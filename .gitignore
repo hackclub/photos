@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# logs
+*.log
+
+# env files (commit only .env.example)
+.env
+.env.local
+.env.*.local
+.env.test.local
+.env.production.local
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# misc caches
+*.tsbuildinfo
+.swc/
+.turbo/
+
+# package manager artifacts (choose one; repo uses npm via Dockerfile)
+yarn.lock
+pnpm-lock.yaml
+bun.lock
+
+mobile
+
+app/api/v1/mobile

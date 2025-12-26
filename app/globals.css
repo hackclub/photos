@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.photo-marker:hover {
+  transform: scale(2.5);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.8);
+  z-index: 10000;
+}
+
+.cluster-marker:hover .cluster-photo {
+  transform: scale(1.8);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.7);
+}
+
+.cluster-marker:hover {
+  z-index: 10000;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #1a1a1a;
+  color: #fff;
+  border-radius: 12px;
+}
+
+.leaflet-popup-tip {
+  background: #1a1a1a;
+}
+
+.leaflet-popup a {
+  color: #dc2626;
+}
+
+.leaflet-popup a:hover {
+  color: #b91c1c;
+}
+
+.leaflet-popup-close-button {
+  color: #9ca3af;
+}
+
+.leaflet-popup-close-button:hover {
+  color: #fff;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.lazy-load-image-background {
+  display: block;
+}
+
+.lazy-load-image-background.blur {
+  filter: blur(15px);
+  transition: filter 0.3s;
+}
+
+.lazy-load-image-background.blur.lazy-load-image-loaded {
+  filter: blur(0);
+}
+
+@keyframes scroll-left {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-33.33%);
+  }
+}
+
+@keyframes scroll-right {
+  0% {
+    transform: translateX(-33.33%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.animate-scroll-left {
+  animation: scroll-left 40s linear infinite;
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+.animate-scroll-right {
+  animation: scroll-right 40s linear infinite;
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}

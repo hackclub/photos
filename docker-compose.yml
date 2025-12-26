@@ -1,0 +1,77 @@
+version: "3.9"
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hack-club-photos-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/photos
+      REDIS_URL: redis://dragonfly:6379
+      NEXTAUTH_URL: https://photos.hackclub.com
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dragonfly:
+        condition: service_started
+
+    # (Removed resource limits to prioritize raw throughput)
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: hack-club-photos-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: photos
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d photos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    # Small/medium deployment tuning (adjust to your machine)
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "effective_cache_size=768MB"
+      - "-c"
+      - "work_mem=16MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "max_connections=200"
+
+    # (Removed log rotation limits to keep config minimal; add back if disk logs become an issue)
+
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly
+    container_name: hack-club-photos-dragonfly
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    # Prioritize speed: allow Dragonfly to use available RAM and avoid snapshot overhead.
+    # If you want durability, re-add --save_schedule and/or AOF-like persistence.
+    command: ["--maxmemory=0"]
+    volumes:
+      - dragonfly_data:/data
+
+volumes:
+  postgres_data:
+  dragonfly_data:
