@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import {
   GetObjectCommand,
   type GetObjectCommandOutput,
@@ -118,7 +119,8 @@ export async function GET(
   try {
     // Read stream to buffer to ensure complete response
     const chunks = [];
-    for await (const chunk of s3Response.Body) {
+    const body = s3Response.Body as Readable;
+    for await (const chunk of body) {
       chunks.push(chunk);
     }
     const buffer = Buffer.concat(chunks);
