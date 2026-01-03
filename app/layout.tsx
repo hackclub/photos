@@ -5,7 +5,10 @@ import "./globals.css";
 import ComingSoon from "@/components/ComingSoon";
 import { comingSoon, maintenanceMode } from "@/flags";
 import ClientLayout from "./ClientLayout";
+import { APP_URL } from "@/lib/constants";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(APP_URL),
   title: "Hack Club Photos",
   description: "A place for all Hack Club photos and videos from events",
   openGraph: {
