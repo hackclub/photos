@@ -5,6 +5,7 @@ import {
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
+  GetObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -104,6 +105,17 @@ export async function getSignedUploadUrl(
     Bucket: process.env.S3_BUCKET_NAME!,
     Key: key,
     ContentType: contentType,
+  });
+  return await getSignedUrl(s3Client, command, { expiresIn });
+}
+
+export async function getSignedDownloadUrl(
+  key: string,
+  expiresIn = 3600,
+): Promise<string> {
+  const command = new GetObjectCommand({
+    Bucket: process.env.S3_BUCKET_NAME!,
+    Key: key,
   });
   return await getSignedUrl(s3Client, command, { expiresIn });
 }
