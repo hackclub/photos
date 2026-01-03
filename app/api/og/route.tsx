@@ -33,7 +33,7 @@ export async function GET(request: Request) {
       });
       if (!event) return errorImage("Event not found");
       let bannerUrl: string | undefined;
-      if (event.bannerS3Key && event.visibility === "public") {
+      if (event.bannerS3Key) {
         bannerUrl = `${APP_URL}${getAssetProxyUrl("event-banner", event.id)}`;
       }
       return generateOgImage({
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
       });
       if (!seriesData) return errorImage("Series not found");
       let bannerUrl: string | undefined;
-      if (seriesData.bannerS3Key && seriesData.visibility === "public") {
+      if (seriesData.bannerS3Key) {
         bannerUrl = `${APP_URL}${getAssetProxyUrl("series-banner", seriesData.id)}`;
       }
       return generateOgImage({
@@ -115,12 +115,10 @@ export async function GET(request: Request) {
       });
       if (!tag) return errorImage("Tag not found");
       let previewUrl: string | undefined;
-      const publicMedia = tag.media.find(
-        (m) => m.media.event.visibility === "public",
-      );
-      if (publicMedia?.media.thumbnailS3Key) {
+      const mediaItem = tag.media[0];
+      if (mediaItem?.media.thumbnailS3Key) {
         previewUrl = `${APP_URL}${getMediaProxyUrl(
-          publicMedia.media.id,
+          mediaItem.media.id,
           "thumbnail",
         )}`;
       }
