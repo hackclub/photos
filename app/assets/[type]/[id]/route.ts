@@ -9,8 +9,6 @@ import { getUserContext } from "@/lib/auth-api";
 import { db } from "@/lib/db";
 import { events, series, users } from "@/lib/db/schema";
 import { s3Client } from "@/lib/media/s3";
-import { can } from "@/lib/policy";
-
 export const dynamic = "force-dynamic";
 
 export async function GET(
@@ -104,51 +102,28 @@ export async function GET(
         const event = await db.query.events.findFirst({
           where: eq(events.id, id),
           columns: {
-            id: true,
             bannerS3Key: true,
-            visibility: true,
-            seriesId: true,
-            createdById: true,
           },
         });
         if (!event || !event.bannerS3Key) {
           return new NextResponse("Not Found", { status: 404 });
         }
-        const canView = await can(user, "view", "event", event);
-        if (canView) {
-          s3Key = event.bannerS3Key;
-          isPublic = event.visibility === "public";
-        } else {
-          console.log("Forbidden access to event banner", {
-            userId: user?.id,
-            eventId: id,
-            visibility: event.visibility,
-            seriesId: event.seriesId,
-            createdById: event.createdById,
-          });
-          return new NextResponse("Forbidden", { status: 403 });
-        }
+        s3Key = event.bannerS3Key;
+        isPublic = true;
         break;
       }
       case "series-banner": {
         const seriesItem = await db.query.series.findFirst({
           where: eq(series.id, id),
           columns: {
-            id: true,
             bannerS3Key: true,
-            visibility: true,
-            createdById: true,
           },
         });
         if (!seriesItem || !seriesItem.bannerS3Key) {
           return new NextResponse("Not Found", { status: 404 });
         }
-        if (await can(user, "view", "series", seriesItem)) {
-          s3Key = seriesItem.bannerS3Key;
-          isPublic = seriesItem.visibility === "public";
-        } else {
-          return new NextResponse("Forbidden", { status: 403 });
-        }
+        s3Key = seriesItem.bannerS3Key;
+        isPublic = true;
         break;
       }
       default:
