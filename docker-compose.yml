@@ -23,8 +23,21 @@ services:
         condition: service_healthy
       dragonfly:
         condition: service_started
+      migrate:
+        condition: service_completed_successfully
 
     # (Removed resource limits to prioritize raw throughput)
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migration
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/photos
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   postgres:
     image: postgres:16-alpine
