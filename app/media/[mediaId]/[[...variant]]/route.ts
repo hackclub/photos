@@ -111,6 +111,7 @@ export async function GET(
     headers.set("Content-Disposition", `inline; filename="${filename}"`);
   }
   console.log(`[Media Debug] Returning response with headers:`, [...headers.entries()]);
+  console.log(`[Media Debug] Returning response with headers:`, [...headers.entries()]);
   
   // Read the stream into a buffer to debug its content/size
   try {
