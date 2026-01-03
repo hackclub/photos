@@ -23,8 +23,6 @@ export async function GET(
 ) {
   const { mediaId, variant: variantPath } = await params;
   const variant = variantPath?.[0];
-  console.log(`[Media Debug] Incoming request: mediaId=${mediaId}, variant=${variant}`);
-
   const searchParams = request.nextUrl.searchParams;
   const download = searchParams.get("download") === "true";
   const mediaItem = await db.query.media.findFirst({
@@ -34,7 +32,6 @@ export async function GET(
     },
   });
   if (!mediaItem) {
-    console.log(`[Media Debug] Media item not found in DB: ${mediaId}`);
     return new NextResponse("Media not found", { status: 404 });
   }
   let isAllowed = false;
@@ -82,27 +79,24 @@ export async function GET(
         filename.substring(0, filename.lastIndexOf(".")) || filename;
       filename = `thumbnail_${baseName}.jpg`;
     } else {
-      console.log(`[Media Debug] No thumbnailS3Key found for ${mediaId}, falling back to original`);
       s3Key = mediaItem.s3Key;
     }
   }
-  console.log(`[Media Debug] Using S3 Key: ${s3Key}`);
-
   const command = new GetObjectCommand({
     Bucket: process.env.S3_BUCKET_NAME,
     Key: s3Key,
   });
   let s3Response: GetObjectCommandOutput;
   try {
-    console.log(`[Media Debug] Fetching ${s3Key} (variant: ${variant})`);
+    // @ts-expect-error - s3Client type definition issue
     s3Response = await s3Client.send(command);
-    console.log(`[Media Debug] S3 Response: ${s3Response.ContentType} ${s3Response.ContentLength} bytes`);
   } catch (error) {
     console.error(`Failed to fetch from S3:`, error);
     return new NextResponse("Failed to fetch media", { status: 502 });
   }
+
   const headers = new Headers();
-  if (variant === "thumbnail") {
+  if (variant === "thumbnail" && mediaItem.thumbnailS3Key) {
     headers.set("Content-Type", "image/jpeg");
   } else {
     headers.set("Content-Type", s3Response.ContentType || mediaItem.mimeType);
@@ -121,9 +115,22 @@ export async function GET(
   } else {
     headers.set("Content-Disposition", `inline; filename="${filename}"`);
   }
-  console.log(`[Media Debug] Returning response with headers:`, [...headers.entries()]);
-  return new NextResponse(s3Response.Body as ReadableStream, {
-    status: 200,
-    headers,
-  });
+
+  try {
+    // Read stream to buffer to ensure complete response
+    const chunks = [];
+    // @ts-expect-error - Body is iterable
+    for await (const chunk of s3Response.Body) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
+
+    return new NextResponse(buffer, {
+      status: 200,
+      headers,
+    });
+  } catch (error) {
+    console.error("Failed to read S3 stream:", error);
+    return new NextResponse("Failed to read media stream", { status: 500 });
+  }
 }
