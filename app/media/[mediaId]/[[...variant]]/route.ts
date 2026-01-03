@@ -121,7 +121,7 @@ export async function GET(
     if (typeof (s3Response.Body as any).transformToWebStream === "function") {
       body = (s3Response.Body as any).transformToWebStream();
     } else if (s3Response.Body instanceof Readable) {
-      body = Readable.toWeb(s3Response.Body) as any;
+      body = Readable.toWeb(s3Response.Body) as unknown as ReadableStream;
     } else {
       body = s3Response.Body as any;
     }
