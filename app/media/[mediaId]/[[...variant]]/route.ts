@@ -2,6 +2,7 @@ import { Readable } from "node:stream";
 import {
   GetObjectCommand,
   type GetObjectCommandOutput,
+  S3Client,
 } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
@@ -89,7 +90,7 @@ export async function GET(
   });
   let s3Response: GetObjectCommandOutput;
   try {
-    s3Response = await s3Client.send(command);
+    s3Response = await (s3Client as S3Client).send(command);
   } catch (error) {
     console.error(`Failed to fetch from S3:`, error);
     return new NextResponse("Failed to fetch media", { status: 502 });
