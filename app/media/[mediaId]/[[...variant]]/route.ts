@@ -120,12 +120,11 @@ export async function GET(
   }
 
   try {
-    // Convert stream to buffer to ensure reliable delivery
     const buffer = await s3Response.Body?.transformToByteArray();
     if (!buffer) {
       throw new Error("Empty response body from S3");
     }
-    return new NextResponse(buffer, {
+    return new NextResponse(buffer as unknown as BodyInit, {
       status: 200,
       headers,
     });
