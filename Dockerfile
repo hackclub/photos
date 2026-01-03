@@ -10,7 +10,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-# Dummy DATABASE_URL to pass build time checks
 ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 RUN npm run build
 
@@ -27,7 +26,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl ffmpeg && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 --gid 1001 --create-home nextjs

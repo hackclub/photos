@@ -10,7 +10,7 @@
     "format": "biome format --write",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:push": "drizzle-kit push",
+    "db:push": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
