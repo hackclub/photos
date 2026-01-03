@@ -391,10 +391,12 @@ export default function MediaGallery({
                     <HiPhoto className="w-12 h-12 text-zinc-600 animate-pulse" />
                   </div>
                 ) : (
-                  <img
+                  <Image
                     src={url}
                     alt={item.filename}
-                    className="object-cover w-full h-full"
+                    fill
+                    sizes="(max-width: 640px) 50vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
+                    className="object-cover"
                   />
                 )}
 

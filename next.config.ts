@@ -31,6 +31,11 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
+        hostname: "hc-photos.hel1.your-objectstorage.com",
+        pathname: "/hc-photos/**",
+      },
+      {
+        protocol: "https",
         hostname: "www.gravatar.com",
         pathname: "/**",
       },
