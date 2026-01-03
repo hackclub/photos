@@ -111,9 +111,24 @@ export async function GET(
     headers.set("Content-Disposition", `inline; filename="${filename}"`);
   }
   console.log(`[Media Debug] Returning response with headers:`, [...headers.entries()]);
-  console.log(`[Media Debug] Returning response with headers:`, [...headers.entries()]);
-  return new NextResponse(s3Response.Body as ReadableStream, {
-    status: 200,
-    headers,
-  });
+  
+  // Read the stream into a buffer to debug its content/size
+  try {
+    const chunks = [];
+    // @ts-ignore
+    for await (const chunk of s3Response.Body) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
+    console.log(`[Media Debug] Read ${buffer.length} bytes from S3 body`);
+    console.log(`[Media Debug] First 20 bytes: ${buffer.subarray(0, 20).toString('hex')}`);
+    
+    return new NextResponse(buffer, {
+      status: 200,
+      headers,
+    });
+  } catch (e) {
+    console.error("[Media Debug] Error reading stream:", e);
+    return new NextResponse("Error reading stream", { status: 500 });
+  }
 }
