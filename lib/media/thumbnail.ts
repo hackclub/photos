@@ -14,17 +14,11 @@ export async function processImageUpload(
   eventId: string,
   mimeType?: string,
 ) {
-  console.log(
-    `[Thumbnail] Processing upload for mediaId: ${mediaId}, mimeType: ${mimeType}`,
-  );
   const buffer = Buffer.isBuffer(input) ? input : await streamToBuffer(input);
-  console.log(`[Thumbnail] Input buffer size: ${buffer.length} bytes`);
-
   const isHeic =
     mimeType?.toLowerCase() === "image/heic" ||
     mimeType?.toLowerCase() === "image/heif";
   const processHeic = async () => {
-    console.log(`[Thumbnail] Processing HEIC for ${mediaId}`);
     let decoder: any = decode;
     if (
       typeof decoder !== "function" &&
@@ -32,16 +26,9 @@ export async function processImageUpload(
     ) {
       decoder = decoder.default;
     }
-    const arrayBuffer =
-      buffer.byteOffset === 0 && buffer.byteLength === buffer.buffer.byteLength
-        ? buffer.buffer
-        : new Uint8Array(buffer).buffer;
-
     const { width, height, data } = await decoder({
-      buffer: arrayBuffer,
+      buffer: new Uint8Array(buffer).buffer,
     });
-    console.log(`[Thumbnail] HEIC decoded. Width: ${width}, Height: ${height}`);
-
     const thumbnailBuffer = await sharp(Buffer.from(data), {
       raw: { width, height, channels: 4 },
     })
@@ -51,11 +38,6 @@ export async function processImageUpload(
       })
       .toFormat("jpeg", { quality: 80, mozjpeg: true })
       .toBuffer();
-
-    console.log(
-      `[Thumbnail] HEIC thumbnail generated. Size: ${thumbnailBuffer.length} bytes`,
-    );
-
     const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
     await uploadToS3(thumbnailBuffer, thumbnailS3Key, "image/jpeg", undefined, {
       uploadedBy,
@@ -76,7 +58,6 @@ export async function processImageUpload(
     }
   }
   try {
-    console.log(`[Thumbnail] Starting Sharp pipeline for ${mediaId}`);
     const pipeline = sharp(buffer);
     const metadataPromise = pipeline.metadata();
     const thumbnailPromise = pipeline
@@ -88,9 +69,6 @@ export async function processImageUpload(
       .toFormat("jpeg", { quality: 80, mozjpeg: true })
       .toBuffer()
       .then(async (buf) => {
-        console.log(
-          `[Thumbnail] Sharp thumbnail generated. Size: ${buf.length} bytes`,
-        );
         const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
         await uploadToS3(buf, thumbnailS3Key, "image/jpeg", undefined, {
           uploadedBy,
@@ -102,11 +80,6 @@ export async function processImageUpload(
       metadataPromise,
       thumbnailPromise,
     ]);
-
-    console.log(
-      `[Thumbnail] Processing complete. Key: ${thumbnailS3Key}, Width: ${metadata.width}, Height: ${metadata.height}`,
-    );
-
     return {
       thumbnailS3Key,
       width: metadata.width,
@@ -114,7 +87,6 @@ export async function processImageUpload(
       exifBuffer: metadata.exif,
     };
   } catch (error: any) {
-    console.error(`[Thumbnail] Sharp failed for ${mediaId}:`, error);
     if (
       !isHeic &&
       (error.message?.includes("unsupported image format") ||
@@ -160,7 +132,6 @@ export async function generateAndUploadThumbnail(
       mimeType.toLowerCase() === "image/heic" ||
       mimeType.toLowerCase() === "image/heif";
     if (isHeic) {
-      console.log(`[Thumbnail] Generating thumbnail for HEIC`);
       let decoder: any = decode;
       if (
         typeof decoder !== "function" &&
@@ -168,13 +139,8 @@ export async function generateAndUploadThumbnail(
       ) {
         decoder = decoder.default;
       }
-      const arrayBuffer =
-        input.byteOffset === 0 && input.byteLength === input.buffer.byteLength
-          ? input.buffer
-          : new Uint8Array(input).buffer;
-
       const { width, height, data } = await decoder({
-        buffer: arrayBuffer,
+        buffer: new Uint8Array(input).buffer,
       });
       thumbnailBuffer = await sharp(Buffer.from(data), {
         raw: { width, height, channels: 4 },
@@ -186,7 +152,6 @@ export async function generateAndUploadThumbnail(
         .toFormat("jpeg", { quality: 80, mozjpeg: true })
         .toBuffer();
     } else {
-      console.log(`[Thumbnail] Generating thumbnail for standard image`);
       thumbnailBuffer = await sharp(input)
         .resize(400, 400, {
           fit: "cover",
@@ -195,9 +160,6 @@ export async function generateAndUploadThumbnail(
         .toFormat("jpeg", { quality: 80, mozjpeg: true })
         .toBuffer();
     }
-    console.log(
-      `[Thumbnail] Generated thumbnail buffer size: ${thumbnailBuffer.length}`,
-    );
     if (signal?.aborted) {
       return null;
     }

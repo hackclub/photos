@@ -82,7 +82,6 @@ export async function GET(
       s3Key = mediaItem.s3Key;
     }
   }
-  console.log(`[Media Route] Fetching S3 Key: ${s3Key}`);
   const command = new GetObjectCommand({
     Bucket: process.env.S3_BUCKET_NAME,
     Key: s3Key,
@@ -90,21 +89,12 @@ export async function GET(
   let s3Response: GetObjectCommandOutput;
   try {
     s3Response = await s3Client.send(command);
-    console.log(
-      `[Media Route] S3 Fetch Success. ContentType: ${s3Response.ContentType}, ContentLength: ${s3Response.ContentLength}`,
-    );
   } catch (error) {
     console.error(`Failed to fetch from S3:`, error);
     return new NextResponse("Failed to fetch media", { status: 502 });
   }
   const headers = new Headers();
-  let contentType = s3Response.ContentType || mediaItem.mimeType;
-
-  if (variant === "thumbnail" && s3Key.includes("thumbnail")) {
-    contentType = "image/jpeg";
-  }
-
-  headers.set("Content-Type", contentType);
+  headers.set("Content-Type", s3Response.ContentType || mediaItem.mimeType);
   if (s3Response.ContentLength) {
     headers.set("Content-Length", String(s3Response.ContentLength));
   }
@@ -118,18 +108,8 @@ export async function GET(
   } else {
     headers.set("Content-Disposition", `inline; filename="${filename}"`);
   }
-
-  try {
-    const buffer = await s3Response.Body?.transformToByteArray();
-    if (!buffer) {
-      throw new Error("Empty response body from S3");
-    }
-    return new NextResponse(buffer, {
-      status: 200,
-      headers,
-    });
-  } catch (e) {
-    console.error("[Media Route] Error reading S3 body:", e);
-    return new NextResponse("Failed to read media", { status: 500 });
-  }
+  return new NextResponse(s3Response.Body as ReadableStream, {
+    status: 200,
+    headers,
+  });
 }
