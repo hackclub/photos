@@ -77,8 +77,8 @@ services:
     image: docker.dragonflydb.io/dragonflydb/dragonfly
     container_name: hack-club-photos-dragonfly
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    # ports:
+    #   - "6379:6379"
     # Prioritize speed: allow Dragonfly to use available RAM and avoid snapshot overhead.
     # If you want durability, re-add --save_schedule and/or AOF-like persistence.
     command: ["--maxmemory=0"]
