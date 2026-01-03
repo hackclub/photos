@@ -1,11 +1,9 @@
 import {
   GetObjectCommand,
   type GetObjectCommandOutput,
-  S3Client,
 } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-import { Readable } from "node:stream";
 import { getUserContext } from "@/lib/auth-api";
 import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
@@ -90,19 +88,13 @@ export async function GET(
   });
   let s3Response: GetObjectCommandOutput;
   try {
-    s3Response = await (s3Client as S3Client).send(command);
+    s3Response = await s3Client.send(command);
   } catch (error) {
     console.error(`Failed to fetch from S3:`, error);
     return new NextResponse("Failed to fetch media", { status: 502 });
   }
   const headers = new Headers();
-
-  let contentType = s3Response.ContentType || mediaItem.mimeType;
-  if (variant === "thumbnail" && mediaItem.thumbnailS3Key) {
-    contentType = "image/jpeg";
-  }
-  headers.set("Content-Type", contentType);
-
+  headers.set("Content-Type", s3Response.ContentType || mediaItem.mimeType);
   if (s3Response.ContentLength) {
     headers.set("Content-Length", String(s3Response.ContentLength));
   }
@@ -116,19 +108,7 @@ export async function GET(
   } else {
     headers.set("Content-Disposition", `inline; filename="${filename}"`);
   }
-
-  let body: BodyInit | null = null;
-  if (s3Response.Body) {
-    if (typeof (s3Response.Body as any).transformToWebStream === "function") {
-      body = (s3Response.Body as any).transformToWebStream();
-    } else if (s3Response.Body instanceof Readable) {
-      body = Readable.toWeb(s3Response.Body) as unknown as ReadableStream;
-    } else {
-      body = s3Response.Body as any;
-    }
-  }
-
-  return new NextResponse(body, {
+  return new NextResponse(s3Response.Body as ReadableStream, {
     status: 200,
     headers,
   });

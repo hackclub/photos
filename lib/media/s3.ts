@@ -27,7 +27,7 @@ if (process.env.S3_ENDPOINT) {
 if (process.env.S3_FORCE_PATH_STYLE === "true") {
   s3Config.forcePathStyle = true;
 }
-const s3Client: S3Client = new S3Client(s3Config);
+const s3Client = new S3Client(s3Config);
 export { s3Client };
 export async function uploadToS3(
   file: Buffer | Readable | Blob | Uint8Array,
