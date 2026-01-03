@@ -109,17 +109,6 @@ export async function getSignedUploadUrl(
   return await getSignedUrl(s3Client, command, { expiresIn });
 }
 
-export async function getSignedDownloadUrl(
-  key: string,
-  expiresIn = 3600,
-): Promise<string> {
-  const command = new GetObjectCommand({
-    Bucket: process.env.S3_BUCKET_NAME!,
-    Key: key,
-  });
-  return await getSignedUrl(s3Client, command, { expiresIn });
-}
-
 export async function createMultipartUpload(
   key: string,
   contentType: string,
