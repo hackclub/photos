@@ -8,14 +8,14 @@ import {
   HiLockClosed,
   HiMapPin,
   HiPencilSquare,
-  HiPhoto,
+  HiPhoto, s
   HiUserPlus,
-  HiUsers,
   HiVideoCamera,
 } from "react-icons/hi2";
 import DownloadAllButton from "@/components/events/DownloadAllButton";
 import JoinEventButton from "@/components/events/JoinEventButton";
 import LeaveEventButton from "@/components/events/LeaveEventButton";
+import ParticipantsList from "@/components/events/ParticipantsList";
 import MediaGallery from "@/components/media/MediaGallery";
 import UploadButton from "@/components/media/UploadButton";
 import { getSession } from "@/lib/auth";
@@ -118,6 +118,9 @@ export default async function EventPage({
   }
   const participants = await db.query.eventParticipants.findMany({
     where: eq(eventParticipants.eventId, event.id),
+    with: {
+      user: true,
+    },
   });
   participantCount = participants.length;
   const photoCount =
@@ -225,13 +228,13 @@ export default async function EventPage({
                 </Link>
               )}
 
-              <div className="flex items-center gap-2 text-zinc-300">
-                <HiUsers className="w-5 h-5 sm:w-6 sm:h-6" />
-                <span className="font-medium text-xs sm:text-sm">
-                  {participantCount}{" "}
-                  {participantCount === 1 ? "participant" : "participants"}
-                </span>
-              </div>
+              <ParticipantsList
+                participants={participants.map((p) => ({
+                  ...p,
+                  joinedAt: p.joinedAt.toISOString(),
+                }))}
+                count={participantCount}
+              />
 
               {event.visibility === "unlisted" && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/50 backdrop-blur-sm border border-zinc-700 rounded-lg text-zinc-400">
