@@ -66,7 +66,7 @@ export default function PhotoUploader({
         ref={fileInputRef}
         type="file"
         multiple
-        accept="image/*,video/*"
+        accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm"
         onChange={handleFileSelect}
         className="hidden"
       />

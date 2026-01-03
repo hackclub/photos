@@ -114,7 +114,7 @@ export default function AvatarUploader({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp,image/gif"
         onChange={handleFileSelect}
         className="hidden"
         disabled={isUploading}
