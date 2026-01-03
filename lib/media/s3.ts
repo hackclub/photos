@@ -44,13 +44,16 @@ export async function uploadToS3(
     CacheControl: "max-age=31536000, immutable",
     Tagging: tags ? new URLSearchParams(tags).toString() : undefined,
   };
+  console.log(`[S3] Starting upload for ${key}. ContentType: ${contentType}`);
   try {
     const command = new PutObjectCommand(params);
     if (signal?.aborted) {
       throw new Error("Upload aborted");
     }
-    await s3Client.send(command, { abortSignal: signal });
+    const response = await s3Client.send(command, { abortSignal: signal });
+    console.log(`[S3] Uploaded ${key} successfully. ETag: ${response.ETag}`);
   } catch (error: unknown) {
+    console.error(`[S3] Upload failed for ${key}:`, error);
     const isNotImplemented =
       error instanceof Error &&
       (error.name === "NotImplemented" ||

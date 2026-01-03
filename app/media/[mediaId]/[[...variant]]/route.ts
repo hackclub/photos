@@ -82,6 +82,7 @@ export async function GET(
       s3Key = mediaItem.s3Key;
     }
   }
+  console.log(`[Media Route] Fetching S3 Key: ${s3Key}`);
   const command = new GetObjectCommand({
     Bucket: process.env.S3_BUCKET_NAME,
     Key: s3Key,
@@ -89,6 +90,9 @@ export async function GET(
   let s3Response: GetObjectCommandOutput;
   try {
     s3Response = await s3Client.send(command);
+    console.log(
+      `[Media Route] S3 Fetch Success. ContentType: ${s3Response.ContentType}, ContentLength: ${s3Response.ContentLength}`,
+    );
   } catch (error) {
     console.error(`Failed to fetch from S3:`, error);
     return new NextResponse("Failed to fetch media", { status: 502 });
