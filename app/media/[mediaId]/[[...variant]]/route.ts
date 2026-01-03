@@ -124,7 +124,7 @@ export async function GET(
     if (!buffer) {
       throw new Error("Empty response body from S3");
     }
-    return new NextResponse(buffer as unknown as BodyInit, {
+    return new NextResponse(buffer, {
       status: 200,
       headers,
     });
