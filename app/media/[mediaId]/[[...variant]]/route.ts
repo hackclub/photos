@@ -1,8 +1,6 @@
-import { Readable } from "node:stream";
 import {
   GetObjectCommand,
   type GetObjectCommandOutput,
-  S3Client,
 } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
@@ -90,19 +88,13 @@ export async function GET(
   });
   let s3Response: GetObjectCommandOutput;
   try {
-    s3Response = await (s3Client as S3Client).send(command);
+    s3Response = await s3Client.send(command);
   } catch (error) {
     console.error(`Failed to fetch from S3:`, error);
     return new NextResponse("Failed to fetch media", { status: 502 });
   }
-
   const headers = new Headers();
-  if (variant === "thumbnail" && mediaItem.thumbnailS3Key) {
-    headers.set("Content-Type", "image/jpeg");
-  } else {
-    headers.set("Content-Type", s3Response.ContentType || mediaItem.mimeType);
-  }
-
+  headers.set("Content-Type", s3Response.ContentType || mediaItem.mimeType);
   if (s3Response.ContentLength) {
     headers.set("Content-Length", String(s3Response.ContentLength));
   }
@@ -116,22 +108,8 @@ export async function GET(
   } else {
     headers.set("Content-Disposition", `inline; filename="${filename}"`);
   }
-
-  try {
-    // Read stream to buffer to ensure complete response
-    const chunks = [];
-    const body = s3Response.Body as Readable;
-    for await (const chunk of body) {
-      chunks.push(chunk);
-    }
-    const buffer = Buffer.concat(chunks);
-
-    return new NextResponse(buffer, {
-      status: 200,
-      headers,
-    });
-  } catch (error) {
-    console.error("Failed to read S3 stream:", error);
-    return new NextResponse("Failed to read media stream", { status: 500 });
-  }
+  return new NextResponse(s3Response.Body as ReadableStream, {
+    status: 200,
+    headers,
+  });
 }

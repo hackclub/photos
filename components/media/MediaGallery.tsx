@@ -1,5 +1,4 @@
 "use client";
-import Image from "next/image";
 import { useRef, useState } from "react";
 import {
   HiArrowDownTray,
@@ -391,12 +390,10 @@ export default function MediaGallery({
                     <HiPhoto className="w-12 h-12 text-zinc-600 animate-pulse" />
                   </div>
                 ) : (
-                  <Image
+                  <img
                     src={url}
                     alt={item.filename}
-                    fill
-                    sizes="(max-width: 640px) 50vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
-                    className="object-cover"
+                    className="w-full h-full object-cover"
                   />
                 )}
 

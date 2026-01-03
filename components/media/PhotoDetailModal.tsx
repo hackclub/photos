@@ -1,6 +1,5 @@
 "use client";
 import dynamic from "next/dynamic";
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   HiArrowDownTray,
@@ -1080,13 +1079,11 @@ export default function PhotoDetailModal({
             media.mimeType.startsWith("image/") && (
               <div className="absolute inset-0 z-10">
                 {thumbnailUrl && (
-                  <Image
+                  <img
                     src={thumbnailUrl}
                     alt={media.filename}
-                    fill
-                    className="object-contain blur-md scale-110 opacity-60"
+                    className="absolute inset-0 w-full h-full object-contain blur-md scale-110 opacity-60"
                     aria-hidden="true"
-                    unoptimized
                   />
                 )}
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 gap-4">
@@ -1158,11 +1155,10 @@ export default function PhotoDetailModal({
             ) : (
               <div className="relative w-full h-full flex items-center justify-center">
                 {effectiveUrl && (
-                  <Image
+                  <img
                     src={effectiveUrl}
                     alt={media.filename}
-                    fill
-                    className={`object-contain transition-opacity duration-300 ${
+                    className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-300 ${
                       imageLoaded ? "opacity-100" : "opacity-0"
                     }`}
                     onLoad={() => {
@@ -1184,7 +1180,6 @@ export default function PhotoDetailModal({
 
                       setImageError(true);
                     }}
-                    unoptimized
                   />
                 )}
               </div>
