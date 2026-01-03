@@ -7,8 +7,6 @@ services:
       dockerfile: Dockerfile
     container_name: hack-club-photos-web
     restart: unless-stopped
-    # ports:
-    #   - "3000:3000"
     env_file:
       - .env
     environment:
@@ -47,8 +45,6 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: photos
-    # ports:
-    #   - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -77,8 +73,6 @@ services:
     image: docker.dragonflydb.io/dragonflydb/dragonfly
     container_name: hack-club-photos-dragonfly
     restart: unless-stopped
-    # ports:
-    #   - "6379:6379"
     # Prioritize speed: allow Dragonfly to use available RAM and avoid snapshot overhead.
     # If you want durability, re-add --save_schedule and/or AOF-like persistence.
     command: ["--maxmemory=0"]
