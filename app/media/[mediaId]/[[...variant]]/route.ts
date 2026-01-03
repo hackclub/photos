@@ -23,6 +23,8 @@ export async function GET(
 ) {
   const { mediaId, variant: variantPath } = await params;
   const variant = variantPath?.[0];
+  console.log(`[Media Debug] Incoming request: mediaId=${mediaId}, variant=${variant}`);
+
   const searchParams = request.nextUrl.searchParams;
   const download = searchParams.get("download") === "true";
   const mediaItem = await db.query.media.findFirst({
@@ -32,6 +34,7 @@ export async function GET(
     },
   });
   if (!mediaItem) {
+    console.log(`[Media Debug] Media item not found in DB: ${mediaId}`);
     return new NextResponse("Media not found", { status: 404 });
   }
   let isAllowed = false;
@@ -79,9 +82,12 @@ export async function GET(
         filename.substring(0, filename.lastIndexOf(".")) || filename;
       filename = `thumbnail_${baseName}.jpg`;
     } else {
+      console.log(`[Media Debug] No thumbnailS3Key found for ${mediaId}, falling back to original`);
       s3Key = mediaItem.s3Key;
     }
   }
+  console.log(`[Media Debug] Using S3 Key: ${s3Key}`);
+
   const command = new GetObjectCommand({
     Bucket: process.env.S3_BUCKET_NAME,
     Key: s3Key,
@@ -96,7 +102,12 @@ export async function GET(
     return new NextResponse("Failed to fetch media", { status: 502 });
   }
   const headers = new Headers();
-  headers.set("Content-Type", s3Response.ContentType || mediaItem.mimeType);
+  if (variant === "thumbnail") {
+    headers.set("Content-Type", "image/jpeg");
+  } else {
+    headers.set("Content-Type", s3Response.ContentType || mediaItem.mimeType);
+  }
+
   if (s3Response.ContentLength) {
     headers.set("Content-Length", String(s3Response.ContentLength));
   }
@@ -111,25 +122,8 @@ export async function GET(
     headers.set("Content-Disposition", `inline; filename="${filename}"`);
   }
   console.log(`[Media Debug] Returning response with headers:`, [...headers.entries()]);
-  console.log(`[Media Debug] Returning response with headers:`, [...headers.entries()]);
-  
-  // Read the stream into a buffer to debug its content/size
-  try {
-    const chunks = [];
-    // @ts-ignore
-    for await (const chunk of s3Response.Body) {
-      chunks.push(chunk);
-    }
-    const buffer = Buffer.concat(chunks);
-    console.log(`[Media Debug] Read ${buffer.length} bytes from S3 body`);
-    console.log(`[Media Debug] First 20 bytes: ${buffer.subarray(0, 20).toString('hex')}`);
-    
-    return new NextResponse(buffer, {
-      status: 200,
-      headers,
-    });
-  } catch (e) {
-    console.error("[Media Debug] Error reading stream:", e);
-    return new NextResponse("Error reading stream", { status: 500 });
-  }
+  return new NextResponse(s3Response.Body as ReadableStream, {
+    status: 200,
+    headers,
+  });
 }
