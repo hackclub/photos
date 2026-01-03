@@ -76,6 +76,7 @@ export default async function EventPage({
             columns: {
               id: true,
               name: true,
+              preferredName: true,
               email: true,
               avatarS3Key: true,
               handle: true,

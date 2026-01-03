@@ -9,6 +9,7 @@ interface Participant {
   user: {
     id: string;
     name: string;
+    preferredName: string | null;
     handle: string | null;
     avatarS3Key: string | null;
     avatarSource: "upload" | "slack" | "gravatar" | "libravatar" | "dicebear";
@@ -49,7 +50,7 @@ export default function ParticipantsList({ participants, count }: ParticipantsLi
           >
             <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0 bg-zinc-900">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <HiUsers className="text-zinc-400" />
+                <HiUsers className="text-red-600" />
                 Participants
               </h3>
               <button
@@ -75,8 +76,8 @@ export default function ParticipantsList({ participants, count }: ParticipantsLi
                     >
                       <UserAvatar user={user} size="md" />
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-white truncate group-hover:text-blue-400 transition-colors">
-                          {user.name}
+                        <div className="font-medium text-white truncate group-hover:text-red-400 transition-colors">
+                          {user.preferredName || user.name}
                         </div>
                         {user.handle && (
                           <div className="text-sm text-zinc-500 truncate">
