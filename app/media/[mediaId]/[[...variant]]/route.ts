@@ -4,6 +4,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
+import { Readable } from "node:stream";
 import { getUserContext } from "@/lib/auth-api";
 import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
@@ -94,7 +95,13 @@ export async function GET(
     return new NextResponse("Failed to fetch media", { status: 502 });
   }
   const headers = new Headers();
-  headers.set("Content-Type", s3Response.ContentType || mediaItem.mimeType);
+
+  let contentType = s3Response.ContentType || mediaItem.mimeType;
+  if (variant === "thumbnail" && mediaItem.thumbnailS3Key) {
+    contentType = "image/jpeg";
+  }
+  headers.set("Content-Type", contentType);
+
   if (s3Response.ContentLength) {
     headers.set("Content-Length", String(s3Response.ContentLength));
   }
@@ -108,7 +115,19 @@ export async function GET(
   } else {
     headers.set("Content-Disposition", `inline; filename="${filename}"`);
   }
-  return new NextResponse(s3Response.Body as ReadableStream, {
+
+  let body: BodyInit | null = null;
+  if (s3Response.Body) {
+    if (typeof (s3Response.Body as any).transformToWebStream === "function") {
+      body = (s3Response.Body as any).transformToWebStream();
+    } else if (s3Response.Body instanceof Readable) {
+      body = Readable.toWeb(s3Response.Body) as any;
+    } else {
+      body = s3Response.Body as any;
+    }
+  }
+
+  return new NextResponse(body, {
     status: 200,
     headers,
   });
