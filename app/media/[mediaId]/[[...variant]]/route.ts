@@ -88,7 +88,6 @@ export async function GET(
   });
   let s3Response: GetObjectCommandOutput;
   try {
-    // @ts-expect-error - s3Client type definition issue
     s3Response = await s3Client.send(command);
   } catch (error) {
     console.error(`Failed to fetch from S3:`, error);
@@ -119,7 +118,6 @@ export async function GET(
   try {
     // Read stream to buffer to ensure complete response
     const chunks = [];
-    // @ts-expect-error - Body is iterable
     for await (const chunk of s3Response.Body) {
       chunks.push(chunk);
     }
