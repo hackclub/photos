@@ -14,6 +14,7 @@ RUN npm run build
 
 FROM node:20-slim AS runner
 WORKDIR /app
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
