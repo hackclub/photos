@@ -62,6 +62,7 @@ export async function processImageUpload(
     const metadataPromise = pipeline.metadata();
     const thumbnailPromise = pipeline
       .clone()
+      .rotate()
       .resize(400, 400, {
         fit: "cover",
         position: "center",
@@ -153,6 +154,7 @@ export async function generateAndUploadThumbnail(
         .toBuffer();
     } else {
       thumbnailBuffer = await sharp(input)
+        .rotate()
         .resize(400, 400, {
           fit: "cover",
           position: "center",
@@ -288,6 +290,7 @@ export async function deleteMediaAndThumbnail(
 }
 export async function processBanner(input: Buffer): Promise<Buffer> {
   return await sharp(input)
+    .rotate()
     .resize(2000, null, {
       withoutEnlargement: true,
     })
