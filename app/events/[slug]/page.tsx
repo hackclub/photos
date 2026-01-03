@@ -120,7 +120,18 @@ export default async function EventPage({
   const participants = await db.query.eventParticipants.findMany({
     where: eq(eventParticipants.eventId, event.id),
     with: {
-      user: true,
+      user: {
+        columns: {
+          id: true,
+          name: true,
+          preferredName: true,
+          handle: true,
+          avatarS3Key: true,
+          avatarSource: true,
+          email: true,
+          slackId: true,
+        },
+      },
     },
   });
   participantCount = participants.length;
@@ -232,6 +243,15 @@ export default async function EventPage({
               <ParticipantsList
                 participants={participants.map((p) => ({
                   ...p,
+                  user: {
+                    id: p.user.id,
+                    name: p.user.preferredName || p.user.name,
+                    handle: p.user.handle,
+                    avatarS3Key: p.user.avatarS3Key,
+                    avatarSource: p.user.avatarSource,
+                    email: p.user.email,
+                    slackId: p.user.slackId,
+                  },
                   joinedAt: p.joinedAt.toISOString(),
                 }))}
                 count={participantCount}

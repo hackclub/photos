@@ -9,7 +9,6 @@ interface Participant {
   user: {
     id: string;
     name: string;
-    preferredName: string | null;
     handle: string | null;
     avatarS3Key: string | null;
     avatarSource: "upload" | "slack" | "gravatar" | "libravatar" | "dicebear";
@@ -77,7 +76,7 @@ export default function ParticipantsList({ participants, count }: ParticipantsLi
                       <UserAvatar user={user} size="md" />
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-white truncate group-hover:text-red-400 transition-colors">
-                          {user.preferredName || user.name}
+                          {user.name}
                         </div>
                         {user.handle && (
                           <div className="text-sm text-zinc-500 truncate">
