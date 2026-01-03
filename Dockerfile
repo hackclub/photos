@@ -32,4 +32,4 @@ COPY --from=builder --chown=nextjs:nodejs /app/drizzle.config.ts ./drizzle.confi
 
 USER nextjs
 EXPOSE 3000
-CMD ["node", "--cpu-prof", "--cpu-prof-dir=/tmp", "server.js"]
+CMD ["node", "--report-on-signal", "--report-signal=SIGUSR2", "--report-directory=/tmp", "server.js"]
