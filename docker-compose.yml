@@ -13,14 +13,3 @@ services:
       - .env
     environment:
       NODE_ENV: production
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-
-  migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: migration
-    env_file:
-      - .env
