@@ -29,6 +29,7 @@ export default function LandingHero({
   const row2 = [...images].sort(() => Math.random() - 0.5);
   const row3 = [...images].sort(() => Math.random() - 0.5);
   const prepareRow = (imgs: string[]) => {
+    if (imgs.length === 0) return [];
     let displayImages = [...imgs];
     while (displayImages.length < 10) {
       displayImages = [...displayImages, ...imgs];
