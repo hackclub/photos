@@ -8,7 +8,7 @@ import {
   HiLockClosed,
   HiMapPin,
   HiPencilSquare,
-  HiPhoto, s
+  HiPhoto,
   HiUserPlus,
   HiVideoCamera,
 } from "react-icons/hi2";
