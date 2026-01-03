@@ -98,7 +98,13 @@ export async function GET(
     return new NextResponse("Failed to fetch media", { status: 502 });
   }
   const headers = new Headers();
-  headers.set("Content-Type", s3Response.ContentType || mediaItem.mimeType);
+  let contentType = s3Response.ContentType || mediaItem.mimeType;
+
+  if (variant === "thumbnail" && s3Key.includes("thumbnail")) {
+    contentType = "image/jpeg";
+  }
+
+  headers.set("Content-Type", contentType);
   if (s3Response.ContentLength) {
     headers.set("Content-Length", String(s3Response.ContentLength));
   }
@@ -112,8 +118,19 @@ export async function GET(
   } else {
     headers.set("Content-Disposition", `inline; filename="${filename}"`);
   }
-  return new NextResponse(s3Response.Body as ReadableStream, {
-    status: 200,
-    headers,
-  });
+
+  try {
+    // Convert stream to buffer to ensure reliable delivery
+    const buffer = await s3Response.Body?.transformToByteArray();
+    if (!buffer) {
+      throw new Error("Empty response body from S3");
+    }
+    return new NextResponse(buffer, {
+      status: 200,
+      headers,
+    });
+  } catch (e) {
+    console.error("[Media Route] Error reading S3 body:", e);
+    return new NextResponse("Failed to read media", { status: 500 });
+  }
 }
