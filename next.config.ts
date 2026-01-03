@@ -32,7 +32,7 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "hc-photos.hel1.your-objectstorage.com",
-        pathname: "/hc-photos/**",
+        pathname: "/**",
       },
       {
         protocol: "https",

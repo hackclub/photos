@@ -6,7 +6,6 @@ import useSupercluster from "use-supercluster";
 import "leaflet/dist/leaflet.css";
 import "leaflet-defaulticon-compatibility";
 import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css";
-import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -590,13 +589,12 @@ export default function PhotoMap() {
                     {photo.thumbnailS3Key &&
                       photoUrls[photo.thumbnailS3Key] && (
                         <div className="relative mb-2 rounded-lg overflow-hidden">
-                          <Image
+                          <img
                             src={photoUrls[photo.thumbnailS3Key]}
                             alt={photo.filename}
                             width={200}
                             height={150}
                             className="w-full h-auto"
-                            unoptimized
                           />
                           {photo.mimeType.startsWith("video/") && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
@@ -667,12 +665,10 @@ export default function PhotoMap() {
                               className="aspect-square bg-zinc-800 rounded-lg overflow-hidden relative"
                             >
                               {url && (
-                                <Image
+                                <img
                                   src={url}
                                   alt={photo.filename}
-                                  fill
-                                  className="object-cover"
-                                  unoptimized
+                                  className="absolute inset-0 w-full h-full object-cover"
                                 />
                               )}
                               {photo.mimeType.startsWith("video/") && (
