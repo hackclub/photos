@@ -88,7 +88,9 @@ export async function GET(
   });
   let s3Response: GetObjectCommandOutput;
   try {
+    console.log(`[Media Debug] Fetching ${s3Key} (variant: ${variant})`);
     s3Response = await s3Client.send(command);
+    console.log(`[Media Debug] S3 Response: ${s3Response.ContentType} ${s3Response.ContentLength} bytes`);
   } catch (error) {
     console.error(`Failed to fetch from S3:`, error);
     return new NextResponse("Failed to fetch media", { status: 502 });
@@ -108,6 +110,7 @@ export async function GET(
   } else {
     headers.set("Content-Disposition", `inline; filename="${filename}"`);
   }
+  console.log(`[Media Debug] Returning response with headers:`, [...headers.entries()]);
   return new NextResponse(s3Response.Body as ReadableStream, {
     status: 200,
     headers,
