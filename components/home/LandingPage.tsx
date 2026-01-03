@@ -1,5 +1,4 @@
 import { Anton } from "next/font/google";
-import Image from "next/image";
 import Link from "next/link";
 import {
   HiArchiveBox,
@@ -113,12 +112,10 @@ export default function LandingPage({
                     transform: `rotate(${rotation}deg) translateY(${translateY}px)`,
                   }}
                 >
-                  <Image
+                  <img
                     src={src}
                     alt=""
-                    fill
-                    className="object-cover transition-transform duration-500 grayscale group-hover:grayscale-0"
-                    sizes="(max-width: 768px) 150px, 300px"
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 grayscale group-hover:grayscale-0"
                   />
                   <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-lg" />
                   <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
@@ -224,12 +221,10 @@ export default function LandingPage({
                       }}
                     >
                       {bannerUrl ? (
-                        <Image
+                        <img
                           src={bannerUrl}
                           alt={event.name}
-                          fill
-                          className="object-cover transition-transform duration-700 group-hover:scale-105"
-                          sizes="(max-width: 768px) 300px, 450px"
+                          className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                         />
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">

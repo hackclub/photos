@@ -1,5 +1,4 @@
 "use client";
-import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { HiDocumentText, HiTrash, HiXMark } from "react-icons/hi2";
 import { getBulkMediaUrls } from "@/app/actions/bulk";
@@ -209,12 +208,10 @@ export default function DeleteAccountModal({
                       className="aspect-square bg-zinc-800 rounded-lg overflow-hidden relative group"
                     >
                       {url ? (
-                        <Image
+                        <img
                           src={url}
                           alt="Preview"
-                          fill
-                          className="object-cover opacity-60 group-hover:opacity-100 transition-opacity"
-                          unoptimized
+                          className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity"
                         />
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center text-zinc-600">
@@ -384,12 +381,10 @@ export default function DeleteAccountModal({
                       }}
                     >
                       {url ? (
-                        <Image
+                        <img
                           src={url}
                           alt=""
-                          fill
-                          className="object-cover"
-                          unoptimized
+                          className="absolute inset-0 w-full h-full object-cover"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">

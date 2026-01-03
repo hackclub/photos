@@ -1,6 +1,5 @@
 "use client";
 import { Anton } from "next/font/google";
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { twMerge } from "tailwind-merge";
@@ -56,12 +55,10 @@ export default function LandingHero({
                   key={`r1-${i}`}
                   className="relative w-64 h-48 rounded-xl overflow-hidden shadow-2xl flex-shrink-0"
                 >
-                  <Image
+                  <img
                     src={src}
                     alt=""
-                    fill
-                    className="object-cover"
-                    sizes="256px"
+                    className="absolute inset-0 w-full h-full object-cover"
                   />
                 </div>
               ))}
@@ -78,12 +75,10 @@ export default function LandingHero({
                   key={`r2-${i}`}
                   className="relative w-80 h-60 rounded-xl overflow-hidden shadow-2xl flex-shrink-0"
                 >
-                  <Image
+                  <img
                     src={src}
                     alt=""
-                    fill
-                    className="object-cover"
-                    sizes="320px"
+                    className="absolute inset-0 w-full h-full object-cover"
                   />
                 </div>
               ))}
@@ -100,12 +95,10 @@ export default function LandingHero({
                   key={`r3-${i}`}
                   className="relative w-64 h-48 rounded-xl overflow-hidden shadow-2xl flex-shrink-0"
                 >
-                  <Image
+                  <img
                     src={src}
                     alt=""
-                    fill
-                    className="object-cover"
-                    sizes="256px"
+                    className="absolute inset-0 w-full h-full object-cover"
                   />
                 </div>
               ))}

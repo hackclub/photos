@@ -1,5 +1,4 @@
 "use client";
-import Image from "next/image";
 import { useEffect, useState } from "react";
 import {
   HiCheck,
@@ -261,11 +260,10 @@ export default function ReportsClient() {
                         >
                           {report.media.thumbnailS3Key &&
                           presignedUrls[report.media.thumbnailS3Key] ? (
-                            <Image
+                            <img
                               src={presignedUrls[report.media.thumbnailS3Key]}
                               alt="Reported content"
-                              fill
-                              className="object-cover"
+                              className="absolute inset-0 w-full h-full object-cover"
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-zinc-600">
