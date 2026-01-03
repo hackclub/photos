@@ -10,12 +10,6 @@ import { deleteBatchMedia } from "@/lib/media/thumbnail";
 import { can, getUserContext } from "@/lib/policy";
 export async function getBulkMediaUrls(s3Keys?: string[], mediaIds?: string[]) {
   try {
-    console.log(
-      "getBulkMediaUrls called with s3Keys:",
-      s3Keys?.length,
-      "mediaIds:",
-      mediaIds?.length,
-    );
     const urls: Record<string, string> = {};
     if (s3Keys && s3Keys.length > 0) {
       await Promise.all(
@@ -25,9 +19,7 @@ export async function getBulkMediaUrls(s3Keys?: string[], mediaIds?: string[]) {
               where: eq(media.thumbnailS3Key, key),
             });
             if (mediaItem) {
-              const url = getMediaProxyUrl(mediaItem.id, "thumbnail");
-              console.log(`[Bulk] Mapped key ${key} to URL ${url}`);
-              urls[key] = url;
+              urls[key] = getMediaProxyUrl(mediaItem.id, "thumbnail");
             } else {
               const match = key.match(/^media\/([^/]+)\/thumbnail\.jpg$/);
               if (match?.[1]) {
