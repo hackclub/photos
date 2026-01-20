@@ -13,8 +13,14 @@ import {
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { NodeHttpHandler } from "@smithy/node-http-handler";
+import { Agent } from "node:https";
 
 const s3Config: S3ClientConfig = {
+  requestHandler: new NodeHttpHandler({
+    httpsAgent: new Agent({ maxSockets: 1000 }),
+    socketAcquisitionWarningTimeout: 10000,
+  }),
   region: process.env.S3_REGION || "auto",
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY_ID!,
