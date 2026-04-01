@@ -44,7 +44,7 @@
     "lottie-react": "^2.4.1",
     "md5": "^2.3.0",
     "nanoid": "^5.1.6",
-    "next": "^16.0.10",
+    "next": "^16.2.2",
     "papaparse": "^5.5.3",
     "postgres": "^3.4.7",
     "qrcode.react": "^4.2.0",
