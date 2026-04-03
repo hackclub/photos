@@ -27,11 +27,20 @@ const s3Config: S3ClientConfig = {
     secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
   },
 };
-if (process.env.S3_ENDPOINT) {
+const hasCustomEndpoint = Boolean(process.env.S3_ENDPOINT);
+if (hasCustomEndpoint) {
   s3Config.endpoint = process.env.S3_ENDPOINT;
 }
-if (process.env.S3_FORCE_PATH_STYLE === "true") {
-  s3Config.forcePathStyle = true;
+if (process.env.S3_FORCE_PATH_STYLE) {
+  s3Config.forcePathStyle = process.env.S3_FORCE_PATH_STYLE === "true";
+} else if (hasCustomEndpoint) {
+  s3Config.forcePathStyle = false;
+}
+if (process.env.S3_BUCKET_ENDPOINT) {
+  s3Config.bucketEndpoint = process.env.S3_BUCKET_ENDPOINT === "true";
+} else if (hasCustomEndpoint) {
+  // Treat configured endpoint as a bucket endpoint for authenticated API calls.
+  s3Config.bucketEndpoint = true;
 }
 const s3Client = new S3Client(s3Config);
 export { s3Client };
