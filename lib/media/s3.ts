@@ -14,7 +14,15 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
+import { HttpRequest } from "@smithy/protocol-http";
 import { Agent } from "node:https";
+
+const normalizeS3Endpoint = (endpoint: string): string => {
+  if (/^https?:\/\//i.test(endpoint)) {
+    return endpoint;
+  }
+  return `https://${endpoint}`;
+};
 
 const s3Config: S3ClientConfig = {
   requestHandler: new NodeHttpHandler({
@@ -28,21 +36,65 @@ const s3Config: S3ClientConfig = {
   },
 };
 const hasCustomEndpoint = Boolean(process.env.S3_ENDPOINT);
+const endpoint = process.env.S3_ENDPOINT
+  ? normalizeS3Endpoint(process.env.S3_ENDPOINT)
+  : undefined;
 if (hasCustomEndpoint) {
-  s3Config.endpoint = process.env.S3_ENDPOINT;
+  s3Config.endpoint = endpoint;
 }
 if (process.env.S3_FORCE_PATH_STYLE) {
   s3Config.forcePathStyle = process.env.S3_FORCE_PATH_STYLE === "true";
 } else if (hasCustomEndpoint) {
   s3Config.forcePathStyle = false;
 }
-if (process.env.S3_BUCKET_ENDPOINT) {
-  s3Config.bucketEndpoint = process.env.S3_BUCKET_ENDPOINT === "true";
-} else if (hasCustomEndpoint) {
-  // Treat configured endpoint as a bucket endpoint for authenticated API calls.
-  s3Config.bucketEndpoint = true;
-}
 const s3Client = new S3Client(s3Config);
+
+if (endpoint && process.env.S3_AUTH_BASE_ENDPOINT !== "false") {
+  const endpointUrl = new URL(endpoint);
+  const bucketName = process.env.S3_BUCKET_NAME;
+
+  if (bucketName) {
+    s3Client.middlewareStack.add(
+      (next) => async (args) => {
+        const request = args.request;
+
+        if (HttpRequest.isInstance(request)) {
+          const hostWithPort = endpointUrl.host;
+          const bucketPrefix = `${bucketName}.`;
+
+          if (request.hostname === bucketName) {
+            request.hostname = endpointUrl.hostname;
+            if (endpointUrl.port) {
+              request.port = Number(endpointUrl.port);
+            }
+            request.headers.host = hostWithPort;
+          } else if (request.hostname.startsWith(bucketPrefix)) {
+            request.hostname = endpointUrl.hostname;
+            if (endpointUrl.port) {
+              request.port = Number(endpointUrl.port);
+            }
+            request.headers.host = hostWithPort;
+          }
+
+          const bucketPathPrefix = `/${bucketName}`;
+          if (request.path === bucketPathPrefix) {
+            request.path = "/";
+          } else if (request.path.startsWith(`${bucketPathPrefix}/`)) {
+            request.path = request.path.slice(bucketPathPrefix.length);
+          }
+        }
+
+        return next(args);
+      },
+      {
+        step: "build",
+        name: "useBaseEndpointForAuthenticatedS3",
+        priority: "high",
+      },
+    );
+  }
+}
+
 export { s3Client };
 export async function uploadToS3(
   file: Buffer | Readable | Blob | Uint8Array,
