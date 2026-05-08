@@ -1,3 +1,5 @@
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { eq } from "drizzle-orm";
 import {
   HiCalendar,
@@ -10,13 +12,11 @@ import {
   HiTag,
   HiUser,
 } from "react-icons/hi2";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { APP_URL } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { events, series, tags, users } from "@/lib/db/schema";
 import { s3Client } from "@/lib/media/s3";
 import { generateOgImage } from "@/lib/og";
+import { getSlackAvatarUrl } from "@/lib/user-display";
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -81,14 +81,7 @@ export async function GET(request: Request) {
         where: isUuid ? eq(users.id, id) : eq(users.handle, id),
       });
       if (!user) return errorImage("User not found");
-      let avatarUrl: string | undefined;
-      if (user.avatarS3Key) {
-        const command = new GetObjectCommand({
-          Bucket: process.env.S3_BUCKET_NAME!,
-          Key: user.avatarS3Key,
-        });
-        avatarUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-      }
+      const avatarUrl = getSlackAvatarUrl(user.slackId);
       return generateOgImage({
         title: user.name,
         description:

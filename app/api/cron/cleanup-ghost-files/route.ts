@@ -6,7 +6,7 @@ import {
 import { inArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { dataExports, events, media, series, users } from "@/lib/db/schema";
+import { dataExports, events, media, series } from "@/lib/db/schema";
 import { deleteFromS3Batch, s3Client } from "@/lib/media/s3";
 export const maxDuration = 300;
 export async function GET(req: NextRequest) {
@@ -66,13 +66,6 @@ export async function GET(req: NextRequest) {
           .from(media)
           .where(inArray(media.thumbnailS3Key, candidateKeys));
         for (const k of mediaThumbKeys) {
-          if (k.key) foundKeys.add(k.key);
-        }
-        const userAvatarKeys = await db
-          .select({ key: users.avatarS3Key })
-          .from(users)
-          .where(inArray(users.avatarS3Key, candidateKeys));
-        for (const k of userAvatarKeys) {
           if (k.key) foundKeys.add(k.key);
         }
         const eventBannerKeys = await db

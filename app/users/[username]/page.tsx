@@ -72,8 +72,6 @@ export default async function UserProfilePage({
       banReason: true,
       deletedAt: true,
       bio: true,
-      avatarS3Key: true,
-      avatarSource: true,
       socialLinks: true,
       slackId: true,
       storageLimit: true,

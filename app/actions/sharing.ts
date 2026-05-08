@@ -95,7 +95,7 @@ export async function getSharedMedia(token: string) {
             uploadedBy: {
               columns: {
                 name: true,
-                avatarS3Key: true,
+                slackId: true,
               },
             },
             event: true,

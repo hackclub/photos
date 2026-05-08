@@ -20,13 +20,6 @@ export const visibilityEnum = pgEnum("visibility", [
   "unlisted",
 ]);
 export const roleEnum = pgEnum("role", ["user", "admin"]);
-export const avatarSourceEnum = pgEnum("avatar_source", [
-  "upload",
-  "slack",
-  "gravatar",
-  "libravatar",
-  "dicebear",
-]);
 export const exportStatusEnum = pgEnum("export_status", [
   "pending",
   "processing",
@@ -68,8 +61,6 @@ export const users = pgTable("users", {
   hcaAccessToken: text("hca_access_token"),
   hcaRefreshToken: text("hca_refresh_token"),
   bio: text("bio"),
-  avatarS3Key: text("avatar_s3_key"),
-  avatarSource: avatarSourceEnum("avatar_source").notNull().default("dicebear"),
   socialLinks: jsonb("social_links"),
   isGlobalAdmin: boolean("is_global_admin").notNull().default(false),
   storageLimit: bigint("storage_limit", { mode: "number" })

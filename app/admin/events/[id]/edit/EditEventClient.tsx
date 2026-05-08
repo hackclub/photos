@@ -129,15 +129,10 @@ export default function EditEventClient({
         type === "checkbox" ? (e.target as HTMLInputElement).checked : value,
     }));
   };
-  const handleAddAdmin = async (user: {
-    id: string;
-    name: string;
-    email: string;
-    hackclubId: string;
-  }) => {
+  const handleAddAdmin = async (user: { id: string; name: string }) => {
     setAddingAdmin(true);
     try {
-      const result = await addEventAdmin(event.id, user.hackclubId);
+      const result = await addEventAdmin(event.id, user.id);
       if (!result.success) {
         throw new Error(result.error || "Failed to add admin");
       }

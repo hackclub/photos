@@ -8,6 +8,7 @@ import {
   users,
 } from "@/lib/db/schema";
 import { filterDeletableMedia } from "@/lib/policy";
+import { getSlackAvatarUrl, getUserDisplayName } from "@/lib/user-display";
 export type FeedItem = {
   id: string;
   type: "photo" | "comment" | "like";
@@ -20,10 +21,9 @@ export type FeedItem = {
   };
   user: {
     id: string | undefined;
-    email: string | undefined;
     slackId: string | null | undefined;
     name: string | undefined;
-    avatarS3Key: string | null | undefined;
+    avatarUrl: string | null;
     handle: string | null | undefined;
   };
   media?: {
@@ -40,7 +40,7 @@ export type FeedItem = {
       id: string | undefined;
       name: string | undefined;
       slackId?: string | null;
-      avatarS3Key?: string | null;
+      avatarUrl?: string | null;
     };
     likeCount: number;
     commentCount: number;
@@ -160,10 +160,7 @@ export async function fetchFeedItems(
               sql<number>`(SELECT COUNT(*) FROM ${mediaComments} WHERE ${mediaComments.mediaId} = ${media.id} AND ${mediaComments.parentCommentId} IS NULL)::int`.mapWith(
                 Number,
               ),
-            uploaderEmail: users.email,
-            uploaderName: users.name,
-            uploaderPreferredName: users.preferredName,
-            uploaderAvatarS3Key: users.avatarS3Key,
+            uploaderHandle: users.handle,
             uploaderSlackId: users.slackId,
             eventName: events.name,
             eventSlug: events.slug,
@@ -204,10 +201,9 @@ export async function fetchFeedItems(
     const user = usersMap.get(activity.userId);
     const feedUser = {
       id: user?.id,
-      email: user?.email,
       slackId: user?.slackId,
-      name: user?.preferredName || user?.name,
-      avatarS3Key: user?.avatarS3Key,
+      name: getUserDisplayName(user),
+      avatarUrl: getSlackAvatarUrl(user?.slackId),
       handle: user?.handle,
     };
     if (activity.activityType === "photo") {
@@ -239,13 +235,10 @@ export async function fetchFeedItems(
               uploadedAt: mediaItem.uploadedAt,
               uploadedBy: {
                 id: mediaItem.uploadedById,
-                name:
-                  mediaItem.uploaderPreferredName ||
-                  mediaItem.uploaderName ||
-                  mediaItem.uploaderEmail.split("@")[0],
-                email: mediaItem.uploaderEmail,
-                avatarS3Key: mediaItem.uploaderAvatarS3Key,
+                name: getUserDisplayName({ handle: mediaItem.uploaderHandle }),
+                handle: mediaItem.uploaderHandle,
                 slackId: mediaItem.uploaderSlackId,
+                avatarUrl: getSlackAvatarUrl(mediaItem.uploaderSlackId),
               },
               likeCount: mediaItem.likeCount,
               commentCount: mediaItem.commentCount,
@@ -287,13 +280,10 @@ export async function fetchFeedItems(
               uploadedAt: mediaItem.uploadedAt,
               uploadedBy: {
                 id: mediaItem.uploadedById,
-                name:
-                  mediaItem.uploaderPreferredName ||
-                  mediaItem.uploaderName ||
-                  mediaItem.uploaderEmail.split("@")[0],
-                email: mediaItem.uploaderEmail,
-                avatarS3Key: mediaItem.uploaderAvatarS3Key,
+                name: getUserDisplayName({ handle: mediaItem.uploaderHandle }),
+                handle: mediaItem.uploaderHandle,
                 slackId: mediaItem.uploaderSlackId,
+                avatarUrl: getSlackAvatarUrl(mediaItem.uploaderSlackId),
               },
               likeCount: mediaItem.likeCount,
               commentCount: mediaItem.commentCount,
@@ -330,13 +320,10 @@ export async function fetchFeedItems(
               uploadedAt: mediaItem.uploadedAt,
               uploadedBy: {
                 id: mediaItem.uploadedById,
-                name:
-                  mediaItem.uploaderPreferredName ||
-                  mediaItem.uploaderName ||
-                  mediaItem.uploaderEmail.split("@")[0],
-                email: mediaItem.uploaderEmail,
-                avatarS3Key: mediaItem.uploaderAvatarS3Key,
+                name: getUserDisplayName({ handle: mediaItem.uploaderHandle }),
+                handle: mediaItem.uploaderHandle,
                 slackId: mediaItem.uploaderSlackId,
+                avatarUrl: getSlackAvatarUrl(mediaItem.uploaderSlackId),
               },
               likeCount: mediaItem.likeCount,
               commentCount: mediaItem.commentCount,

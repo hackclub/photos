@@ -10,6 +10,7 @@ import {
   users,
 } from "@/lib/db/schema";
 import { can, getUserContext } from "@/lib/policy";
+import { toPublicUser } from "@/lib/user-display";
 
 const clients = new Map<ReadableStreamDefaultController, string | undefined>();
 export async function notifyFeedUpdate(activityData: Record<string, unknown>) {
@@ -106,8 +107,8 @@ export async function broadcastNewPhoto(mediaId: string) {
         uploadedAt: media.uploadedAt,
         uploadedBy: {
           id: users.id,
-          name: users.name,
           handle: users.handle,
+          slackId: users.slackId,
         },
         eventId: media.eventId,
         event: {
@@ -119,7 +120,7 @@ export async function broadcastNewPhoto(mediaId: string) {
         },
         user: {
           id: users.id,
-          email: users.email,
+          handle: users.handle,
           slackId: users.slackId,
         },
         likeCount: sql<number>`(SELECT COUNT(*) FROM ${mediaLikes} WHERE ${mediaLikes.mediaId} = ${media.id})::int`,
@@ -139,7 +140,7 @@ export async function broadcastNewPhoto(mediaId: string) {
           type: "photo",
           timestamp: item.uploadedAt,
           event: item.event,
-          user: item.user,
+          user: item.user ? toPublicUser(item.user) : null,
           media: {
             id: item.id,
             filename: item.filename,
@@ -150,7 +151,7 @@ export async function broadcastNewPhoto(mediaId: string) {
             thumbnailS3Key: item.thumbnailS3Key,
             exifData: item.exifData,
             uploadedAt: item.uploadedAt,
-            uploadedBy: item.uploadedBy,
+            uploadedBy: item.uploadedBy ? toPublicUser(item.uploadedBy) : null,
             likeCount: item.likeCount,
             commentCount: item.commentCount,
           },
@@ -195,10 +196,8 @@ export async function broadcastNewComment(commentId: string) {
         },
         user: {
           id: users.id,
-          name: users.name,
-          email: users.email,
+          handle: users.handle,
           slackId: users.slackId,
-          avatarS3Key: users.avatarS3Key,
         },
       })
       .from(mediaComments)
@@ -216,7 +215,7 @@ export async function broadcastNewComment(commentId: string) {
           type: "comment",
           timestamp: item.createdAt,
           event: item.event,
-          user: item.user,
+          user: toPublicUser(item.user),
           comment: {
             id: item.id,
             content: item.content,
@@ -253,10 +252,8 @@ export async function broadcastNewLike(mediaId: string, userId: string) {
         },
         user: {
           id: users.id,
-          name: users.name,
-          email: users.email,
+          handle: users.handle,
           slackId: users.slackId,
-          avatarS3Key: users.avatarS3Key,
         },
       })
       .from(mediaLikes)
@@ -276,7 +273,7 @@ export async function broadcastNewLike(mediaId: string, userId: string) {
           type: "like",
           timestamp: item.createdAt,
           event: item.event,
-          user: item.user,
+          user: toPublicUser(item.user),
           media: item.media,
         },
       };
@@ -314,8 +311,8 @@ export async function broadcastBulkUpload(
         },
         user: {
           id: user.id,
-          name: user.name,
-          email: user.email,
+          name: toPublicUser(user).name,
+          handle: user.handle,
           slackId: user.slackId,
         },
         count,

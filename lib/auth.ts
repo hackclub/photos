@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { jwtVerify, SignJWT } from "jose";
 import { cookies, headers } from "next/headers";
 import { HACK_CLUB_AUTH_URL } from "@/lib/constants";
+import { getUserDisplayName, toPublicUser } from "@/lib/user-display";
 import { db } from "./db";
 import { users } from "./db/schema";
 
@@ -25,9 +26,7 @@ export interface SessionUser {
   hackclubId: string;
   isGlobalAdmin: boolean;
   isBanned?: boolean;
-  avatarS3Key?: string | null;
   slackId?: string | null;
-  avatarSource?: "upload" | "slack" | "gravatar" | "libravatar" | "dicebear";
   hasAdminAccess?: boolean;
 }
 export interface OnboardingUser {
@@ -232,7 +231,7 @@ export function parseHackClubUser(
   return {
     hackclubId: identity.id,
     email: identity.primary_email,
-    name: `${identity.first_name} ${identity.last_name}`.trim(),
+    name: getUserDisplayName(),
     slackId: identity.slack_id,
     verificationStatus: identity.verification_status,
     hcaAccessToken: accessToken,
@@ -245,7 +244,7 @@ export async function createOrUpdateUser(
   refreshToken?: string,
 ): Promise<SessionUser> {
   const userData = parseHackClubUser(hackclubData, accessToken, refreshToken);
-  const { email, name, hackclubId, slackId, verificationStatus } = userData;
+  const { email, hackclubId, slackId, verificationStatus } = userData;
 
   const existingUser = await db.query.users.findFirst({
     where: eq(users.hackclubId, hackclubId),
@@ -255,7 +254,6 @@ export async function createOrUpdateUser(
     await db
       .update(users)
       .set({
-        name,
         slackId,
         verificationStatus,
         hcaAccessToken: accessToken,
@@ -265,16 +263,13 @@ export async function createOrUpdateUser(
       .where(eq(users.id, existingUser.id));
 
     return {
+      ...toPublicUser(existingUser),
       id: existingUser.id,
       email: existingUser.email,
-      name: existingUser.preferredName || name,
-      handle: existingUser.handle,
       hackclubId: existingUser.hackclubId,
       isGlobalAdmin: existingUser.isGlobalAdmin,
       isBanned: existingUser.isBanned,
-      avatarS3Key: existingUser.avatarS3Key,
       slackId: existingUser.slackId,
-      avatarSource: existingUser.avatarSource,
     };
   }
 
@@ -283,7 +278,7 @@ export async function createOrUpdateUser(
     .values({
       hackclubId,
       email,
-      name,
+      name: getUserDisplayName(),
       slackId,
       verificationStatus,
       hcaAccessToken: accessToken,
@@ -292,16 +287,13 @@ export async function createOrUpdateUser(
     .returning();
 
   return {
+    ...toPublicUser(newUser),
     id: newUser.id,
     email: newUser.email,
-    name: newUser.name,
-    handle: newUser.handle,
     hackclubId: newUser.hackclubId,
     isGlobalAdmin: newUser.isGlobalAdmin,
     isBanned: newUser.isBanned,
-    avatarS3Key: newUser.avatarS3Key,
     slackId: newUser.slackId,
-    avatarSource: newUser.avatarSource,
   };
 }
 export async function refreshUser(userId: string) {

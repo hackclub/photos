@@ -104,7 +104,6 @@ interface MediaItem {
     id: string;
     name: string;
     email?: string;
-    avatarS3Key?: string | null;
     handle?: string | null;
     slackId?: string | null;
   };
@@ -173,7 +172,6 @@ interface MentionedUser {
   id: string;
   name: string;
   handle?: string | null;
-  avatarS3Key?: string | null;
   email?: string;
   slackId?: string | null;
 }
@@ -289,7 +287,6 @@ export default function PhotoDetailModal({
       id: media.uploadedBy.id,
       name: media.uploadedBy.name,
       handle: media.uploadedBy.handle,
-      avatarS3Key: media.uploadedBy.avatarS3Key,
       email: media.uploadedBy.email,
       slackId: media.uploadedBy.slackId,
     };

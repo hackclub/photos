@@ -15,7 +15,6 @@ import {
   SiX,
 } from "react-icons/si";
 import { adminUpdateUser } from "@/app/actions/admins";
-import AvatarSelector from "@/components/media/AvatarSelector";
 
 interface User {
   id: string;
@@ -27,8 +26,6 @@ interface User {
   preferredName?: string | null;
   socialLinks?: Record<string, string> | null;
   storageLimit: number;
-  avatarS3Key?: string | null;
-  avatarSource?: "upload" | "slack" | "gravatar" | "libravatar" | "dicebear";
 }
 interface EditUserModalProps {
   user: User;
@@ -42,7 +39,6 @@ export default function EditUserModal({
 }: EditUserModalProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [_avatarVersion, setAvatarVersion] = useState(0);
   const [formData, setFormData] = useState({
     preferredName: user.preferredName || "",
     handle: user.handle || "",
@@ -151,45 +147,6 @@ export default function EditUserModal({
                 {error}
               </div>
             )}
-
-            <div className="space-y-4">
-              <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">
-                Avatar
-              </h3>
-              <AvatarSelector
-                email={user.email}
-                currentAvatarS3Key={user.avatarS3Key || undefined}
-                currentAvatarSource={user.avatarSource}
-                onAvatarChange={async (url, s3Key, source) => {
-                  const { adminUpdateUser } = await import(
-                    "@/app/actions/admins"
-                  );
-                  if (source === "upload") {
-                  } else {
-                    await adminUpdateUser(user.id, {
-                      avatarS3Key: null,
-                      avatarSource: source,
-                    });
-                  }
-                  onSave({
-                    ...user,
-                    avatarS3Key: source === "upload" ? s3Key : null,
-                    avatarSource: source,
-                  });
-                  setAvatarVersion((v) => v + 1);
-                }}
-                hasSlackId={!!user.slackId}
-                slackId={user.slackId}
-                onUpload={async (file) => {
-                  const formData = new FormData();
-                  formData.append("avatar", file);
-                  const { adminUploadUserAvatar } = await import(
-                    "@/app/actions/admins"
-                  );
-                  return await adminUploadUserAvatar(user.id, formData);
-                }}
-              />
-            </div>
 
             <div className="space-y-4">
               <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">

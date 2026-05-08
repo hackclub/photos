@@ -36,8 +36,8 @@ interface ApiKey {
     id: string;
     name: string;
     email: string;
-    avatarS3Key: string | null;
     handle: string | null;
+    slackId?: string | null;
   };
 }
 export default function ApiKeyList({ initialKeys }: { initialKeys: ApiKey[] }) {

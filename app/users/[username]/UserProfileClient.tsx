@@ -29,12 +29,11 @@ import {
   SiTwitch,
   SiX,
 } from "react-icons/si";
-import { deleteAccount, updateUserProfile } from "@/app/actions/users";
+import { deleteAccount } from "@/app/actions/users";
 import EventCard from "@/components/events/EventCard";
-import AvatarSelector from "@/components/media/AvatarSelector";
 import MediaGallery from "@/components/media/MediaGallery";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
-import UserAvatar, { clearAvatarCache } from "@/components/ui/UserAvatar";
+import UserAvatar from "@/components/ui/UserAvatar";
 import DeleteAccountModal from "@/components/users/DeleteAccountModal";
 import EditProfileModal from "@/components/users/EditProfileModal";
 import UserReports from "@/components/users/UserReports";
@@ -52,8 +51,6 @@ interface User {
   bannedAt?: Date | null;
   banReason?: string | null;
   bio?: string | null;
-  avatarS3Key?: string | null;
-  avatarSource?: "upload" | "slack" | "gravatar" | "libravatar" | "dicebear";
   socialLinks?: Record<string, string> | null;
   slackId?: string | null;
   storageLimit?: number;
@@ -74,7 +71,6 @@ interface MediaItem {
     id: string;
     name: string;
     handle?: string | null;
-    avatarS3Key?: string | null;
     slackId?: string | null;
   };
   event?: {
@@ -130,9 +126,7 @@ export default function UserProfileClient({
   const [storageUsage, setStorageUsage] = useState<number>(0);
   const { refreshUser } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
-  const [showAvatarSelector, setShowAvatarSelector] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [avatarVersion, setAvatarVersion] = useState(0);
   const [showReports, setShowReports] = useState(false);
   useEffect(() => {
     setUser(initialUser);
@@ -163,46 +157,6 @@ export default function UserProfileClient({
     };
     fetchData();
   }, [user.id, isOwnProfile]);
-  const handleAvatarChange = async (
-    url: string,
-    key: string,
-    source: "upload" | "slack" | "gravatar" | "libravatar" | "dicebear",
-  ) => {
-    try {
-      let finalKey: string | null = key;
-      const updateData: {
-        avatarS3Key?: string | null;
-        avatarSource:
-          | "upload"
-          | "slack"
-          | "gravatar"
-          | "libravatar"
-          | "dicebear";
-      } = {
-        avatarSource: source,
-      };
-      if (source === "upload") {
-        updateData.avatarS3Key = key;
-      } else {
-        updateData.avatarS3Key = null;
-        finalKey = null;
-      }
-      await updateUserProfile(user.id, updateData);
-      setUser((prev) => ({
-        ...prev,
-        avatarS3Key: finalKey,
-        avatarSource: source,
-      }));
-      if (finalKey) {
-        clearAvatarCache(finalKey);
-      }
-      setAvatarVersion((v) => v + 1);
-      await refreshUser();
-      router.refresh();
-    } catch (error) {
-      console.error("Failed to update avatar:", error);
-    }
-  };
   const handleDeleteAccount = async () => {
     try {
       const result = await deleteAccount();
@@ -248,64 +202,9 @@ export default function UserProfileClient({
                 user={user}
                 size="xl"
                 className="w-full! h-full! text-4xl!"
-                avatarVersion={avatarVersion}
               />
-
-              {isOwnProfile && (
-                <button
-                  onClick={() => setShowAvatarSelector(true)}
-                  className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity z-10 w-full h-full border-none outline-none"
-                >
-                  <div className="text-center">
-                    <HiPhoto className="w-6 h-6 text-white mx-auto mb-1" />
-                    <span className="text-xs text-white font-medium">
-                      Change
-                    </span>
-                  </div>
-                </button>
-              )}
             </div>
           </div>
-
-          {showAvatarSelector && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full relative">
-                <button
-                  onClick={() => setShowAvatarSelector(false)}
-                  className="absolute top-4 right-4 text-zinc-400 hover:text-white"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <title>Close</title>
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-
-                <h3 className="text-xl font-bold text-white mb-6 text-center">
-                  Update Profile Picture
-                </h3>
-
-                <AvatarSelector
-                  email={user.email}
-                  currentAvatarS3Key={user.avatarS3Key || undefined}
-                  currentAvatarSource={user.avatarSource}
-                  onAvatarChange={handleAvatarChange}
-                  hasSlackId={!!user.slackId}
-                  slackId={user.slackId}
-                />
-              </div>
-            </div>
-          )}
 
           {isEditing && (
             <EditProfileModal

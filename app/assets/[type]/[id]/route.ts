@@ -77,27 +77,6 @@ export async function GET(
     let s3Key: string | null = null;
     let isPublic = false;
     switch (type) {
-      case "avatar": {
-        const isUuid =
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-            id,
-          );
-        if (isUuid) {
-          const userRecord = await db.query.users.findFirst({
-            where: eq(users.id, id),
-            columns: { avatarS3Key: true },
-          });
-          if (!userRecord || !userRecord.avatarS3Key) {
-            return new NextResponse("Not Found", { status: 404 });
-          }
-          s3Key = userRecord.avatarS3Key;
-          isPublic = true;
-        } else {
-          s3Key = `users/onboarding/${id}/avatar.jpg`;
-          isPublic = true;
-        }
-        break;
-      }
       case "event-banner": {
         const event = await db.query.events.findFirst({
           where: eq(events.id, id),

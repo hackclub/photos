@@ -54,10 +54,9 @@ export default function FeedItem({
         >
           <UserAvatar
             user={{
-              name: item.user.name || item.user.email.split("@")[0],
-              email: item.user.email,
-              avatarS3Key: item.user.avatarS3Key,
+              name: item.user.name,
               slackId: item.user.slackId,
+              avatarUrl: item.user.avatarUrl,
             }}
             size="sm"
             className="w-8 h-8 ring-2 ring-zinc-900"
@@ -70,7 +69,7 @@ export default function FeedItem({
               href={`/users/${item.user.handle || item.user.id}`}
               className="font-semibold text-white hover:text-red-400 transition-colors text-sm"
             >
-              {item.user.name || item.user.email.split("@")[0]}
+              {item.user.name}
             </Link>
             <span className="text-zinc-500 text-xs">{getActionText()}</span>
             <span className="text-zinc-600 text-xs">

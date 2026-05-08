@@ -46,16 +46,16 @@ interface Report {
       id: string;
       name: string;
       handle: string | null;
-      avatarS3Key: string | null;
       email: string;
+      slackId?: string | null;
     };
   };
   reporter: {
     id: string;
     name: string;
     handle: string | null;
-    avatarS3Key: string | null;
     email: string;
+    slackId?: string | null;
   };
   resolvedBy?: {
     id: string;

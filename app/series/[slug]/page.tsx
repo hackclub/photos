@@ -71,7 +71,6 @@ export default async function SeriesDetailPage({
                 id: true,
                 name: true,
                 email: true,
-                avatarS3Key: true,
                 handle: true,
                 slackId: true,
               },

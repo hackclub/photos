@@ -17,8 +17,9 @@ import {
   getAccessibleEventIds,
   getUserContext,
 } from "@/lib/policy";
+import { type PublicUser, toPublicUser } from "@/lib/user-display";
 export type SearchResults = {
-  users: (typeof users.$inferSelect)[];
+  users: PublicUser[];
   events: (typeof events.$inferSelect)[];
   series: (typeof series.$inferSelect)[];
   media: (typeof media.$inferSelect & {
@@ -56,11 +57,7 @@ export async function globalSearch(query: string): Promise<{
     let userResults: (typeof users.$inferSelect)[] = [];
     if (session) {
       userResults = await db.query.users.findMany({
-        where: or(
-          ilike(users.name, searchPattern),
-          ilike(users.email, searchPattern),
-          ilike(users.handle, searchPattern),
-        ),
+        where: or(ilike(users.handle, searchPattern)),
         limit: 5,
         orderBy: [desc(users.createdAt)],
       });
@@ -122,10 +119,7 @@ export async function globalSearch(query: string): Promise<{
       .filter((e) => accessibleEventIds.has(e.id))
       .slice(0, 5);
     const matchingUsers = await db.query.users.findMany({
-      where: or(
-        ilike(users.name, searchPattern),
-        ilike(users.handle, searchPattern),
-      ),
+      where: or(ilike(users.handle, searchPattern)),
       columns: { id: true },
       limit: 10,
     });
@@ -170,7 +164,7 @@ export async function globalSearch(query: string): Promise<{
     return {
       success: true,
       results: {
-        users: userResults,
+        users: userResults.map(toPublicUser),
         events: eventResults,
         series: seriesResults,
         media: finalMedia,
@@ -233,7 +227,7 @@ export async function getSearchFilterOptions() {
       data: {
         events: allEvents,
         series: allSeries,
-        users: allUsers,
+        users: allUsers.map(toPublicUser),
         tags: allTags,
       },
     };
@@ -271,11 +265,7 @@ export async function advancedSearch(
     let userResults: (typeof users.$inferSelect)[] = [];
     if (session && trimmedQuery.length >= 2) {
       userResults = await db.query.users.findMany({
-        where: or(
-          ilike(users.name, searchPattern),
-          ilike(users.email, searchPattern),
-          ilike(users.handle, searchPattern),
-        ),
+        where: or(ilike(users.handle, searchPattern)),
         limit: 5,
         orderBy: [desc(users.createdAt)],
       });
@@ -312,10 +302,7 @@ export async function advancedSearch(
     const mediaConditions = [];
     if (trimmedQuery.length > 0) {
       const matchingUsers = await db.query.users.findMany({
-        where: or(
-          ilike(users.name, searchPattern),
-          ilike(users.handle, searchPattern),
-        ),
+        where: or(ilike(users.handle, searchPattern)),
         columns: { id: true },
         limit: 10,
       });
@@ -425,7 +412,7 @@ export async function advancedSearch(
     return {
       success: true,
       results: {
-        users: userResults,
+        users: userResults.map(toPublicUser),
         events: eventResults,
         series: [],
         media: finalMedia,

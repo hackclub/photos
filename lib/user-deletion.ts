@@ -64,17 +64,6 @@ export async function deleteUserContent(userId: string) {
       successfulSeriesIds.push(s.id);
     }
   }
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-    columns: { avatarS3Key: true },
-  });
-  if (user?.avatarS3Key) {
-    try {
-      await deleteMediaAndThumbnail(user.avatarS3Key, null);
-    } catch (e) {
-      console.error(`Failed to delete avatar:`, e);
-    }
-  }
   const userExports = await db.query.dataExports.findMany({
     where: eq(dataExports.userId, userId),
     columns: { id: true, s3Key: true },
@@ -114,7 +103,6 @@ export async function deleteUserContent(userId: string) {
           hackclubId: `deleted-${userId}`,
           handle: `deleted-${userId}`,
           bio: null,
-          avatarS3Key: null,
           socialLinks: null,
           slackId: null,
           hcaAccessToken: null,

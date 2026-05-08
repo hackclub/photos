@@ -23,7 +23,7 @@ type MediaItem = {
   caption: string | null;
   uploadedBy: {
     name: string;
-    avatarS3Key: string | null;
+    slackId?: string | null;
   };
 };
 type Config = {

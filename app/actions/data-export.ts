@@ -173,25 +173,6 @@ async function processDataExport(exportId: string, userId: string) {
         console.error(`Failed to add media ${item.id} to export:`, err);
       }
     }
-    if (userData.avatarS3Key) {
-      try {
-        const { GetObjectCommand } = await import("@aws-sdk/client-s3");
-        const { s3Client } = await import("@/lib/media/s3");
-        const command = new GetObjectCommand({
-          Bucket: process.env.S3_BUCKET_NAME,
-          Key: userData.avatarS3Key,
-        });
-        const response = await s3Client.send(command);
-        if (response.Body) {
-          const stream = response.Body as Readable;
-          zipFile.addReadStream(stream, "avatar.jpg", {
-            mode: 0o644,
-          });
-        }
-      } catch (err) {
-        console.error("Failed to add avatar to export:", err);
-      }
-    }
     zipFile.end();
     await new Promise<void>((resolve, reject) => {
       output.on("finish", () => resolve());

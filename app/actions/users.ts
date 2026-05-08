@@ -1,176 +1,15 @@
 "use server";
-import { createHash } from "node:crypto";
 import { and, eq, ilike, inArray, or } from "drizzle-orm";
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
-import sharp from "sharp";
 import { auditLog } from "@/lib/audit";
-import { getOnboardingSession, getSession } from "@/lib/auth";
-import { GRAVATAR_URL, LIBRAVATAR_URL } from "@/lib/constants";
+import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { dataExports, media, users } from "@/lib/db/schema";
-import { deleteFromS3, getAssetProxyUrl, uploadToS3 } from "@/lib/media/s3";
+import { deleteFromS3 } from "@/lib/media/s3";
 import { deleteBatchMedia } from "@/lib/media/thumbnail";
-import { can, getUserContext } from "@/lib/policy";
-
-const MAX_AVATAR_SIZE = 50 * 1024 * 1024;
-const ALLOWED_AVATAR_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "image/heic",
-  "image/heif",
-  "image/avif",
-  "image/tiff",
-  "image/svg+xml",
-];
-export async function uploadUserAvatar(formData: FormData) {
-  try {
-    const session = await getSession();
-    const onboardingSession = !session ? await getOnboardingSession() : null;
-    if (!session?.id && !onboardingSession) {
-      return { success: false, error: "Unauthorized" };
-    }
-    if (session?.id) {
-      const user = await getUserContext(session.id);
-      if (!user) return { success: false, error: "Unauthorized" };
-      if (!(await can(user, "update", "user", { id: user.id }))) {
-        return { success: false, error: "Forbidden" };
-      }
-    }
-    const file = formData.get("avatar") as File;
-    if (!file) {
-      return { success: false, error: "No file provided" };
-    }
-    if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
-      return {
-        success: false,
-        error: "Invalid file type. Only images are allowed.",
-      };
-    }
-    if (file.size > MAX_AVATAR_SIZE) {
-      return { success: false, error: "File too large (max 50MB)" };
-    }
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const processedBuffer = await sharp(buffer)
-      .resize(400, 400, {
-        fit: "cover",
-        position: "center",
-      })
-      .jpeg({ quality: 80, mozjpeg: true })
-      .toBuffer();
-    const key = session?.id
-      ? `users/${session.id}/avatar.jpg`
-      : `users/onboarding/${onboardingSession!.hackclubId}/avatar.jpg`;
-    const tags: Record<string, string> = session?.id
-      ? { userId: session.id }
-      : { onboardingId: onboardingSession!.hackclubId };
-    await uploadToS3(processedBuffer, key, "image/jpeg", undefined, tags);
-    revalidateTag(`s3-url-${key}`, "default");
-    if (session?.id) {
-      const currentUser = await db.query.users.findFirst({
-        where: eq(users.id, session.id),
-        columns: { avatarS3Key: true },
-      });
-      if (currentUser?.avatarS3Key && currentUser.avatarS3Key !== key) {
-        try {
-          await deleteFromS3(currentUser.avatarS3Key);
-        } catch (e) {
-          console.error("Failed to delete old avatar:", e);
-        }
-      }
-      await db
-        .update(users)
-        .set({
-          avatarS3Key: key,
-          avatarSource: "upload",
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, session.id));
-      await auditLog(session.id, "update", "user", session.id, {
-        action: "upload_avatar",
-      });
-      revalidatePath(`/users/${session.id}`);
-      if (session.handle) {
-        revalidatePath(`/users/${session.handle}`);
-      }
-    }
-    let url: string;
-    if (session?.id) {
-      url = `${getAssetProxyUrl("avatar", session.id)}?t=${Date.now()}`;
-    } else if (onboardingSession?.hackclubId) {
-      url = `${getAssetProxyUrl("avatar", onboardingSession.hackclubId.toString())}?t=${Date.now()}`;
-    } else {
-      url = "";
-    }
-    return { success: true, avatarS3Key: key, url };
-  } catch (error) {
-    console.error("Error uploading avatar:", error);
-    return { success: false, error: "Failed to upload avatar" };
-  }
-}
-export async function getAvatarUrl(key: string) {
-  try {
-    const parts = key.split("/");
-    if (parts.length >= 2 && (parts[0] === "users" || parts[0] === "avatars")) {
-      const userId = parts[1];
-      if (
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          userId,
-        )
-      ) {
-        const { getAssetProxyUrl } = await import("@/lib/media/s3");
-        return { success: true, url: getAssetProxyUrl("avatar", userId) };
-      }
-    }
-    return { success: false, error: "Invalid avatar key format" };
-  } catch (error) {
-    console.error("Error getting avatar URL:", error);
-    return { success: false, error: "Failed to get avatar URL" };
-  }
-}
-export async function checkAvatarExistence(email: string) {
-  if (!email) return { found: false };
-  const hash = createHash("md5")
-    .update(email.trim().toLowerCase())
-    .digest("hex");
-  try {
-    const gravatarUrl = `${GRAVATAR_URL}/${hash}?d=404`;
-    const gravatarResponse = await fetch(gravatarUrl, {
-      method: "HEAD",
-      cache: "no-store",
-      headers: {
-        "User-Agent": "HackClub-Photos/1.0",
-      },
-    });
-    if (gravatarResponse.status === 200) {
-      return {
-        found: true,
-        type: "gravatar" as const,
-        url: `${GRAVATAR_URL}/${hash}?d=mp&s=400`,
-      };
-    }
-  } catch (_e) {}
-  try {
-    const libravatarUrl = `${LIBRAVATAR_URL}/${hash}?d=404`;
-    const libravatarResponse = await fetch(libravatarUrl, {
-      method: "HEAD",
-      cache: "no-store",
-      headers: {
-        "User-Agent": "HackClub-Photos/1.0",
-      },
-    });
-    if (libravatarResponse.status === 200) {
-      return {
-        found: true,
-        type: "libravatar" as const,
-        url: `${LIBRAVATAR_URL}/${hash}?d=mp&s=400`,
-      };
-    }
-  } catch (_e) {}
-  return { found: false };
-}
+import { getUserContext } from "@/lib/policy";
+import { getUserDisplayName, toPublicUser } from "@/lib/user-display";
 export async function searchUsers(query: string) {
   try {
     const session = await getSession();
@@ -182,25 +21,18 @@ export async function searchUsers(query: string) {
       return { success: true, users: [] };
     }
     const searchResults = await db.query.users.findMany({
-      where: or(
-        ilike(users.name, `%${query}%`),
-        ilike(users.email, `%${query}%`),
-        ilike(users.slackId, `%${query}%`),
-        ilike(users.handle, `%${query}%`),
-      ),
+      where: or(ilike(users.handle, `%${query}%`)),
       limit: 10,
       columns: {
         id: true,
-        name: true,
-        email: true,
-        hackclubId: true,
-        avatarS3Key: true,
-        avatarSource: true,
         handle: true,
         slackId: true,
       },
     });
-    return { success: true, users: searchResults };
+    return {
+      success: true,
+      users: searchResults.map(toPublicUser),
+    };
   } catch (error) {
     console.error("Error searching users:", error);
     return { success: false, error: "Failed to search users" };
@@ -220,14 +52,18 @@ export async function getUsersBySlackIds(slackIds: string[]) {
       where: inArray(users.slackId, slackIds),
       columns: {
         id: true,
-        name: true,
-        email: true,
         slackId: true,
-        avatarS3Key: true,
-        avatarSource: true,
+        handle: true,
       },
     });
-    return { success: true, users: foundUsers };
+    return {
+      success: true,
+      users: foundUsers.map((user) => ({
+        ...toPublicUser(user),
+        email: "",
+        slackId: user.slackId,
+      })),
+    };
   } catch (error) {
     console.error("Error fetching users by Slack IDs:", error);
     return { success: false, error: "Failed to fetch users" };
@@ -239,7 +75,10 @@ export async function getCurrentUser() {
     if (!session?.id) {
       return { success: false, error: "Unauthorized" };
     }
-    return { success: true, user: session };
+    return {
+      success: true,
+      user: { ...session, name: getUserDisplayName(session) },
+    };
   } catch (error) {
     console.error("Error getting current user:", error);
     return { success: false, error: "Failed to get user" };
@@ -379,8 +218,6 @@ export async function updateUserProfile(
   data: {
     bio?: string;
     socialLinks?: Record<string, string>;
-    avatarS3Key?: string | null;
-    avatarSource?: "upload" | "slack" | "gravatar" | "libravatar" | "dicebear";
     handle?: string;
     preferredName?: string;
   },

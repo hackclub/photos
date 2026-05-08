@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getOnboardingSession, getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
+import { getUserDisplayName, toPublicUser } from "@/lib/user-display";
 export async function GET() {
   const session = await getSession();
   if (session) {
@@ -10,8 +11,8 @@ export async function GET() {
       where: eq(users.id, session.id),
       columns: {
         isBanned: true,
-        avatarS3Key: true,
         slackId: true,
+        handle: true,
       },
       with: {
         seriesAdminRoles: { limit: 1 },
@@ -26,8 +27,8 @@ export async function GET() {
       const res = NextResponse.json({
         user: {
           ...session,
+          ...toPublicUser({ ...session, ...user }),
           isBanned: user.isBanned,
-          avatarS3Key: user.avatarS3Key,
           slackId: user.slackId,
           hasAdminAccess,
         },
@@ -41,7 +42,12 @@ export async function GET() {
   }
   const onboardingSession = await getOnboardingSession();
   if (onboardingSession) {
-    const res = NextResponse.json({ onboardingUser: onboardingSession });
+    const res = NextResponse.json({
+      onboardingUser: {
+        ...onboardingSession,
+        name: getUserDisplayName(),
+      },
+    });
     res.headers.set("Cache-Control", "no-store");
     res.headers.set("Pragma", "no-cache");
     res.headers.set("X-Content-Type-Options", "nosniff");

@@ -11,6 +11,8 @@ import {
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { getUserContext } from "@/lib/policy";
+import { getUserDisplayName } from "@/lib/user-display";
+
 export async function checkHandleAvailability(handle: string) {
   if (!handle || handle.length < 3 || handle.length > 20) {
     return {
@@ -40,12 +42,8 @@ export async function checkHandleAvailability(handle: string) {
     return { available: false, error: "Internal server error" };
   }
 }
-export async function completeOnboarding(data: {
-  handle: string;
-  name: string;
-  avatarS3Key?: string;
-  avatarSource?: "upload" | "slack" | "gravatar" | "libravatar" | "dicebear";
-}) {
+
+export async function completeOnboarding(data: { handle: string }) {
   const session = await getSession();
   const onboardingSession = await getOnboardingSession();
   if (!session && !onboardingSession) {
@@ -57,7 +55,7 @@ export async function completeOnboarding(data: {
       return { success: false, error: "Unauthorized" };
     }
   }
-  const { handle, name, avatarS3Key } = data;
+  const { handle } = data;
   const availability = await checkHandleAvailability(handle);
   if (!availability.available) {
     return {
@@ -67,60 +65,45 @@ export async function completeOnboarding(data: {
   }
   try {
     if (session) {
-      const finalAvatarS3Key =
-        data.avatarSource !== "upload"
-          ? null
-          : avatarS3Key !== undefined
-            ? avatarS3Key
-            : session.avatarS3Key;
       await db
         .update(users)
         .set({
           handle,
-          preferredName: name,
-          avatarS3Key: finalAvatarS3Key,
-          avatarSource: data.avatarSource || "dicebear",
+          preferredName: null,
           updatedAt: new Date(),
         })
         .where(eq(users.id, session.id));
       await auditLog(session.id, "update", "user", session.id, {
         action: "onboarding_update",
         handle,
-        preferredName: name,
       });
-      const updatedUser = {
+      await createSession({
         ...session,
+        name: getUserDisplayName({ handle }),
         handle,
-        name,
-        avatarS3Key: finalAvatarS3Key,
-      };
-      await createSession(updatedUser);
+      });
     } else if (onboardingSession) {
       const existingUser = await db.query.users.findFirst({
         where: eq(users.hackclubId, onboardingSession.hackclubId),
       });
       if (existingUser) {
-        const finalAvatarS3Key =
-          data.avatarSource !== "upload" ? null : avatarS3Key;
         await db
           .update(users)
           .set({
             handle,
-            preferredName: name,
-            avatarS3Key: finalAvatarS3Key,
-            avatarSource: data.avatarSource || "dicebear",
+            preferredName: null,
             updatedAt: new Date(),
           })
           .where(eq(users.id, existingUser.id));
         await createSession({
           id: existingUser.id,
           email: existingUser.email,
-          name: name,
-          handle: handle,
+          name: getUserDisplayName({ handle }),
+          handle,
           hackclubId: existingUser.hackclubId,
           isGlobalAdmin: existingUser.isGlobalAdmin,
           isBanned: existingUser.isBanned,
-          avatarS3Key: finalAvatarS3Key,
+          slackId: existingUser.slackId,
         });
       } else {
         const [newUser] = await db
@@ -128,14 +111,13 @@ export async function completeOnboarding(data: {
           .values({
             hackclubId: onboardingSession.hackclubId,
             email: onboardingSession.email,
-            name: onboardingSession.name,
-            preferredName: name,
+            name: getUserDisplayName({ handle }),
+            preferredName: null,
             handle,
             slackId: onboardingSession.slackId,
             verificationStatus: onboardingSession.verificationStatus,
             hcaAccessToken: onboardingSession.hcaAccessToken,
-            avatarS3Key: data.avatarSource !== "upload" ? null : avatarS3Key,
-            avatarSource: data.avatarSource || "dicebear",
+            hcaRefreshToken: onboardingSession.hcaRefreshToken,
           })
           .returning();
         await auditLog(newUser.id, "create", "user", newUser.id, {
@@ -145,12 +127,12 @@ export async function completeOnboarding(data: {
         await createSession({
           id: newUser.id,
           email: newUser.email,
-          name: newUser.preferredName || newUser.name,
+          name: getUserDisplayName(newUser),
           handle: newUser.handle,
           hackclubId: newUser.hackclubId,
           isGlobalAdmin: newUser.isGlobalAdmin,
           isBanned: newUser.isBanned,
-          avatarS3Key: newUser.avatarS3Key,
+          slackId: newUser.slackId,
         });
       }
       await deleteOnboardingSession();

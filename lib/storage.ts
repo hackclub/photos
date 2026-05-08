@@ -2,6 +2,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { events, media, users } from "@/lib/db/schema";
 import { getUserContext } from "@/lib/policy";
+import { getUserDisplayName } from "@/lib/user-display";
 export const DEFAULT_STORAGE_LIMIT = 20 * 1024 * 1024 * 1024;
 export const UNLIMITED_STORAGE = -1;
 export async function getUserStorageUsage(userId: string): Promise<number> {
@@ -88,7 +89,7 @@ export async function getDatabaseStorageStats() {
   const userStats = await db
     .select({
       id: users.id,
-      name: users.name,
+      handle: users.handle,
       email: users.email,
       storageLimit: users.storageLimit,
       isGlobalAdmin: users.isGlobalAdmin,
@@ -97,13 +98,7 @@ export async function getDatabaseStorageStats() {
     })
     .from(media)
     .innerJoin(users, eq(media.uploadedById, users.id))
-    .groupBy(
-      users.id,
-      users.name,
-      users.email,
-      users.storageLimit,
-      users.isGlobalAdmin,
-    )
+    .groupBy(users.id, users.handle, users.storageLimit, users.isGlobalAdmin)
     .orderBy(desc(sql`sum(${media.fileSize})`));
   return {
     totalSize: Number(totalStats[0]?.totalSize || 0),
@@ -115,6 +110,7 @@ export async function getDatabaseStorageStats() {
     })),
     userBreakdown: userStats.map((u) => ({
       ...u,
+      name: getUserDisplayName(u),
       size: Number(u.size),
       count: Number(u.count),
       storageLimit: Number(u.storageLimit),

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
+import { useState } from "react";
 import { HiUsers, HiXMark } from "react-icons/hi2";
 import UserAvatar from "@/components/ui/UserAvatar";
 
@@ -10,8 +10,6 @@ interface Participant {
     id: string;
     name: string;
     handle: string | null;
-    avatarS3Key: string | null;
-    avatarSource: "upload" | "slack" | "gravatar" | "libravatar" | "dicebear";
     email: string;
     slackId: string | null;
   };
@@ -23,7 +21,10 @@ interface ParticipantsListProps {
   count: number;
 }
 
-export default function ParticipantsList({ participants, count }: ParticipantsListProps) {
+export default function ParticipantsList({
+  participants,
+  count,
+}: ParticipantsListProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (

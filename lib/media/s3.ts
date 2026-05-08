@@ -1,3 +1,4 @@
+import { Agent } from "node:https";
 import type { Readable } from "node:stream";
 import {
   AbortMultipartUploadCommand,
@@ -5,7 +6,6 @@ import {
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
-  GetObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -14,7 +14,6 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
-import { Agent } from "node:https";
 
 const normalizeS3Endpoint = (endpoint: string): string => {
   if (/^https?:\/\//i.test(endpoint)) {
@@ -23,19 +22,40 @@ const normalizeS3Endpoint = (endpoint: string): string => {
   return `https://${endpoint}`;
 };
 
+const resolveS3Region = (): string => {
+  const configured = process.env.S3_REGION?.trim();
+  if (!configured || configured.toLowerCase() === "auto") {
+    return "eu-central-1";
+  }
+  return configured;
+};
+
+const requireEnv = (name: string): string => {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+};
+
+const s3BucketName = requireEnv("S3_BUCKET_NAME");
+const s3AccessKeyId = requireEnv("S3_ACCESS_KEY_ID");
+const s3SecretAccessKey = requireEnv("S3_SECRET_ACCESS_KEY");
+
 const s3Config: S3ClientConfig = {
   requestHandler: new NodeHttpHandler({
     httpsAgent: new Agent({ maxSockets: 1000 }),
     socketAcquisitionWarningTimeout: 10000,
   }),
-  region: process.env.S3_REGION || "auto",
+  region: resolveS3Region(),
+  requestChecksumCalculation: "WHEN_REQUIRED",
+  responseChecksumValidation: "WHEN_REQUIRED",
   credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
+    accessKeyId: s3AccessKeyId,
+    secretAccessKey: s3SecretAccessKey,
   },
 };
 const hasCustomEndpoint = Boolean(process.env.S3_ENDPOINT);
-const bucketName = process.env.S3_BUCKET_NAME;
 const endpoint = process.env.S3_ENDPOINT
   ? normalizeS3Endpoint(process.env.S3_ENDPOINT)
   : undefined;
@@ -50,7 +70,7 @@ if (forcePathStyleFromEnv) {
 if (hasCustomEndpoint && endpoint) {
   const endpointUrl = new URL(endpoint);
   const endpointHost = endpointUrl.hostname.toLowerCase();
-  const normalizedBucket = bucketName?.toLowerCase();
+  const normalizedBucket = s3BucketName.toLowerCase();
   const endpointIsBucketScoped = Boolean(
     normalizedBucket &&
       (endpointHost === normalizedBucket ||
@@ -73,7 +93,7 @@ export async function uploadToS3(
   tags?: Record<string, string>,
 ): Promise<void> {
   const params = {
-    Bucket: process.env.S3_BUCKET_NAME!,
+    Bucket: s3BucketName,
     Key: key,
     Body: file,
     ContentType: contentType,
@@ -112,7 +132,7 @@ export async function uploadToS3(
 }
 export async function deleteFromS3(key: string): Promise<void> {
   const command = new DeleteObjectCommand({
-    Bucket: process.env.S3_BUCKET_NAME!,
+    Bucket: s3BucketName,
     Key: key,
   });
   await s3Client.send(command);
@@ -123,7 +143,7 @@ export async function deleteFromS3Batch(keys: string[]): Promise<void> {
   for (let i = 0; i < keys.length; i += batchSize) {
     const batch = keys.slice(i, i + batchSize);
     const command = new DeleteObjectsCommand({
-      Bucket: process.env.S3_BUCKET_NAME!,
+      Bucket: s3BucketName,
       Delete: {
         Objects: batch.map((Key) => ({ Key })),
         Quiet: true,
@@ -138,7 +158,7 @@ export async function getSignedUploadUrl(
   expiresIn = 3600,
 ): Promise<string> {
   const command = new PutObjectCommand({
-    Bucket: process.env.S3_BUCKET_NAME!,
+    Bucket: s3BucketName,
     Key: key,
     ContentType: contentType,
   });
@@ -150,7 +170,7 @@ export async function createMultipartUpload(
   contentType: string,
 ): Promise<string> {
   const command = new CreateMultipartUploadCommand({
-    Bucket: process.env.S3_BUCKET_NAME!,
+    Bucket: s3BucketName,
     Key: key,
     ContentType: contentType,
     CacheControl: "max-age=31536000, immutable",
@@ -165,7 +185,7 @@ export async function getSignedPartUrl(
   expiresIn = 3600,
 ): Promise<string> {
   const command = new UploadPartCommand({
-    Bucket: process.env.S3_BUCKET_NAME!,
+    Bucket: s3BucketName,
     Key: key,
     UploadId: uploadId,
     PartNumber: partNumber,
@@ -181,7 +201,7 @@ export async function completeMultipartUpload(
   }[],
 ): Promise<void> {
   const command = new CompleteMultipartUploadCommand({
-    Bucket: process.env.S3_BUCKET_NAME!,
+    Bucket: s3BucketName,
     Key: key,
     UploadId: uploadId,
     MultipartUpload: {
@@ -195,7 +215,7 @@ export async function abortMultipartUpload(
   uploadId: string,
 ): Promise<void> {
   const command = new AbortMultipartUploadCommand({
-    Bucket: process.env.S3_BUCKET_NAME!,
+    Bucket: s3BucketName,
     Key: key,
     UploadId: uploadId,
   });
@@ -210,7 +230,7 @@ export async function getStorageStats(): Promise<{
   let continuationToken: string | undefined;
   do {
     const command: ListObjectsV2Command = new ListObjectsV2Command({
-      Bucket: process.env.S3_BUCKET_NAME!,
+      Bucket: s3BucketName,
       ContinuationToken: continuationToken,
     });
     const response = await s3Client.send(command);
@@ -295,7 +315,7 @@ export async function getDetailedStorageStats(): Promise<{
   let continuationToken: string | undefined;
   do {
     const command: ListObjectsV2Command = new ListObjectsV2Command({
-      Bucket: process.env.S3_BUCKET_NAME!,
+      Bucket: s3BucketName,
       ContinuationToken: continuationToken,
     });
     const response = await s3Client.send(command);

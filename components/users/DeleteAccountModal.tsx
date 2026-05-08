@@ -7,7 +7,6 @@ import UserAvatar from "@/components/ui/UserAvatar";
 interface User {
   name: string;
   email?: string;
-  avatarS3Key?: string | null;
   slackId?: string | null;
 }
 interface Upload {

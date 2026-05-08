@@ -10,10 +10,9 @@ export type FeedItemType = {
   };
   user: {
     id: string;
-    email: string;
     slackId: string | null;
     name: string;
-    avatarS3Key?: string | null;
+    avatarUrl?: string | null;
     handle?: string | null;
   };
   media?: {
@@ -30,8 +29,8 @@ export type FeedItemType = {
       id: string;
       name: string;
       handle?: string | null;
-      avatarS3Key?: string | null;
       slackId?: string | null;
+      avatarUrl?: string | null;
     };
     caption?: string | null;
     likeCount?: number;

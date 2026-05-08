@@ -36,16 +36,8 @@ interface CsvRow {
 interface SlackUser {
   id: string;
   name: string;
-  email: string;
   slackId: string | null;
-  avatarS3Key: string | null;
-  avatarSource:
-    | "upload"
-    | "slack"
-    | "gravatar"
-    | "libravatar"
-    | "dicebear"
-    | null;
+  avatarUrl?: string | null;
 }
 interface BulkEventRow {
   id: string;
@@ -60,8 +52,8 @@ interface BulkEventRow {
   admins: {
     id: string;
     name: string;
-    email: string;
-    avatarS3Key?: string | null;
+    slackId?: string | null;
+    avatarUrl?: string | null;
   }[];
   slug: string;
   slugManuallyEdited?: boolean;
@@ -202,8 +194,8 @@ export default function BulkCreateClient({
     user: {
       id: string;
       name: string;
-      email: string;
-      avatarS3Key?: string | null;
+      slackId?: string | null;
+      avatarUrl?: string | null;
     },
   ) => {
     const row = rows.find((r) => r.id === rowId);
@@ -250,8 +242,8 @@ export default function BulkCreateClient({
   const handleBulkAddAdmin = (user: {
     id: string;
     name: string;
-    email: string;
-    avatarS3Key?: string | null;
+    slackId?: string | null;
+    avatarUrl?: string | null;
   }) => {
     if (selectedRows.size === 0) return;
     setRows(

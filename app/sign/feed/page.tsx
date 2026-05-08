@@ -16,7 +16,6 @@ type MediaItem = {
   caption: string | null;
   uploadedBy: {
     name: string;
-    avatarS3Key: string | null;
   };
 };
 export default function LiveFeedPage() {

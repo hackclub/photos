@@ -7,10 +7,8 @@ import UserAvatar from "./UserAvatar";
 interface User {
   id: string;
   name: string;
-  email: string;
-  hackclubId: string;
-  avatarS3Key?: string | null;
   handle?: string | null;
+  slackId?: string | null;
 }
 interface UserSearchProps {
   onSelectUser: (user: User) => void;
@@ -82,7 +80,7 @@ export default function UserSearch({
         const result = await searchUsers(searchQuery);
         if (result.success && result.users) {
           const filtered = result.users.filter(
-            (user: User) => !excludeUserIds.includes(user.id),
+            (user) => !excludeUserIds.includes(user.id),
           );
           setSearchResults(filtered);
           setShowDropdown(filtered.length > 0);

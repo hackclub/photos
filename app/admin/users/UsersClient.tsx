@@ -41,7 +41,6 @@ interface User {
   email: string;
   handle?: string | null;
   slackId: string | null;
-  avatarS3Key: string | null;
   isGlobalAdmin: boolean;
   isBanned: boolean;
   bannedAt: Date | null;
@@ -369,7 +368,6 @@ export default function UsersClient({
                           className={
                             user.isBanned ? "!bg-zinc-700 !bg-none" : ""
                           }
-                          avatarVersion={user.avatarS3Key ? 1 : 0}
                         />
                         <div className="min-w-0 max-w-[120px]">
                           <div

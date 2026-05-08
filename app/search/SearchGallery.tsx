@@ -42,7 +42,6 @@ export interface MediaItem {
     id: string;
     name: string;
     email?: string;
-    avatarS3Key?: string | null;
     handle?: string | null;
     slackId?: string | null;
   };

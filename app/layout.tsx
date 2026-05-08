@@ -4,8 +4,8 @@ import { HiWrenchScrewdriver } from "react-icons/hi2";
 import "./globals.css";
 import ComingSoon from "@/components/ComingSoon";
 import { comingSoon, maintenanceMode } from "@/flags";
-import ClientLayout from "./ClientLayout";
 import { APP_URL } from "@/lib/constants";
+import ClientLayout from "./ClientLayout";
 
 export const metadata: Metadata = {
   metadataBase: new URL(APP_URL),

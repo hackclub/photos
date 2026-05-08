@@ -123,15 +123,10 @@ export default function EditSeriesClient({
       });
     }
   };
-  const handleAddAdmin = async (user: {
-    id: string;
-    name: string;
-    email: string;
-    hackclubId: string;
-  }) => {
+  const handleAddAdmin = async (user: { id: string; name: string }) => {
     setAddingAdmin(true);
     try {
-      const result = await addSeriesAdmin(series.id, user.hackclubId);
+      const result = await addSeriesAdmin(series.id, user.id);
       if (!result.success) {
         throw new Error(result.error || "Failed to add admin");
       }
