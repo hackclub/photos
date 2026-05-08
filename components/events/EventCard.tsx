@@ -77,7 +77,7 @@ export default function EventCard({
           alt={event.name}
           fill
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
-          className="object-cover group-hover:scale-105 transition-transform duration-300"
+          className="object-cover transition-transform duration-300 md:group-hover:scale-105"
         />
       ) : (
         <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center">
@@ -93,7 +93,7 @@ export default function EventCard({
               e.stopPropagation();
               onToggleSelection();
             }}
-            className={`w-8 h-8 rounded-lg backdrop-blur-sm border-2 flex items-center justify-center transition-all hover:bg-zinc-800 ${
+            className={`flex h-11 w-11 items-center justify-center rounded-xl border-2 backdrop-blur-sm transition-all hover:bg-zinc-800 ${
               isSelected
                 ? "bg-red-600 border-red-600"
                 : "bg-zinc-900/80 border-white"
@@ -117,19 +117,22 @@ export default function EventCard({
         <button
           type="button"
           onClick={onToggleSelection}
-          className="block w-full text-left"
+          className="block w-full touch-manipulation text-left focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
         >
           {cardImage}
         </button>
       ) : (
-        <Link href={linkHref} className="block">
+        <Link
+          href={linkHref}
+          className="block touch-manipulation focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
+        >
           {cardImage}
         </Link>
       )}
 
       <div className="p-4">
         <div className="flex items-start justify-between mb-2">
-          <Link href={linkHref} className="flex-1">
+          <Link href={linkHref} className="min-h-11 flex-1">
             <h3 className="font-semibold text-white text-lg group-hover:text-red-400 transition-colors line-clamp-1">
               {event.name}
             </h3>
@@ -242,14 +245,14 @@ export default function EventCard({
           <div className="flex items-center gap-2 mt-4">
             <Link
               href={`/admin/events/${event.id}/edit`}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-transparent border border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white text-sm font-medium rounded-lg transition-all group/btn"
+              className="group/btn flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-transparent px-3 py-2 text-sm font-medium text-zinc-400 transition-all hover:border-zinc-700 hover:bg-zinc-800 hover:text-white"
             >
               <HiPencil className="w-5 h-5 group-hover/btn:text-red-400 transition-colors" />
               Edit
             </Link>
             <Link
               href={linkHref}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-transparent border border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white text-sm font-medium rounded-lg transition-all group/btn"
+              className="group/btn flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-transparent px-3 py-2 text-sm font-medium text-zinc-400 transition-all hover:border-zinc-700 hover:bg-zinc-800 hover:text-white"
             >
               <HiEye className="w-5 h-5 group-hover/btn:text-red-400 transition-colors" />
               View

@@ -45,19 +45,19 @@ export default function ReportModal({
   };
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/80 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4"
       onClick={(e) => {
         e.stopPropagation();
         onClose();
       }}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 max-w-md w-full space-y-6 shadow-2xl relative"
+        className="relative max-h-[calc(100dvh-1.5rem)] w-full max-w-md space-y-6 overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-2xl sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-white p-1 hover:bg-zinc-800 rounded-lg transition-colors"
+          className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-xl text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
         >
           <HiXMark className="w-5 h-5" />
         </button>
@@ -110,7 +110,7 @@ export default function ReportModal({
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="e.g., Inappropriate content, spam, harassment..."
-                className="w-full h-32 bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-white placeholder-zinc-500 focus:outline-none  focus:border-red-600 resize-none transition-all"
+                className="h-32 w-full resize-none rounded-lg border border-zinc-800 bg-zinc-900 p-3 text-white placeholder-zinc-500 transition-all focus:border-red-600 focus:outline-none"
                 required
               />
             </div>
@@ -121,14 +121,14 @@ export default function ReportModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded-lg transition-colors font-medium text-sm"
+                className="min-h-11 flex-1 rounded-xl bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-white"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={submitting || !reason.trim()}
-                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2 text-sm"
+                className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
               >
                 {submitting ? (
                   <>

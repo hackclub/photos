@@ -896,7 +896,7 @@ export default function PhotoDetailModal({
   const longitude = media.longitude ?? exif.longitude;
   return (
     <div
-      className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-50 flex min-h-dvh items-stretch justify-center overflow-hidden bg-black/95 supports-[height:100dvh]:h-dvh"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -905,7 +905,7 @@ export default function PhotoDetailModal({
       <button
         type="button"
         onClick={onClose}
-        className="absolute top-2 right-2 sm:top-4 sm:right-4 z-50 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-zinc-900/90 hover:bg-zinc-800 backdrop-blur-sm border border-zinc-700 flex items-center justify-center transition-all"
+        className="absolute right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-50 flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-zinc-950/85 text-white shadow-2xl shadow-black/40 backdrop-blur-md transition-all hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-white/40"
         aria-label="Close"
       >
         <HiXMark className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
@@ -924,7 +924,7 @@ export default function PhotoDetailModal({
             }, 125);
           }}
           disabled={navigationBusyRef.current}
-          className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-50 w-8 h-8 sm:w-12 sm:h-12 rounded-full bg-zinc-900/90 hover:bg-zinc-800 backdrop-blur-sm border border-zinc-700 flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="absolute left-3 top-[38dvh] z-50 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-zinc-950/80 text-white shadow-2xl shadow-black/40 backdrop-blur-md transition-all hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-40 sm:left-4 lg:top-1/2 lg:h-12 lg:w-12"
           aria-label="Previous photo"
         >
           <HiChevronLeft className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
@@ -944,7 +944,7 @@ export default function PhotoDetailModal({
             }, 125);
           }}
           disabled={navigationBusyRef.current}
-          className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-50 w-8 h-8 sm:w-12 sm:h-12 rounded-full bg-zinc-900/90 hover:bg-zinc-800 backdrop-blur-sm border border-zinc-700 flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="absolute right-3 top-[38dvh] z-50 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-zinc-950/80 text-white shadow-2xl shadow-black/40 backdrop-blur-md transition-all hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-40 sm:right-4 lg:top-1/2 lg:h-12 lg:w-12"
           aria-label="Next photo"
         >
           <HiChevronRight className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
@@ -959,11 +959,11 @@ export default function PhotoDetailModal({
 
       {showShareModal && (
         <div
-          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          className="fixed inset-0 z-60 flex items-end justify-center bg-black/80 p-3 backdrop-blur-sm sm:items-center sm:p-4"
           onClick={() => setShowShareModal(false)}
         >
           <div
-            className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 max-w-md w-full space-y-6 shadow-2xl"
+            className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center">
@@ -1065,12 +1065,12 @@ export default function PhotoDetailModal({
       )}
 
       <div
-        className="max-w-7xl w-full max-h-full flex flex-col lg:flex-row gap-2 sm:gap-4 p-2 sm:p-4"
+        className="flex h-dvh w-full max-w-[1800px] flex-col gap-2 overflow-hidden p-2 pt-[calc(env(safe-area-inset-top)+3.75rem)] pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-4 sm:pt-[calc(env(safe-area-inset-top)+4.25rem)] lg:flex-row lg:gap-4 lg:pt-4"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
         role="presentation"
       >
-        <div className="flex-1 flex items-center justify-center bg-black rounded-xl overflow-hidden relative min-h-[50vh] sm:min-h-[40vh] lg:min-h-0">
+        <div className="relative flex min-h-0 flex-[1_1_auto] items-center justify-center overflow-hidden rounded-2xl bg-black shadow-2xl shadow-black/30 lg:h-full lg:flex-1">
           {!imageLoaded &&
             !imageError &&
             media.mimeType.startsWith("image/") && (
@@ -1079,7 +1079,7 @@ export default function PhotoDetailModal({
                   <img
                     src={thumbnailUrl}
                     alt={media.filename}
-                    className="absolute inset-0 w-full h-full object-contain blur-md scale-110 opacity-60"
+                    className="absolute inset-0 h-full w-full object-contain blur-md scale-110 opacity-60"
                     aria-hidden="true"
                   />
                 )}
@@ -1150,12 +1150,12 @@ export default function PhotoDetailModal({
                 </div>
               </div>
             ) : (
-              <div className="relative w-full h-full flex items-center justify-center">
+              <div className="relative flex h-full min-h-[42dvh] w-full items-center justify-center sm:min-h-[50dvh] lg:min-h-0">
                 {effectiveUrl && (
                   <img
                     src={effectiveUrl}
                     alt={media.filename}
-                    className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-300 ${
+                    className={`absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain transition-opacity duration-300 ${
                       imageLoaded ? "opacity-100" : "opacity-0"
                     }`}
                     onLoad={() => {
@@ -1182,7 +1182,7 @@ export default function PhotoDetailModal({
               </div>
             )
           ) : (
-            <div className="w-full h-full flex items-center justify-center relative">
+            <div className="relative flex h-full min-h-[42dvh] w-full items-center justify-center sm:min-h-[50dvh] lg:min-h-0">
               {videoError && (
                 <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-zinc-400 p-6 text-center max-w-md">
                   <HiFaceFrown className="w-12 h-12 mb-2 text-red-600" />
@@ -1218,7 +1218,7 @@ export default function PhotoDetailModal({
               <video
                 key={`${media.id}:${videoRetryCount}`}
                 src={fullSizeUrl}
-                className="w-full h-full object-contain"
+                className="h-full max-h-full w-full max-w-full object-contain"
                 controls
                 autoPlay
                 playsInline
@@ -1232,8 +1232,8 @@ export default function PhotoDetailModal({
           )}
         </div>
 
-        <div className="w-full lg:w-96 bg-zinc-900 rounded-xl overflow-hidden border border-zinc-800 flex flex-col max-h-[45vh] sm:max-h-[50vh] lg:max-h-[90vh]">
-          <div className="p-3 sm:p-4 lg:p-6 border-b border-zinc-800 space-y-2 sm:space-y-3 lg:space-y-4">
+        <div className="flex max-h-[46dvh] min-h-[14rem] w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/95 shadow-2xl shadow-black/30 backdrop-blur-xl sm:max-h-[42dvh] lg:h-full lg:max-h-none lg:min-h-0 lg:w-[26rem] xl:w-[28rem]">
+          <div className="space-y-2 border-b border-zinc-800 p-3 sm:space-y-3 sm:p-4 lg:space-y-4 lg:p-5">
             <div className="space-y-1">
               {isEditingCaption ? (
                 <div className="flex gap-2 items-center">
@@ -1243,7 +1243,7 @@ export default function PhotoDetailModal({
                     onChange={(e) => setCaption(e.target.value)}
                     placeholder="Add a caption..."
                     ref={inputRef}
-                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm text-white placeholder-zinc-400 focus:outline-none  focus:border-red-600 transition-all"
+                    className="min-h-11 flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-base text-white placeholder-zinc-400 transition-all focus:border-red-600 focus:outline-none sm:text-sm"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") handleSaveCaption();
                       if (e.key === "Escape") {
@@ -1256,7 +1256,7 @@ export default function PhotoDetailModal({
                     <button
                       onClick={handleSaveCaption}
                       disabled={savingCaption}
-                      className="p-2 bg-red-600 hover:bg-red-700 rounded-lg text-white disabled:opacity-50 transition-colors"
+                      className="flex h-11 w-11 items-center justify-center rounded-lg bg-red-600 text-white transition-colors hover:bg-red-700 disabled:opacity-50"
                       title="Save"
                     >
                       {savingCaption ? (
@@ -1270,7 +1270,7 @@ export default function PhotoDetailModal({
                         setIsEditingCaption(false);
                         setCaption(media.caption || "");
                       }}
-                      className="p-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors"
+                      className="flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-white"
                       title="Cancel"
                     >
                       <HiXMark className="w-5 h-5" />
@@ -1301,7 +1301,7 @@ export default function PhotoDetailModal({
                   {currentUserId === media.uploadedBy.id && (
                     <button
                       onClick={() => setIsEditingCaption(true)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white shrink-0"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white sm:h-9 sm:w-9 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100"
                       title="Edit caption"
                     >
                       <HiPencil className="w-5 h-5" />
@@ -1352,12 +1352,12 @@ export default function PhotoDetailModal({
               )}
             </div>
 
-            <div className="flex items-center gap-2 pt-2 sm:pt-3 lg:pt-4 border-t border-zinc-800 overflow-x-auto pb-1 scrollbar-hide">
+            <div className="scrollbar-hide flex items-center gap-2 overflow-x-auto border-t border-zinc-800 pt-2 pb-1 sm:pt-3 lg:pt-4">
               <button
                 type="button"
                 onClick={handleLike}
                 disabled={likePending}
-                className={`flex items-center justify-center gap-1.5 sm:gap-2 h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm rounded-full sm:rounded-lg border transition-all shrink-0 ${
+                className={`flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full border px-4 text-sm transition-all sm:h-10 sm:gap-2 sm:rounded-lg ${
                   hasLiked
                     ? "bg-red-600 border-red-600 text-white hover:bg-red-700"
                     : "bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700"
@@ -1385,7 +1385,7 @@ export default function PhotoDetailModal({
                   }
                   handleShareClick();
                 }}
-                className={`flex items-center justify-center gap-1.5 sm:gap-2 h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-full sm:rounded-lg transition-all shrink-0 ${!currentUserId ? "opacity-50" : ""}`}
+                className={`flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-800 px-4 text-sm transition-all hover:bg-zinc-700 sm:h-10 sm:gap-2 sm:rounded-lg ${!currentUserId ? "opacity-50" : ""}`}
                 title={!currentUserId ? "Sign in to share" : "Share"}
               >
                 <HiShare className="w-5 h-5 text-white" />
@@ -1395,7 +1395,7 @@ export default function PhotoDetailModal({
                 type="button"
                 onClick={onDownload}
                 disabled={downloading}
-                className="flex items-center justify-center gap-1.5 sm:gap-2 h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-full sm:rounded-lg transition-all disabled:opacity-50 shrink-0"
+                className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-800 px-4 text-sm transition-all hover:bg-zinc-700 disabled:opacity-50 sm:h-10 sm:gap-2 sm:rounded-lg"
                 title="Download"
               >
                 <HiArrowDownTray className="w-5 h-5 text-white" />
@@ -1405,7 +1405,7 @@ export default function PhotoDetailModal({
                 <button
                   type="button"
                   onClick={onDelete}
-                  className="flex items-center justify-center gap-1.5 sm:gap-2 h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm bg-red-600 hover:bg-red-700 border border-red-600 rounded-full sm:rounded-lg transition-all ml-auto shrink-0"
+                  className="ml-auto flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full border border-red-600 bg-red-600 px-4 text-sm transition-all hover:bg-red-700 sm:h-10 sm:gap-2 sm:rounded-lg"
                   title="Delete"
                 >
                   <HiTrash className="w-5 h-5 text-white" />
@@ -1421,7 +1421,7 @@ export default function PhotoDetailModal({
                   }
                   setShowReportModal(true);
                 }}
-                className={`flex items-center justify-center gap-1.5 sm:gap-2 h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-full sm:rounded-lg transition-all shrink-0 ${!onDelete ? "ml-auto" : ""} ${!currentUserId ? "opacity-50" : ""}`}
+                className={`flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-800 px-4 text-sm transition-all hover:bg-zinc-700 sm:h-10 sm:gap-2 sm:rounded-lg ${!onDelete ? "ml-auto" : ""} ${!currentUserId ? "opacity-50" : ""}`}
                 title={!currentUserId ? "Sign in to report" : "Report"}
               >
                 <HiExclamationTriangle className="w-5 h-5 text-zinc-400 hover:text-red-400" />
@@ -1462,7 +1462,7 @@ export default function PhotoDetailModal({
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {activeTab === "info" ? (
               <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4 lg:space-y-6">
                 <div className="space-y-2">

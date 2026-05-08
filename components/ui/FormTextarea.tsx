@@ -31,7 +31,7 @@ export default function FormTextarea({
       <div className="relative">
         <textarea
           id={inputId}
-          className={`w-full px-3 py-2 bg-zinc-900 border rounded-lg text-white placeholder-zinc-500 focus:outline-none  focus:border-red-600 transition-all resize-none ${error ? "border-red-600" : "border-zinc-800"} ${props.disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+          className={`min-h-28 w-full resize-none rounded-lg border bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500 transition-all focus:border-red-600 focus:outline-none ${error ? "border-red-600" : "border-zinc-800"} ${props.disabled ? "cursor-not-allowed opacity-50" : ""}`}
           {...props}
         />
         {error && (

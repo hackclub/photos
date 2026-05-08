@@ -85,7 +85,7 @@ export default function GlobalSearch() {
             }
           }}
           placeholder="Search events, series, people..."
-          className="w-full pl-10 pr-10 py-2 bg-zinc-800 border border-zinc-700 rounded-full text-sm text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all"
+          className="min-h-11 w-full rounded-full border border-zinc-700 bg-zinc-800 py-2 pl-10 pr-12 text-base text-white placeholder-zinc-400 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-600 sm:text-sm"
         />
         {query && (
           <button
@@ -94,7 +94,7 @@ export default function GlobalSearch() {
               setResults(null);
               setIsOpen(false);
             }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+            className="absolute right-1.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-700 hover:text-white"
           >
             <HiXMark className="w-5 h-5" />
           </button>
@@ -102,7 +102,7 @@ export default function GlobalSearch() {
       </div>
 
       {isOpen && (query.length >= 2 || loading) && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50 max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.25rem)] z-50 max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl sm:absolute sm:inset-x-0 sm:top-full sm:mt-2 sm:max-h-[80vh]">
           {loading ? (
             <div className="p-4 flex justify-center">
               <LoadingSpinner size="sm" />
@@ -122,7 +122,7 @@ export default function GlobalSearch() {
                     <button
                       key={tag.id}
                       onClick={() => handleSelect(`/search?tag=${tag.id}`)}
-                      className="w-full px-4 py-2 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left"
+                      className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-zinc-800"
                     >
                       <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
                         <HiHashtag className="w-5 h-5 text-zinc-400" />
@@ -149,7 +149,7 @@ export default function GlobalSearch() {
                     <button
                       key={event.id}
                       onClick={() => handleSelect(`/events/${event.slug}`)}
-                      className="w-full px-4 py-2 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left"
+                      className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-zinc-800"
                     >
                       <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
                         <HiCalendar className="w-5 h-5 text-zinc-400" />
@@ -176,7 +176,7 @@ export default function GlobalSearch() {
                     <button
                       key={s.id}
                       onClick={() => handleSelect(`/series/${s.slug}`)}
-                      className="w-full px-4 py-2 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left"
+                      className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-zinc-800"
                     >
                       <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
                         <HiFolder className="w-5 h-5 text-zinc-400" />
@@ -203,7 +203,7 @@ export default function GlobalSearch() {
                     <button
                       key={u.id}
                       onClick={() => handleSelect(`/users/${u.handle || u.id}`)}
-                      className="w-full px-4 py-2 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left"
+                      className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-zinc-800"
                     >
                       <UserAvatar user={u} size="sm" />
                       <div className="min-w-0">
@@ -227,7 +227,7 @@ export default function GlobalSearch() {
                       onClick={() =>
                         handleSelect(`/events/${m.event.slug}?photo=${m.id}`)
                       }
-                      className="w-full px-4 py-2 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left"
+                      className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-zinc-800"
                     >
                       <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0 overflow-hidden">
                         {m.thumbnailS3Key || m.s3Key ? (

@@ -32,14 +32,14 @@ export default function FormInput({
       <div className={`relative ${prefix ? "flex" : ""}`}>
         {prefix && (
           <span
-            className={`px-4 py-3 bg-zinc-900 border border-r-0 rounded-l-lg text-zinc-400 text-sm flex items-center ${error ? "border-red-600" : "border-zinc-700"}`}
+            className={`flex min-h-11 items-center rounded-l-lg border border-r-0 bg-zinc-900 px-4 py-3 text-sm text-zinc-400 ${error ? "border-red-600" : "border-zinc-700"}`}
           >
             {prefix}
           </span>
         )}
         <input
           id={inputId}
-          className={`w-full px-3 py-2 bg-zinc-900 border text-white placeholder-zinc-500 focus:outline-none  focus:border-red-600 transition-all ${prefix ? "rounded-r-lg" : "rounded-lg"} ${error ? "border-red-600 pr-10" : "border-zinc-800"} ${props.disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+          className={`min-h-11 w-full border bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500 transition-all focus:border-red-600 focus:outline-none ${prefix ? "rounded-r-lg" : "rounded-lg"} ${error ? "border-red-600 pr-10" : "border-zinc-800"} ${props.disabled ? "cursor-not-allowed opacity-50" : ""}`}
           {...props}
         />
         {error && (

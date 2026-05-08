@@ -49,9 +49,9 @@ export default function ConfirmModal({
   };
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-md w-full shadow-2xl">
-        <div className="flex items-center justify-between p-6 border-b border-zinc-800">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4">
+      <div className="max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-zinc-800 p-4 sm:p-6">
           <div className="flex items-center gap-3">
             {danger && (
               <div className="p-2 bg-red-600/10 rounded-lg">
@@ -63,13 +63,13 @@ export default function ConfirmModal({
           <button
             type="button"
             onClick={handleCancel}
-            className="text-zinc-400 hover:text-white transition-colors"
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
           >
             <HiXMark className="w-6 h-6" />
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {typeof message === "string" ? (
             <p className="text-zinc-300">{message}</p>
           ) : (
@@ -77,11 +77,11 @@ export default function ConfirmModal({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 p-6 bg-zinc-900 rounded-b-xl border-t border-zinc-800">
+        <div className="flex flex-col-reverse gap-3 rounded-b-xl border-t border-zinc-800 bg-zinc-900 p-4 sm:flex-row sm:items-center sm:justify-end sm:p-6">
           <button
             type="button"
             onClick={handleCancel}
-            className="px-4 py-2 text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors font-medium text-sm"
+            className="min-h-11 rounded-xl px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
           >
             {cancelText}
           </button>
@@ -90,7 +90,7 @@ export default function ConfirmModal({
             onClick={handleConfirm}
             disabled={timeLeft > 0 || disabled}
             className={`
-       px-4 py-2 rounded-lg font-medium transition-all min-w-[120px] text-sm
+        min-h-11 px-4 py-2 rounded-xl font-medium transition-all min-w-[120px] text-sm
        ${
          confirmButtonClass ||
          (danger

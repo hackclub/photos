@@ -8,7 +8,7 @@ const TableContainer = React.forwardRef<
   <div
     ref={ref}
     className={twMerge(
-      "bg-zinc-900 shadow-xl rounded-xl overflow-hidden border border-zinc-800 flex flex-col",
+      "bg-zinc-900 shadow-xl rounded-xl overflow-hidden border border-zinc-800 flex flex-col max-w-full",
       className,
     )}
     {...props}
@@ -19,10 +19,13 @@ const Table = React.forwardRef<
   HTMLTableElement,
   React.TableHTMLAttributes<HTMLTableElement>
 >(({ className, ...props }, ref) => (
-  <div className="overflow-x-auto w-full">
+  <div className="w-full overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
     <table
       ref={ref}
-      className={twMerge("min-w-full divide-y divide-zinc-800", className)}
+      className={twMerge(
+        "min-w-[44rem] divide-y divide-zinc-800 sm:min-w-full",
+        className,
+      )}
       {...props}
     />
   </div>
@@ -71,7 +74,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={twMerge(
-      "px-6 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider",
+      "px-3 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider sm:px-6",
       className,
     )}
     {...props}
@@ -85,7 +88,7 @@ const TableCell = React.forwardRef<
   <td
     ref={ref}
     className={twMerge(
-      "px-6 py-4 whitespace-nowrap text-sm text-zinc-300",
+      "whitespace-nowrap px-3 py-4 text-sm text-zinc-300 sm:px-6",
       className,
     )}
     {...props}

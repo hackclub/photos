@@ -93,12 +93,12 @@ export default function DownloadAllButton({
   };
   return (
     <>
-      <div className="flex flex-col items-end gap-2">
+      <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
         <button
           type="button"
           onClick={handleDownload}
           disabled={downloading}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-all border border-zinc-700 hover:border-zinc-700"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 px-6 py-3 font-semibold text-white transition-all hover:border-zinc-700 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-900"
         >
           <HiArrowDownTray className="w-5 h-5" />
           <span>Download All ({mediaCount})</span>

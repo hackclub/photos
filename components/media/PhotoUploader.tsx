@@ -56,7 +56,7 @@ export default function PhotoUploader({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`relative border-2 border-dashed rounded-xl transition-all ${
+      className={`relative rounded-2xl border-2 border-dashed transition-all ${
         isDragging
           ? "border-red-600 bg-red-600/10"
           : "border-zinc-800 hover:border-zinc-700 bg-zinc-900"
@@ -71,7 +71,7 @@ export default function PhotoUploader({
         className="hidden"
       />
 
-      <div className="p-6 sm:p-12 text-center">
+      <div className="p-5 text-center sm:p-12">
         <div
           className={`w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full flex items-center justify-center transition-all ${isDragging ? "bg-red-600/20 scale-110" : "bg-zinc-800"}`}
         >
@@ -91,7 +91,7 @@ export default function PhotoUploader({
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
+          className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-red-600 px-4 py-2 font-medium text-white transition-colors hover:bg-red-700"
         >
           <HiPhoto className="w-5 h-5" />
           <span>Select Files</span>

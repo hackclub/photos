@@ -31,12 +31,12 @@ export default function ServerActionModal({
 }: ServerActionModalProps) {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-12 max-w-2xl w-full relative shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-4">
+      <div className="relative max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl sm:p-12">
         {onClose && (
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-300 transition-colors"
+            className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-xl text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300 sm:right-4 sm:top-4"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -56,7 +56,7 @@ export default function ServerActionModal({
           </button>
         )}
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-white mb-2">
+          <h2 className="mb-2 text-2xl font-bold text-white sm:text-3xl">
             {isSuccess ? successTitle : title}
           </h2>
           <p className="text-zinc-400">
@@ -83,10 +83,10 @@ export default function ServerActionModal({
         )}
 
         {!isSuccess && (
-          <div className="bg-zinc-900/50 rounded-lg p-8 border border-zinc-800">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-8">
             <LoadingQuip
               type={type}
-              className="text-2xl md:text-3xl text-zinc-200 text-center leading-relaxed font-medium"
+              className="text-center text-xl font-medium leading-relaxed text-zinc-200 md:text-3xl"
             />
           </div>
         )}
@@ -120,7 +120,7 @@ export default function ServerActionModal({
           <div className="mt-8 flex justify-center">
             <button
               onClick={onClose}
-              className="text-zinc-500 hover:text-zinc-300 text-sm font-medium transition-colors"
+              className="min-h-11 rounded-xl px-4 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
             >
               Cancel
             </button>

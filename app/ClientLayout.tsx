@@ -18,24 +18,24 @@ export default function ClientLayout({
   return (
     <AuthProvider>
       <UploadProvider>
-        <div className="flex min-h-screen">
+        <div className="flex min-h-dvh overflow-x-clip">
           {!isSignMode && (
             <Sidebar isOpen={sidebarOpen} onClose={handleCloseSidebar} />
           )}
 
-          <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex min-w-0 flex-1 flex-col">
             {!isSignMode && (
-              <div className="lg:hidden bg-zinc-900 border-b border-zinc-800 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
+              <div className="sticky top-0 z-30 flex items-center justify-between border-b border-zinc-800 bg-zinc-900/95 px-3 py-2.5 pt-[calc(env(safe-area-inset-top)+0.625rem)] backdrop-blur lg:hidden">
                 <button
                   type="button"
                   onClick={() => setSidebarOpen(true)}
-                  className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-all"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl text-zinc-300 transition-all hover:bg-zinc-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-red-500/60"
                   aria-label="Open sidebar"
                 >
                   <HiBars3 className="w-6 h-6" />
                 </button>
 
-                <h1 className="text-lg font-bold text-white">
+                <h1 className="truncate px-3 text-base font-bold text-white">
                   Hack Club Photos
                 </h1>
 

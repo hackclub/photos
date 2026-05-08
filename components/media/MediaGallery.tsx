@@ -360,7 +360,7 @@ export default function MediaGallery({
         />
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4 xl:grid-cols-5">
         {sortedMedia.map((item) => {
           const url = presignedUrls[item.id];
           const isSelected = selectedItems.has(item.id);
@@ -370,11 +370,11 @@ export default function MediaGallery({
           return (
             <div
               key={item.id}
-              className="relative aspect-square bg-zinc-800 rounded-lg overflow-hidden border border-zinc-800 hover:border-zinc-700 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl group"
+              className="group relative aspect-square overflow-hidden rounded-xl border border-zinc-800 bg-zinc-800 transition-all duration-300 hover:border-zinc-700 hover:shadow-xl md:hover:scale-[1.02]"
             >
               <button
                 type="button"
-                className="w-full h-full"
+                className="h-full w-full touch-manipulation focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
                 onClick={() => {
                   if (selectionMode) {
                     toggleSelection(item.id);
@@ -386,21 +386,21 @@ export default function MediaGallery({
                 aria-label={`View ${item.filename}`}
               >
                 {!url ? (
-                  <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+                  <div className="flex h-full w-full items-center justify-center bg-zinc-800">
                     <HiPhoto className="w-12 h-12 text-zinc-600 animate-pulse" />
                   </div>
                 ) : (
                   <img
                     src={url}
                     alt={item.filename}
-                    className="w-full h-full object-cover"
+                    className="h-full w-full object-cover"
                   />
                 )}
 
                 {isVideo && url && <VideoIndicator size="lg" />}
 
                 {sortBy === "date" && (
-                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 backdrop-blur-sm rounded-lg text-xs text-white flex items-center gap-1">
+                  <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-lg bg-black/70 px-2 py-1 text-xs text-white backdrop-blur-sm">
                     <HiClock className="w-3 h-3" />
                     <span>
                       {new Date(
@@ -428,13 +428,15 @@ export default function MediaGallery({
                 {sortBy === "event" && event && (
                   <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 backdrop-blur-sm rounded-lg text-xs text-white flex items-center gap-1">
                     <HiCalendar className="w-3 h-3" />
-                    <span>{event.name}</span>
+                    <span className="truncate">{event.name}</span>
                   </div>
                 )}
                 {sortBy === "uploader" && (
-                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 backdrop-blur-sm rounded-lg text-xs text-white flex items-center gap-1">
+                  <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-lg bg-black/70 px-2 py-1 text-xs text-white backdrop-blur-sm">
                     <HiUser className="w-3 h-3" />
-                    <span>{item.uploadedBy?.name || "Unknown"}</span>
+                    <span className="truncate">
+                      {item.uploadedBy?.name || "Unknown"}
+                    </span>
                   </div>
                 )}
                 {sortBy === "likes" && (

@@ -81,7 +81,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         {isOpen && (
           <button
             type="button"
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
             onClick={handleClose}
             aria-label="Close sidebar"
           />
@@ -89,8 +89,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
         <div
           className={`
-     fixed lg:sticky top-0 left-0 z-50 h-screen
-     w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col
+      fixed lg:sticky top-0 left-0 z-50 h-dvh
+      w-[min(18rem,86vw)] bg-zinc-900 border-r border-zinc-800 flex flex-col
      transition-transform duration-300 ease-in-out lg:translate-x-0
      ${isOpen ? "translate-x-0" : "-translate-x-full"}
     `}
@@ -107,7 +107,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       {isOpen && (
         <button
           type="button"
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
           onClick={handleClose}
           aria-label="Close sidebar"
         />
@@ -115,8 +115,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       <div
         className={`
-    fixed lg:sticky top-0 left-0 z-50 h-screen
-    w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col
+    fixed lg:sticky top-0 left-0 z-50 h-dvh
+    w-[min(18rem,86vw)] bg-zinc-900 border-r border-zinc-800 flex flex-col
     transition-transform duration-300 ease-in-out lg:translate-x-0
     ${isOpen ? "translate-x-0" : "-translate-x-full"}
    `}
@@ -124,13 +124,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <button
           type="button"
           onClick={handleClose}
-          className="lg:hidden absolute top-4 right-4 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-all z-10"
+          className="absolute right-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-10 flex h-11 w-11 items-center justify-center rounded-xl text-zinc-300 transition-all hover:bg-zinc-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-red-500/60 lg:hidden"
           aria-label="Close sidebar"
         >
           <HiXMark className="w-5 h-5" />
         </button>
 
-        <div className="p-6 border-b border-zinc-800">
+        <div className="border-b border-zinc-800 p-4 pt-[calc(env(safe-area-inset-top)+1rem)] sm:p-6">
           <Link href="/" className="flex items-center gap-3 mb-4">
             <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
               <Image
@@ -148,7 +148,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           <GlobalSearch />
         </div>
 
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
           <div className="mb-6">
             <p className="px-3 mb-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider">
               Main
@@ -159,7 +159,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
                     isActive
                       ? "bg-red-600 text-white shadow-lg "
                       : "text-zinc-400 hover:text-white hover:bg-zinc-800"
@@ -175,7 +175,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               <>
                 <Link
                   href={`/users/${user.handle || user.id}`}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
                     pathname === `/users/${user.handle || user.id}`
                       ? "bg-red-600 text-white shadow-lg "
                       : "text-zinc-400 hover:text-white hover:bg-zinc-800"
@@ -186,7 +186,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 </Link>
                 <Link
                   href="/developer"
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
                     pathname === "/developer"
                       ? "bg-red-600 text-white shadow-lg "
                       : "text-zinc-400 hover:text-white hover:bg-zinc-800"
@@ -218,7 +218,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                     <Link
                       key={item.name}
                       href={item.href}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
                         isActive
                           ? "bg-red-600 text-white shadow-lg "
                           : "text-zinc-400 hover:text-white hover:bg-zinc-800"
@@ -234,10 +234,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         </nav>
 
         {user ? (
-          <div className="p-4 border-t border-zinc-800">
+          <div className="border-t border-zinc-800 p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
             <Link
               href={`/users/${user.handle || user.id}`}
-              className="flex items-center gap-3 mb-3 hover:bg-zinc-800/50 p-2 -mx-2 rounded-lg transition-colors group"
+              className="group -mx-2 mb-3 flex min-h-12 items-center gap-3 rounded-xl p-2 transition-colors hover:bg-zinc-800/50"
             >
               <UserAvatar user={user} size="md" />
               <div className="flex-1 min-w-0">
@@ -250,7 +250,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <button
               type="button"
               onClick={signOut}
-              className="w-full px-3 py-2 text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-all"
+              className="min-h-11 w-full rounded-xl px-3 py-2 text-sm font-medium text-zinc-300 transition-all hover:bg-zinc-800 hover:text-white"
             >
               Sign Out
             </button>
@@ -270,10 +270,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             </div>
           </div>
         ) : (
-          <div className="p-4 border-t border-zinc-800">
+          <div className="border-t border-zinc-800 p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
             <Link
               href="/auth/signin"
-              className="w-full block px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg text-center transition-all"
+              className="block min-h-11 w-full rounded-xl bg-red-600 px-4 py-2.5 text-center text-sm font-medium text-white transition-all hover:bg-red-700"
             >
               Sign In
             </Link>

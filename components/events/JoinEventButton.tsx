@@ -49,7 +49,7 @@ export default function JoinEventButton({ eventId, requiresInvite }: Props) {
       <button
         type="button"
         onClick={() => setShowInviteInput(true)}
-        className="px-6 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition"
+        className="min-h-11 rounded-xl bg-red-600 px-6 py-2 text-center font-medium transition hover:bg-red-700"
       >
         Join Event (Invite Required)
       </button>
@@ -57,19 +57,19 @@ export default function JoinEventButton({ eventId, requiresInvite }: Props) {
   }
   if (requiresInvite && showInviteInput) {
     return (
-      <div className="flex gap-2">
+      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
         <input
           type="text"
           value={inviteCode}
           onChange={(e) => setInviteCode(e.target.value)}
           placeholder="Enter invite code"
-          className="px-4 py-2 bg-zinc-800 rounded-lg"
+          className="min-h-11 rounded-xl bg-zinc-800 px-4 py-2"
         />
         <button
           type="button"
           onClick={() => handleJoin()}
           disabled={loading || !inviteCode}
-          className="px-6 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition disabled:opacity-50"
+          className="min-h-11 rounded-xl bg-red-600 px-6 py-2 font-medium transition hover:bg-red-700 disabled:opacity-50"
         >
           {loading ? "Joining..." : "Join"}
         </button>
@@ -81,7 +81,7 @@ export default function JoinEventButton({ eventId, requiresInvite }: Props) {
       type="button"
       onClick={() => handleJoin()}
       disabled={loading}
-      className="w-full sm:w-auto px-6 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition disabled:opacity-50 text-center"
+      className="min-h-11 w-full rounded-xl bg-red-600 px-6 py-2 text-center font-medium transition hover:bg-red-700 disabled:opacity-50 sm:w-auto"
     >
       {loading ? "Joining..." : "Join Event"}
     </button>

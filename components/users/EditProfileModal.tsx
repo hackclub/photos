@@ -122,19 +122,19 @@ export default function EditProfileModal({
     }
   };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 overflow-y-auto">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl relative flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between p-6 border-b border-zinc-800 shrink-0">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/80 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4">
+      <div className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 p-4 sm:p-6">
           <h2 className="text-xl font-bold text-white">Edit Profile</h2>
           <button
             onClick={onClose}
-            className="text-zinc-400 hover:text-white transition-colors"
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
           >
             <HiXMark className="w-6 h-6" />
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto custom-scrollbar">
+        <div className="custom-scrollbar min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6">
           <form
             id="edit-profile-form"
             onSubmit={handleSubmit}
@@ -166,7 +166,7 @@ export default function EditProfileModal({
                       })
                     }
                     placeholder={user.name}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all"
+                    className="min-h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-white placeholder-zinc-600 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-600"
                   />
                   <p className="mt-1 text-xs text-zinc-500">
                     Overrides your Hack Club directory name.
@@ -190,7 +190,7 @@ export default function EditProfileModal({
                         checkHandle(val);
                       }}
                       placeholder="username"
-                      className={`w-full bg-zinc-950 border rounded-lg pl-7 pr-3 py-2 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:border-transparent transition-all ${
+                      className={`min-h-11 w-full rounded-lg border bg-zinc-950 py-2 pl-7 pr-3 text-white placeholder-zinc-600 transition-all focus:border-transparent focus:outline-none focus:ring-2 ${
                         handleError
                           ? "border-red-600 focus:ring-red-600"
                           : "border-zinc-800 focus:ring-red-600"
@@ -223,7 +223,7 @@ export default function EditProfileModal({
                   }
                   placeholder="Tell us about yourself..."
                   rows={3}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all resize-none"
+                  className="min-h-28 w-full resize-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-white placeholder-zinc-600 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-600"
                   maxLength={500}
                 />
               </div>
@@ -324,11 +324,11 @@ export default function EditProfileModal({
           </form>
         </div>
 
-        <div className="p-6 border-t border-zinc-800 shrink-0 flex justify-end gap-3">
+        <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-zinc-800 p-4 sm:flex-row sm:justify-end sm:p-6">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
+            className="min-h-11 rounded-xl px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
             disabled={saving}
           >
             Cancel
@@ -337,7 +337,7 @@ export default function EditProfileModal({
             type="submit"
             form="edit-profile-form"
             disabled={saving || !!handleError || checkingHandle}
-            className="flex items-center gap-2 px-6 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-red-600 px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? (
               <HiArrowPath className="w-5 h-5 animate-spin" />
@@ -378,7 +378,7 @@ function SocialInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-10 pr-3 py-2 text-white placeholder-zinc-700 focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all"
+          className="min-h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 py-2 pl-10 pr-3 text-white placeholder-zinc-700 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-600"
         />
       </div>
     </div>
