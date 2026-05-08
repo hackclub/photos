@@ -19,9 +19,9 @@ export interface MediaItem {
   uploadedBy: {
     id: string;
     name: string;
-    email?: string;
     handle?: string | null;
     slackId?: string | null;
+    avatarUrl?: string | null;
   };
   likeCount?: number;
   caption?: string | null;

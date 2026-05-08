@@ -36,6 +36,7 @@ export type ResourceType =
   | "storage";
 export interface UserContext {
   id: string;
+  slackId: string | null;
   isGlobalAdmin: boolean;
   isBanned: boolean;
   seriesAdmins: {
@@ -323,6 +324,7 @@ export async function getUserContext(
     where: eq(users.id, userId),
     columns: {
       id: true,
+      slackId: true,
       isGlobalAdmin: true,
       isBanned: true,
     },
@@ -338,6 +340,7 @@ export async function getUserContext(
   if (!user) return null;
   return {
     id: user.id,
+    slackId: user.slackId,
     isGlobalAdmin: user.isGlobalAdmin,
     isBanned: user.isBanned || false,
     seriesAdmins: user.seriesAdminRoles,

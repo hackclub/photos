@@ -168,6 +168,36 @@ export const eventAdmins = pgTable("event_admins", {
     .references(() => users.id, { onDelete: "cascade" }),
   grantedAt: timestamp("granted_at").notNull().defaultNow(),
 });
+export const pendingSeriesAdmins = pgTable("pending_series_admins", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  seriesId: uuid("series_id")
+    .notNull()
+    .references(() => series.id, { onDelete: "cascade" }),
+  slackId: text("slack_id").notNull(),
+  grantedById: uuid("granted_by_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  grantedAt: timestamp("granted_at").notNull().defaultNow(),
+  claimedById: uuid("claimed_by_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  claimedAt: timestamp("claimed_at"),
+});
+export const pendingEventAdmins = pgTable("pending_event_admins", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id")
+    .notNull()
+    .references(() => events.id, { onDelete: "cascade" }),
+  slackId: text("slack_id").notNull(),
+  grantedById: uuid("granted_by_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  grantedAt: timestamp("granted_at").notNull().defaultNow(),
+  claimedById: uuid("claimed_by_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  claimedAt: timestamp("claimed_at"),
+});
 export const mediaLikes = pgTable("media_likes", {
   id: uuid("id").primaryKey().defaultRandom(),
   mediaId: uuid("media_id")
@@ -313,6 +343,7 @@ export const seriesRelations = relations(series, ({ one, many }) => ({
   }),
   events: many(events),
   admins: many(seriesAdmins),
+  pendingAdmins: many(pendingSeriesAdmins),
 }));
 export const eventsRelations = relations(events, ({ one, many }) => ({
   series: one(series, {
@@ -326,6 +357,7 @@ export const eventsRelations = relations(events, ({ one, many }) => ({
   media: many(media),
   participants: many(eventParticipants),
   admins: many(eventAdmins),
+  pendingAdmins: many(pendingEventAdmins),
 }));
 export const mediaRelations = relations(media, ({ one, many }) => ({
   event: one(events, {
@@ -380,6 +412,44 @@ export const eventAdminsRelations = relations(eventAdmins, ({ one }) => ({
     references: [users.id],
   }),
 }));
+export const pendingSeriesAdminsRelations = relations(
+  pendingSeriesAdmins,
+  ({ one }) => ({
+    series: one(series, {
+      fields: [pendingSeriesAdmins.seriesId],
+      references: [series.id],
+    }),
+    grantedBy: one(users, {
+      fields: [pendingSeriesAdmins.grantedById],
+      references: [users.id],
+      relationName: "pending_series_admin_granter",
+    }),
+    claimedBy: one(users, {
+      fields: [pendingSeriesAdmins.claimedById],
+      references: [users.id],
+      relationName: "pending_series_admin_claimant",
+    }),
+  }),
+);
+export const pendingEventAdminsRelations = relations(
+  pendingEventAdmins,
+  ({ one }) => ({
+    event: one(events, {
+      fields: [pendingEventAdmins.eventId],
+      references: [events.id],
+    }),
+    grantedBy: one(users, {
+      fields: [pendingEventAdmins.grantedById],
+      references: [users.id],
+      relationName: "pending_event_admin_granter",
+    }),
+    claimedBy: one(users, {
+      fields: [pendingEventAdmins.claimedById],
+      references: [users.id],
+      relationName: "pending_event_admin_claimant",
+    }),
+  }),
+);
 export const mediaLikesRelations = relations(mediaLikes, ({ one }) => ({
   media: one(media, {
     fields: [mediaLikes.mediaId],
@@ -496,6 +566,18 @@ export const usersRelations = relations(users, ({ many }) => ({
   eventParticipations: many(eventParticipants),
   seriesAdminRoles: many(seriesAdmins),
   eventAdminRoles: many(eventAdmins),
+  pendingSeriesAdminGrants: many(pendingSeriesAdmins, {
+    relationName: "pending_series_admin_granter",
+  }),
+  claimedPendingSeriesAdminGrants: many(pendingSeriesAdmins, {
+    relationName: "pending_series_admin_claimant",
+  }),
+  pendingEventAdminGrants: many(pendingEventAdmins, {
+    relationName: "pending_event_admin_granter",
+  }),
+  claimedPendingEventAdminGrants: many(pendingEventAdmins, {
+    relationName: "pending_event_admin_claimant",
+  }),
   mediaLikes: many(mediaLikes),
   mediaComments: many(mediaComments),
   commentLikes: many(commentLikes),

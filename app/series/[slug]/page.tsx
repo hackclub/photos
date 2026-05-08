@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { media, series } from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 import { can, getUserContext } from "@/lib/policy";
+import { toPublicUser } from "@/lib/user-display";
 import SeriesDetailClient from "./SeriesDetailClient";
 export async function generateMetadata({
   params,
@@ -69,8 +70,7 @@ export default async function SeriesDetailPage({
             uploadedBy: {
               columns: {
                 id: true,
-                name: true,
-                email: true,
+                preferredName: true,
                 handle: true,
                 slackId: true,
               },
@@ -121,6 +121,7 @@ export default async function SeriesDetailPage({
       series={seriesData}
       allMedia={allMedia.map((m) => ({
         ...m,
+        uploadedBy: toPublicUser(m.uploadedBy),
         exifData: m.exifData as Record<string, unknown> | null,
         likeCount: m.likes.length,
       }))}

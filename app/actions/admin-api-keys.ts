@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { apiKeys } from "@/lib/db/schema";
 import { getUserContext } from "@/lib/policy";
+import { getUserDisplayName, toPublicUser } from "@/lib/user-display";
 export async function listAllApiKeys() {
   try {
     const session = await getSession();
@@ -19,15 +20,17 @@ export async function listAllApiKeys() {
         user: {
           columns: {
             id: true,
-            name: true,
-            email: true,
+            preferredName: true,
             handle: true,
             slackId: true,
           },
         },
       },
     });
-    return { success: true, keys };
+    return {
+      success: true,
+      keys: keys.map((key) => ({ ...key, user: toPublicUser(key.user) })),
+    };
   } catch (error) {
     console.error("Error listing all API keys:", error);
     return { success: false, error: "Failed to list API keys" };
@@ -53,7 +56,7 @@ export async function revokeApiKeyAdmin(id: string) {
     await auditLog(user.id, "delete", "api_key", id, {
       name: apiKey.name,
       ownerId: apiKey.userId,
-      ownerName: apiKey.user.name,
+      ownerName: getUserDisplayName(apiKey.user),
       adminRevoke: true,
     });
     revalidatePath("/admin/api-keys");

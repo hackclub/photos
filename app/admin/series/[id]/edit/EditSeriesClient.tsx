@@ -12,8 +12,10 @@ import {
   HiXMark,
 } from "react-icons/hi2";
 import {
+  addPendingSeriesAdminBySlackId,
   addSeriesAdmin,
   getSeriesAdmins,
+  removePendingSeriesAdminBySlackId,
   removeSeriesAdmin,
 } from "@/app/actions/admins";
 import { getSeries, updateSeries } from "@/app/actions/series";
@@ -23,18 +25,25 @@ import FormInput from "@/components/ui/FormInput";
 import FormTextarea from "@/components/ui/FormTextarea";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import UserSearch from "@/components/ui/UserSearch";
-import type { series, seriesAdmins, users } from "@/lib/db/schema";
+import type { series, seriesAdmins } from "@/lib/db/schema";
+import type { PublicUser } from "@/lib/user-display";
 
 interface EditSeriesClientProps {
   series: typeof series.$inferSelect;
   initialAdmins: (typeof seriesAdmins.$inferSelect & {
-    user: Pick<typeof users.$inferSelect, "id" | "name" | "email">;
+    user: PublicUser;
   })[];
+  initialPendingAdmins?: {
+    id: string;
+    slackId: string;
+    grantedAt: Date;
+  }[];
   isGlobalAdmin: boolean;
 }
 export default function EditSeriesClient({
   series,
   initialAdmins,
+  initialPendingAdmins = [],
   isGlobalAdmin,
 }: EditSeriesClientProps) {
   const router = useRouter();
@@ -42,11 +51,14 @@ export default function EditSeriesClient({
   const [admins, setAdmins] =
     useState<
       (typeof seriesAdmins.$inferSelect & {
-        user: Pick<typeof users.$inferSelect, "id" | "name" | "email">;
+        user: PublicUser;
       })[]
     >(initialAdmins);
+  const [pendingAdmins, setPendingAdmins] = useState(initialPendingAdmins);
   const [loadingAdmins, _setLoadingAdmins] = useState(false);
   const [addingAdmin, setAddingAdmin] = useState(false);
+  const [pendingSlackId, setPendingSlackId] = useState("");
+  const [addingPendingAdmin, setAddingPendingAdmin] = useState(false);
   const [bannerS3Key, setBannerS3Key] = useState<string | null>(
     series.bannerS3Key || null,
   );
@@ -133,6 +145,7 @@ export default function EditSeriesClient({
       const adminsResult = await getSeriesAdmins(series.id);
       if (adminsResult.success && adminsResult.admins) {
         setAdmins(adminsResult.admins);
+        setPendingAdmins(adminsResult.pendingAdmins || []);
       }
     } catch (error: unknown) {
       const message =
@@ -140,6 +153,48 @@ export default function EditSeriesClient({
       alert(message);
     } finally {
       setAddingAdmin(false);
+    }
+  };
+  const handleAddPendingAdmin = async () => {
+    setAddingPendingAdmin(true);
+    try {
+      const result = await addPendingSeriesAdminBySlackId(
+        series.id,
+        pendingSlackId,
+      );
+      if (!result.success) {
+        throw new Error(result.error || "Failed to add pending admin");
+      }
+      setPendingSlackId("");
+      const adminsResult = await getSeriesAdmins(series.id);
+      if (adminsResult.success) {
+        setAdmins(adminsResult.admins || []);
+        setPendingAdmins(adminsResult.pendingAdmins || []);
+      }
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "An error occurred";
+      alert(message);
+    } finally {
+      setAddingPendingAdmin(false);
+    }
+  };
+  const handleRemovePendingAdmin = async (slackId: string) => {
+    try {
+      const result = await removePendingSeriesAdminBySlackId(
+        series.id,
+        slackId,
+      );
+      if (!result.success) {
+        throw new Error(result.error || "Failed to remove pending admin");
+      }
+      setPendingAdmins((current) =>
+        current.filter((admin) => admin.slackId !== slackId),
+      );
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "An error occurred";
+      alert(message);
     }
   };
   const handleRemoveAdminConfirm = async () => {
@@ -300,6 +355,67 @@ export default function EditSeriesClient({
                 />
               </div>
 
+              {isGlobalAdmin && (
+                <div className="rounded-xl border border-zinc-800 bg-black p-4">
+                  <div className="mb-3">
+                    <p className="text-sm font-medium text-white">
+                      Upsert admin by Slack ID
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      Grant access before the user has registered. The grant is
+                      claimed automatically when their Slack-linked account
+                      appears.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      type="text"
+                      value={pendingSlackId}
+                      onChange={(e) => setPendingSlackId(e.target.value)}
+                      placeholder="U062UG485EE"
+                      className="min-h-11 flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 font-mono text-sm text-white placeholder-zinc-600 focus:border-red-600 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddPendingAdmin}
+                      disabled={addingPendingAdmin || !pendingSlackId.trim()}
+                      className="min-h-11 rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {addingPendingAdmin ? "Adding..." : "Upsert Admin"}
+                    </button>
+                  </div>
+                  {pendingAdmins.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      {pendingAdmins.map((admin) => (
+                        <div
+                          key={admin.id}
+                          className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2"
+                        >
+                          <div>
+                            <p className="font-mono text-sm text-white">
+                              {admin.slackId}
+                            </p>
+                            <p className="text-xs text-zinc-500">
+                              Pending account registration
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleRemovePendingAdmin(admin.slackId)
+                            }
+                            className="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-red-400"
+                            title="Remove pending admin"
+                          >
+                            <HiTrash className="h-5 w-5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {loadingAdmins ? (
                 <div className="flex items-center justify-center py-8">
                   <LoadingSpinner center />
@@ -321,7 +437,9 @@ export default function EditSeriesClient({
                             {admin.user.name}
                           </p>
                           <p className="text-zinc-400 text-sm">
-                            {admin.user.email}
+                            {admin.user.handle
+                              ? `@${admin.user.handle}`
+                              : admin.user.name}
                           </p>
                         </div>
                         <button

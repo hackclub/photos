@@ -14,6 +14,7 @@ import {
   mediaLikes,
 } from "@/lib/db/schema";
 import { can, getUserContext } from "@/lib/policy";
+import { toPublicUser } from "@/lib/user-display";
 export async function toggleMediaLike(mediaId: string) {
   const session = await getSession();
   const user = await getUserContext(session?.id);
@@ -121,8 +122,9 @@ export async function getMediaComments(mediaId: string) {
         user: {
           columns: {
             id: true,
-            name: true,
+            preferredName: true,
             handle: true,
+            slackId: true,
           },
         },
         replies: {
@@ -130,8 +132,9 @@ export async function getMediaComments(mediaId: string) {
             user: {
               columns: {
                 id: true,
-                name: true,
+                preferredName: true,
                 handle: true,
+                slackId: true,
               },
             },
           },
@@ -175,10 +178,12 @@ export async function getMediaComments(mediaId: string) {
       .filter((c) => !c.parentCommentId)
       .map((comment) => ({
         ...comment,
+        user: toPublicUser(comment.user),
         likeCount: likeCountMap[comment.id] || 0,
         hasLiked: userLikeSet.has(comment.id),
         replies: comment.replies.map((reply) => ({
           ...reply,
+          user: toPublicUser(reply.user),
           likeCount: likeCountMap[reply.id] || 0,
           hasLiked: userLikeSet.has(reply.id),
         })),
@@ -252,8 +257,9 @@ export async function createComment(
         user: {
           columns: {
             id: true,
-            name: true,
+            preferredName: true,
             handle: true,
+            slackId: true,
           },
         },
       },
@@ -263,6 +269,7 @@ export async function createComment(
     }
     const commentWithLikes = {
       ...commentWithUser,
+      user: toPublicUser(commentWithUser.user),
       likeCount: 0,
       hasLiked: false,
       replies: [],

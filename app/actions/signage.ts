@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { events, media, series } from "@/lib/db/schema";
 import { getMediaProxyUrl } from "@/lib/media/s3";
 import { getAccessibleEventIdsForUser, getUserContext } from "@/lib/policy";
+import { toPublicUser } from "@/lib/user-display";
 export type SignageFilter = {
   seriesId?: string;
   eventId?: string;
@@ -45,7 +46,14 @@ export async function getRandomMedia(filter: SignageFilter = {}, limit = 50) {
       limit: limit,
       with: {
         event: true,
-        uploadedBy: true,
+        uploadedBy: {
+          columns: {
+            id: true,
+            preferredName: true,
+            handle: true,
+            slackId: true,
+          },
+        },
       },
     });
     const mediaWithUrls = await Promise.all(
@@ -58,6 +66,7 @@ export async function getRandomMedia(filter: SignageFilter = {}, limit = 50) {
         }
         return {
           ...item,
+          uploadedBy: toPublicUser(item.uploadedBy),
           url,
         };
       }),
@@ -88,7 +97,14 @@ export async function getLatestMedia(limit = 1) {
       limit: limit,
       with: {
         event: true,
-        uploadedBy: true,
+        uploadedBy: {
+          columns: {
+            id: true,
+            preferredName: true,
+            handle: true,
+            slackId: true,
+          },
+        },
       },
     });
     const mediaWithUrls = await Promise.all(
@@ -101,6 +117,7 @@ export async function getLatestMedia(limit = 1) {
         }
         return {
           ...item,
+          uploadedBy: toPublicUser(item.uploadedBy),
           url,
         };
       }),

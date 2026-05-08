@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { jwtVerify, SignJWT } from "jose";
 import { cookies, headers } from "next/headers";
 import { HACK_CLUB_AUTH_URL } from "@/lib/constants";
+import { claimPendingAdminGrantsForUser } from "@/lib/pending-admins";
 import { getUserDisplayName, toPublicUser } from "@/lib/user-display";
 import { db } from "./db";
 import { users } from "./db/schema";
@@ -262,6 +263,8 @@ export async function createOrUpdateUser(
       })
       .where(eq(users.id, existingUser.id));
 
+    await claimPendingAdminGrantsForUser({ id: existingUser.id, slackId });
+
     return {
       ...toPublicUser(existingUser),
       id: existingUser.id,
@@ -269,7 +272,7 @@ export async function createOrUpdateUser(
       hackclubId: existingUser.hackclubId,
       isGlobalAdmin: existingUser.isGlobalAdmin,
       isBanned: existingUser.isBanned,
-      slackId: existingUser.slackId,
+      slackId,
     };
   }
 
@@ -285,6 +288,11 @@ export async function createOrUpdateUser(
       ...(refreshToken ? { hcaRefreshToken: refreshToken } : {}),
     })
     .returning();
+
+  await claimPendingAdminGrantsForUser({
+    id: newUser.id,
+    slackId: newUser.slackId,
+  });
 
   return {
     ...toPublicUser(newUser),

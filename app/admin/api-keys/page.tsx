@@ -32,7 +32,7 @@ export default async function AdminApiKeysPage() {
       />
 
       <AdminPageContent>
-        <ApiKeysClient initialKeys={keysResult.keys} />
+        <ApiKeysClient initialKeys={keysResult.keys as never} />
       </AdminPageContent>
     </div>
   );

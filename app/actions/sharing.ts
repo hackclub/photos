@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { media, shareLinks } from "@/lib/db/schema";
 import { can, getUserContext } from "@/lib/policy";
+import { toPublicUser } from "@/lib/user-display";
 export async function createShareLink(
   mediaId: string,
   type: "view" | "raw" = "view",
@@ -94,7 +95,9 @@ export async function getSharedMedia(token: string) {
           with: {
             uploadedBy: {
               columns: {
-                name: true,
+                id: true,
+                preferredName: true,
+                handle: true,
                 slackId: true,
               },
             },
@@ -103,7 +106,10 @@ export async function getSharedMedia(token: string) {
         },
         createdBy: {
           columns: {
-            name: true,
+            id: true,
+            preferredName: true,
+            handle: true,
+            slackId: true,
           },
         },
       },
@@ -121,7 +127,17 @@ export async function getSharedMedia(token: string) {
       .set({ views: link.views + 1 })
       .where(eq(shareLinks.token, token))
       .catch(console.error);
-    return { success: true, link };
+    return {
+      success: true,
+      link: {
+        ...link,
+        media: {
+          ...link.media,
+          uploadedBy: toPublicUser(link.media.uploadedBy),
+        },
+        createdBy: toPublicUser(link.createdBy),
+      },
+    };
   } catch (error) {
     console.error("Failed to get shared media:", error);
     return { success: false, error: "Failed to retrieve media" };

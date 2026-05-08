@@ -100,6 +100,7 @@ export async function getUserContext(): Promise<{
     where: eq(users.id, session.id),
     columns: {
       id: true,
+      slackId: true,
       isGlobalAdmin: true,
       isBanned: true,
     },
@@ -130,6 +131,7 @@ export async function getUserContext(): Promise<{
   return {
     user: {
       id: user.id,
+      slackId: user.slackId,
       isGlobalAdmin: user.isGlobalAdmin,
       isBanned: user.isBanned || false,
       seriesAdmins: user.seriesAdminRoles,

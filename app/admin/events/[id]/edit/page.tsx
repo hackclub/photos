@@ -3,8 +3,9 @@ import { getEventAdmins } from "@/app/actions/admins";
 import { getEvent } from "@/app/actions/events";
 import { getAllSeries } from "@/app/actions/series";
 import { getCurrentUser } from "@/app/actions/users";
-import type { eventAdmins, users } from "@/lib/db/schema";
+import type { eventAdmins } from "@/lib/db/schema";
 import { can, getUserContext } from "@/lib/policy";
+import type { PublicUser } from "@/lib/user-display";
 import EditEventClient from "./EditEventClient";
 export default async function EditEventPage({
   params,
@@ -42,17 +43,21 @@ export default async function EditEventPage({
     ? await can(ctx, "manage", "series", event.seriesId)
     : false;
   let initialAdmins: (typeof eventAdmins.$inferSelect & {
-    user: Pick<typeof users.$inferSelect, "id" | "name" | "email">;
+    user: PublicUser;
   })[] = [];
+  let initialPendingAdmins: { id: string; slackId: string; grantedAt: Date }[] =
+    [];
   const adminsResult = await getEventAdmins(id);
   if (adminsResult.success && adminsResult.admins) {
     initialAdmins = adminsResult.admins;
+    initialPendingAdmins = adminsResult.pendingAdmins || [];
   }
   return (
     <EditEventClient
       event={event}
       series={series}
       initialAdmins={initialAdmins}
+      initialPendingAdmins={initialPendingAdmins}
       isGlobalAdmin={isGlobal}
       isSeriesAdmin={isSeries}
     />

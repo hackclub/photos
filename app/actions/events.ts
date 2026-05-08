@@ -9,6 +9,7 @@ import {
   deleteBatchMedia,
   deleteMediaAndThumbnail,
 } from "@/lib/media/thumbnail";
+import { claimPendingAdminGrantsForUser } from "@/lib/pending-admins";
 import { can, getUserContext } from "@/lib/policy";
 export async function joinEvent(eventId: string, inviteCode?: string) {
   const session = await getSession();
@@ -47,6 +48,7 @@ export async function joinEvent(eventId: string, inviteCode?: string) {
     eventId: event.id,
     userId: user.id,
   });
+  await claimPendingAdminGrantsForUser({ id: user.id, slackId: user.slackId });
   await auditLog(user.id, "join", "event", event.id);
   revalidatePath(`/events/${event.slug}`);
   revalidatePath("/events");

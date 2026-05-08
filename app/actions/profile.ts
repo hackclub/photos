@@ -15,6 +15,7 @@ import {
   getAccessibleEventIds,
   getUserContext,
 } from "@/lib/policy";
+import { toPublicUser } from "@/lib/user-display";
 export async function getUserProfileData(userId: string) {
   try {
     const session = await getSession();
@@ -43,8 +44,7 @@ export async function getUserProfileData(userId: string) {
         uploadedBy: {
           columns: {
             id: true,
-            name: true,
-            email: true,
+            preferredName: true,
             handle: true,
             slackId: true,
           },
@@ -62,8 +62,7 @@ export async function getUserProfileData(userId: string) {
             uploadedBy: {
               columns: {
                 id: true,
-                name: true,
-                email: true,
+                preferredName: true,
                 handle: true,
                 slackId: true,
               },
@@ -86,8 +85,7 @@ export async function getUserProfileData(userId: string) {
             uploadedBy: {
               columns: {
                 id: true,
-                name: true,
-                email: true,
+                preferredName: true,
                 handle: true,
                 slackId: true,
               },
@@ -143,13 +141,25 @@ export async function getUserProfileData(userId: string) {
       currentUser?.id,
       uniqueEvents,
     );
-    const filteredUploads = userUploads.filter(
+    const publicUploads = userUploads.map((item) => ({
+      ...item,
+      uploadedBy: toPublicUser(item.uploadedBy),
+    }));
+    const publicLikedMedia = likedMedia.map((item) => ({
+      ...item,
+      uploadedBy: toPublicUser(item.uploadedBy),
+    }));
+    const publicMentionedMedia = mentionedMedia.map((item) => ({
+      ...item,
+      uploadedBy: toPublicUser(item.uploadedBy),
+    }));
+    const filteredUploads = publicUploads.filter(
       (u) => u.event && accessibleEventIds.has(u.event.id),
     );
-    const filteredLikes = likedMedia.filter(
+    const filteredLikes = publicLikedMedia.filter(
       (m) => m.event && accessibleEventIds.has(m.event.id),
     );
-    const filteredMentions = mentionedMedia.filter(
+    const filteredMentions = publicMentionedMedia.filter(
       (m) => m.event && accessibleEventIds.has(m.event.id),
     );
     const filteredUserEvents = userEvents.filter(

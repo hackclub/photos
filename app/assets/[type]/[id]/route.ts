@@ -35,6 +35,7 @@ export async function GET(
           where: eq(users.id, sessionUser.id),
           columns: {
             id: true,
+            slackId: true,
             isGlobalAdmin: true,
             isBanned: true,
           },
@@ -51,6 +52,7 @@ export async function GET(
         if (dbUser && !dbUser.isBanned) {
           user = {
             id: dbUser.id,
+            slackId: dbUser.slackId,
             isGlobalAdmin: dbUser.isGlobalAdmin,
             isBanned: dbUser.isBanned || false,
             seriesAdmins: dbUser.seriesAdminRoles,

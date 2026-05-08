@@ -103,7 +103,6 @@ interface MediaItem {
   uploadedBy: {
     id: string;
     name: string;
-    email?: string;
     handle?: string | null;
     slackId?: string | null;
   };
@@ -172,7 +171,6 @@ interface MentionedUser {
   id: string;
   name: string;
   handle?: string | null;
-  email?: string;
   slackId?: string | null;
 }
 interface Props {
@@ -287,7 +285,6 @@ export default function PhotoDetailModal({
       id: media.uploadedBy.id,
       name: media.uploadedBy.name,
       handle: media.uploadedBy.handle,
-      email: media.uploadedBy.email,
       slackId: media.uploadedBy.slackId,
     };
     return [uploaderAsMention, ...mentions];

@@ -23,6 +23,7 @@ import { db } from "@/lib/db";
 import { eventParticipants, events } from "@/lib/db/schema";
 import { getAssetProxyUrl } from "@/lib/media/s3";
 import { can, getUserContext } from "@/lib/policy";
+import { toPublicUser } from "@/lib/user-display";
 export async function generateMetadata({
   params,
 }: {
@@ -75,9 +76,7 @@ export default async function EventPage({
           uploadedBy: {
             columns: {
               id: true,
-              name: true,
               preferredName: true,
-              email: true,
               handle: true,
               slackId: true,
             },
@@ -122,10 +121,8 @@ export default async function EventPage({
       user: {
         columns: {
           id: true,
-          name: true,
           preferredName: true,
           handle: true,
-          email: true,
           slackId: true,
         },
       },
@@ -240,13 +237,7 @@ export default async function EventPage({
               <ParticipantsList
                 participants={participants.map((p) => ({
                   ...p,
-                  user: {
-                    id: p.user.id,
-                    name: p.user.preferredName || p.user.name,
-                    handle: p.user.handle,
-                    email: p.user.email,
-                    slackId: p.user.slackId,
-                  },
+                  user: toPublicUser(p.user),
                   joinedAt: p.joinedAt.toISOString(),
                 }))}
                 count={participantCount}
@@ -347,6 +338,7 @@ export default async function EventPage({
             <MediaGallery
               media={mediaWithPermissions.map((m) => ({
                 ...m,
+                uploadedBy: toPublicUser(m.uploadedBy),
                 exifData: m.exifData as Record<string, unknown> | null,
                 likeCount: m.likes.length,
               }))}

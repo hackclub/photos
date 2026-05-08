@@ -45,7 +45,6 @@ interface User {
   name: string;
   preferredName?: string | null;
   handle?: string | null;
-  email: string;
   createdAt: Date;
   isBanned?: boolean;
   bannedAt?: Date | null;

@@ -9,6 +9,7 @@ export function getSlackAvatarUrl(slackId?: string | null) {
 
 type DisplayableUser = {
   handle?: string | null;
+  preferredName?: string | null;
 };
 
 export function getUserHandle(user?: DisplayableUser | null) {
@@ -17,7 +18,8 @@ export function getUserHandle(user?: DisplayableUser | null) {
 }
 
 export function getUserDisplayName(user?: DisplayableUser | null) {
-  return getUserHandle(user);
+  const preferredName = user?.preferredName?.trim();
+  return preferredName || getUserHandle(user);
 }
 
 type PublicUserInput = DisplayableUser & {

@@ -2,8 +2,9 @@ import { notFound, redirect } from "next/navigation";
 import { getSeriesAdmins } from "@/app/actions/admins";
 import { getSeries } from "@/app/actions/series";
 import { getCurrentUser } from "@/app/actions/users";
-import type { seriesAdmins, users } from "@/lib/db/schema";
+import type { seriesAdmins } from "@/lib/db/schema";
 import { can, getUserContext } from "@/lib/policy";
+import type { PublicUser } from "@/lib/user-display";
 import EditSeriesClient from "./EditSeriesClient";
 export default async function EditSeriesPage({
   params,
@@ -32,16 +33,20 @@ export default async function EditSeriesPage({
   const series = seriesResult.series;
   const isGlobal = ctx.isGlobalAdmin;
   let initialAdmins: (typeof seriesAdmins.$inferSelect & {
-    user: Pick<typeof users.$inferSelect, "id" | "name" | "email">;
+    user: PublicUser;
   })[] = [];
+  let initialPendingAdmins: { id: string; slackId: string; grantedAt: Date }[] =
+    [];
   const adminsResult = await getSeriesAdmins(id);
   if (adminsResult.success && adminsResult.admins) {
     initialAdmins = adminsResult.admins;
+    initialPendingAdmins = adminsResult.pendingAdmins || [];
   }
   return (
     <EditSeriesClient
       series={series}
       initialAdmins={initialAdmins}
+      initialPendingAdmins={initialPendingAdmins}
       isGlobalAdmin={isGlobal}
     />
   );

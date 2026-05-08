@@ -16,7 +16,7 @@ import { db } from "@/lib/db";
 import { events, series, tags, users } from "@/lib/db/schema";
 import { s3Client } from "@/lib/media/s3";
 import { generateOgImage } from "@/lib/og";
-import { getSlackAvatarUrl } from "@/lib/user-display";
+import { getSlackAvatarUrl, getUserDisplayName } from "@/lib/user-display";
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -82,15 +82,16 @@ export async function GET(request: Request) {
       });
       if (!user) return errorImage("User not found");
       const avatarUrl = getSlackAvatarUrl(user.slackId);
+      const displayName = getUserDisplayName(user);
       return generateOgImage({
-        title: user.name,
+        title: displayName,
         description:
           user.bio || `@${user.handle || "user"} on Hack Club Photos`,
         image: undefined,
         icon: avatarUrl ? (
           <img
             src={avatarUrl}
-            alt={user.name}
+            alt={displayName}
             style={{
               width: "100%",
               height: "100%",

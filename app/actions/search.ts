@@ -213,7 +213,7 @@ export async function getSearchFilterOptions() {
       }),
       db.query.users.findMany({
         orderBy: [desc(users.createdAt)],
-        columns: { id: true, name: true, handle: true },
+        columns: { id: true, preferredName: true, handle: true, slackId: true },
         limit: 100,
       }),
       db.query.tags.findMany({

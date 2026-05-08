@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { getUserContext } from "@/lib/policy";
+import { getUserDisplayName } from "@/lib/user-display";
 import UserProfileClient from "./UserProfileClient";
 export async function generateMetadata({
   params,
@@ -26,8 +27,9 @@ export async function generateMetadata({
       title: "User Not Found",
     };
   }
+  const displayName = getUserDisplayName(user);
   return {
-    title: `${user.name} (@${user.handle}) | Hack Club Photos`,
+    title: `${displayName}${user.handle ? ` (@${user.handle})` : ""} | Hack Club Photos`,
     description: user.bio || `@${user.handle} on Hack Club Photos`,
     openGraph: {
       images: [`/api/og?type=user&id=${username}`],
@@ -62,10 +64,8 @@ export default async function UserProfilePage({
     where: isUuid ? eq(users.id, username) : eq(users.handle, username),
     columns: {
       id: true,
-      name: true,
       preferredName: true,
       handle: true,
-      email: true,
       createdAt: true,
       isBanned: true,
       bannedAt: true,
@@ -81,6 +81,7 @@ export default async function UserProfilePage({
   const user = userData
     ? {
         ...userData,
+        name: getUserDisplayName(userData),
         socialLinks: userData.socialLinks as Record<string, string> | null,
         storageLimit: userData.storageLimit
           ? Number(userData.storageLimit)

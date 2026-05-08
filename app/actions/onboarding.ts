@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
+import { claimPendingAdminGrantsForUser } from "@/lib/pending-admins";
 import { getUserContext } from "@/lib/policy";
 import { getUserDisplayName } from "@/lib/user-display";
 
@@ -82,6 +83,10 @@ export async function completeOnboarding(data: { handle: string }) {
         name: getUserDisplayName({ handle }),
         handle,
       });
+      await claimPendingAdminGrantsForUser({
+        id: session.id,
+        slackId: session.slackId,
+      });
     } else if (onboardingSession) {
       const existingUser = await db.query.users.findFirst({
         where: eq(users.hackclubId, onboardingSession.hackclubId),
@@ -103,6 +108,10 @@ export async function completeOnboarding(data: { handle: string }) {
           hackclubId: existingUser.hackclubId,
           isGlobalAdmin: existingUser.isGlobalAdmin,
           isBanned: existingUser.isBanned,
+          slackId: existingUser.slackId,
+        });
+        await claimPendingAdminGrantsForUser({
+          id: existingUser.id,
           slackId: existingUser.slackId,
         });
       } else {
@@ -132,6 +141,10 @@ export async function completeOnboarding(data: { handle: string }) {
           hackclubId: newUser.hackclubId,
           isGlobalAdmin: newUser.isGlobalAdmin,
           isBanned: newUser.isBanned,
+          slackId: newUser.slackId,
+        });
+        await claimPendingAdminGrantsForUser({
+          id: newUser.id,
           slackId: newUser.slackId,
         });
       }

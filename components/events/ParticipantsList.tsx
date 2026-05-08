@@ -10,8 +10,8 @@ interface Participant {
     id: string;
     name: string;
     handle: string | null;
-    email: string;
     slackId: string | null;
+    avatarUrl?: string | null;
   };
   joinedAt?: string | Date;
 }

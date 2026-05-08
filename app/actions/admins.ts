@@ -1,5 +1,5 @@
 "use server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auditLog } from "@/lib/audit";
 import { createSession, getSession } from "@/lib/auth";
@@ -7,11 +7,14 @@ import { db } from "@/lib/db";
 import {
   eventAdmins,
   events,
+  pendingEventAdmins,
+  pendingSeriesAdmins,
   series,
   seriesAdmins,
   users,
 } from "@/lib/db/schema";
 import { can, getUserContext } from "@/lib/policy";
+import { toPublicUser } from "@/lib/user-display";
 export async function getEventAdmins(eventId: string) {
   try {
     const session = await getSession();
@@ -34,13 +37,32 @@ export async function getEventAdmins(eventId: string) {
         user: {
           columns: {
             id: true,
-            name: true,
-            email: true,
+            preferredName: true,
+            handle: true,
+            slackId: true,
           },
         },
       },
     });
-    return { success: true, admins };
+    const pendingAdmins = user.isGlobalAdmin
+      ? await db.query.pendingEventAdmins.findMany({
+          where: and(
+            eq(pendingEventAdmins.eventId, event.id),
+            isNull(pendingEventAdmins.claimedAt),
+          ),
+          orderBy: (pendingEventAdmins, { desc }) => [
+            desc(pendingEventAdmins.grantedAt),
+          ],
+        })
+      : [];
+    return {
+      success: true,
+      admins: admins.map((admin) => ({
+        ...admin,
+        user: toPublicUser(admin.user),
+      })),
+      pendingAdmins,
+    };
   } catch (error) {
     console.error("Error fetching event admins:", error);
     return { error: "Failed to fetch admins" };
@@ -68,13 +90,32 @@ export async function getSeriesAdmins(seriesId: string) {
         user: {
           columns: {
             id: true,
-            name: true,
-            email: true,
+            preferredName: true,
+            handle: true,
+            slackId: true,
           },
         },
       },
     });
-    return { success: true, admins };
+    const pendingAdmins = user.isGlobalAdmin
+      ? await db.query.pendingSeriesAdmins.findMany({
+          where: and(
+            eq(pendingSeriesAdmins.seriesId, seriesData.id),
+            isNull(pendingSeriesAdmins.claimedAt),
+          ),
+          orderBy: (pendingSeriesAdmins, { desc }) => [
+            desc(pendingSeriesAdmins.grantedAt),
+          ],
+        })
+      : [];
+    return {
+      success: true,
+      admins: admins.map((admin) => ({
+        ...admin,
+        user: toPublicUser(admin.user),
+      })),
+      pendingAdmins,
+    };
   } catch (error) {
     console.error("Error fetching series admins:", error);
     return { error: "Failed to fetch admins" };
@@ -205,6 +246,155 @@ export const addSeriesAdmin = async (id: string, hackclubId: string) =>
   addAdmin("series", id, hackclubId);
 export const removeSeriesAdmin = async (id: string, userId: string) =>
   removeAdmin("series", id, userId);
+
+function normalizeSlackId(slackId: string) {
+  return slackId.trim().toUpperCase();
+}
+
+function isValidSlackId(slackId: string) {
+  return /^U[A-Z0-9]{8,}$/.test(slackId);
+}
+
+export async function addPendingAdminBySlackId(
+  entityType: "event" | "series",
+  entityId: string,
+  slackIdInput: string,
+) {
+  try {
+    const session = await getSession();
+    const currentUser = await getUserContext(session?.id);
+    if (!currentUser) return { success: false, error: "Unauthorized" };
+    if (!currentUser.isGlobalAdmin) {
+      return { success: false, error: "Forbidden" };
+    }
+
+    const slackId = normalizeSlackId(slackIdInput);
+    if (!isValidSlackId(slackId)) {
+      return { success: false, error: "Enter a valid Slack user ID" };
+    }
+
+    const entity =
+      entityType === "event"
+        ? await db.query.events.findFirst({ where: eq(events.id, entityId) })
+        : await db.query.series.findFirst({ where: eq(series.id, entityId) });
+    if (!entity) return { success: false, error: `${entityType} not found` };
+
+    const existingUser = await db.query.users.findFirst({
+      where: eq(users.slackId, slackId),
+      columns: { id: true },
+    });
+    if (existingUser) {
+      return addAdmin(entityType, entityId, existingUser.id);
+    }
+
+    const existingPending =
+      entityType === "event"
+        ? await db.query.pendingEventAdmins.findFirst({
+            where: and(
+              eq(pendingEventAdmins.eventId, entityId),
+              eq(pendingEventAdmins.slackId, slackId),
+              isNull(pendingEventAdmins.claimedAt),
+            ),
+          })
+        : await db.query.pendingSeriesAdmins.findFirst({
+            where: and(
+              eq(pendingSeriesAdmins.seriesId, entityId),
+              eq(pendingSeriesAdmins.slackId, slackId),
+              isNull(pendingSeriesAdmins.claimedAt),
+            ),
+          });
+    if (existingPending) {
+      return { success: false, error: "Slack user is already pending" };
+    }
+
+    if (entityType === "event") {
+      await db.insert(pendingEventAdmins).values({
+        eventId: entityId,
+        slackId,
+        grantedById: currentUser.id,
+      });
+    } else {
+      await db.insert(pendingSeriesAdmins).values({
+        seriesId: entityId,
+        slackId,
+        grantedById: currentUser.id,
+      });
+    }
+
+    await auditLog(currentUser.id, "update", entityType, entityId, {
+      action: "add_pending_admin",
+      slackId,
+    });
+    revalidatePath(
+      `/admin/${entityType === "event" ? "events" : "series"}/${entityId}/edit`,
+    );
+    return { success: true };
+  } catch (error) {
+    console.error(`Error adding pending ${entityType} admin:`, error);
+    return { success: false, error: "Failed to add pending admin" };
+  }
+}
+
+export async function removePendingAdminBySlackId(
+  entityType: "event" | "series",
+  entityId: string,
+  slackIdInput: string,
+) {
+  try {
+    const session = await getSession();
+    const currentUser = await getUserContext(session?.id);
+    if (!currentUser) return { success: false, error: "Unauthorized" };
+    if (!currentUser.isGlobalAdmin) {
+      return { success: false, error: "Forbidden" };
+    }
+
+    const slackId = normalizeSlackId(slackIdInput);
+    if (entityType === "event") {
+      await db
+        .delete(pendingEventAdmins)
+        .where(
+          and(
+            eq(pendingEventAdmins.eventId, entityId),
+            eq(pendingEventAdmins.slackId, slackId),
+            isNull(pendingEventAdmins.claimedAt),
+          ),
+        );
+    } else {
+      await db
+        .delete(pendingSeriesAdmins)
+        .where(
+          and(
+            eq(pendingSeriesAdmins.seriesId, entityId),
+            eq(pendingSeriesAdmins.slackId, slackId),
+            isNull(pendingSeriesAdmins.claimedAt),
+          ),
+        );
+    }
+
+    await auditLog(currentUser.id, "update", entityType, entityId, {
+      action: "remove_pending_admin",
+      slackId,
+    });
+    revalidatePath(
+      `/admin/${entityType === "event" ? "events" : "series"}/${entityId}/edit`,
+    );
+    return { success: true };
+  } catch (error) {
+    console.error(`Error removing pending ${entityType} admin:`, error);
+    return { success: false, error: "Failed to remove pending admin" };
+  }
+}
+
+export const addPendingEventAdminBySlackId = (id: string, slackId: string) =>
+  addPendingAdminBySlackId("event", id, slackId);
+export const addPendingSeriesAdminBySlackId = (id: string, slackId: string) =>
+  addPendingAdminBySlackId("series", id, slackId);
+export const removePendingEventAdminBySlackId = (id: string, slackId: string) =>
+  removePendingAdminBySlackId("event", id, slackId);
+export const removePendingSeriesAdminBySlackId = (
+  id: string,
+  slackId: string,
+) => removePendingAdminBySlackId("series", id, slackId);
 export async function adminUpdateUser(
   userId: string,
   data: {

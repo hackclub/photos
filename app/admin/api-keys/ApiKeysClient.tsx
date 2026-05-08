@@ -35,9 +35,9 @@ interface ApiKey {
   user: {
     id: string;
     name: string;
-    email: string;
     handle: string | null;
     slackId?: string | null;
+    avatarUrl?: string | null;
   };
 }
 export default function ApiKeyList({ initialKeys }: { initialKeys: ApiKey[] }) {
@@ -52,7 +52,6 @@ export default function ApiKeyList({ initialKeys }: { initialKeys: ApiKey[] }) {
       (key.note?.toLowerCase() || "").includes(term) ||
       key.key.toLowerCase().includes(term) ||
       key.user.name.toLowerCase().includes(term) ||
-      key.user.email.toLowerCase().includes(term) ||
       key.id.toLowerCase().includes(term)
     );
   });
@@ -152,7 +151,9 @@ export default function ApiKeyList({ initialKeys }: { initialKeys: ApiKey[] }) {
                           {key.user.name}
                         </div>
                         <div className="text-xs text-zinc-500">
-                          {key.user.email}
+                          {key.user.handle
+                            ? `@${key.user.handle}`
+                            : key.user.name}
                         </div>
                       </div>
                     </div>
