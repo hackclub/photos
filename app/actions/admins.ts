@@ -385,16 +385,30 @@ export async function removePendingAdminBySlackId(
   }
 }
 
-export const addPendingEventAdminBySlackId = (id: string, slackId: string) =>
-  addPendingAdminBySlackId("event", id, slackId);
-export const addPendingSeriesAdminBySlackId = (id: string, slackId: string) =>
-  addPendingAdminBySlackId("series", id, slackId);
-export const removePendingEventAdminBySlackId = (id: string, slackId: string) =>
-  removePendingAdminBySlackId("event", id, slackId);
-export const removePendingSeriesAdminBySlackId = (
+export async function addPendingEventAdminBySlackId(
   id: string,
   slackId: string,
-) => removePendingAdminBySlackId("series", id, slackId);
+) {
+  return addPendingAdminBySlackId("event", id, slackId);
+}
+export async function addPendingSeriesAdminBySlackId(
+  id: string,
+  slackId: string,
+) {
+  return addPendingAdminBySlackId("series", id, slackId);
+}
+export async function removePendingEventAdminBySlackId(
+  id: string,
+  slackId: string,
+) {
+  return removePendingAdminBySlackId("event", id, slackId);
+}
+export async function removePendingSeriesAdminBySlackId(
+  id: string,
+  slackId: string,
+) {
+  return removePendingAdminBySlackId("series", id, slackId);
+}
 export async function adminUpdateUser(
   userId: string,
   data: {
