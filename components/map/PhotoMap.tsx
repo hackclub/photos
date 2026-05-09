@@ -134,15 +134,20 @@ export default function PhotoMap() {
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [viewMode, setViewMode] = useState<ViewMode>("photos");
   const mapRef = useRef<L.Map | null>(null);
-  const urlLat = searchParams.get("lat")
+  const urlLatParsed = searchParams.get("lat")
     ? parseFloat(searchParams.get("lat")!)
     : undefined;
-  const urlLng = searchParams.get("lng")
+  const urlLat = urlLatParsed !== undefined && !isNaN(urlLatParsed) ? urlLatParsed : undefined;
+
+  const urlLngParsed = searchParams.get("lng")
     ? parseFloat(searchParams.get("lng")!)
     : undefined;
-  const urlZoom = searchParams.get("zoom")
+  const urlLng = urlLngParsed !== undefined && !isNaN(urlLngParsed) ? urlLngParsed : undefined;
+
+  const urlZoomParsed = searchParams.get("zoom")
     ? parseInt(searchParams.get("zoom")!, 10)
     : undefined;
+  const urlZoom = urlZoomParsed !== undefined && !isNaN(urlZoomParsed) ? urlZoomParsed : undefined;
   const handleBoundsChange = useCallback(
     (newBounds: [number, number, number, number], newZoom: number) => {
       setBounds((prev) => {
@@ -182,7 +187,15 @@ export default function PhotoMap() {
   }, []);
   const points =
     viewMode === "photos"
-      ? mapData.photos.map((photo) => ({
+      ? mapData.photos
+          .filter(
+            (photo) =>
+              photo.lat != null &&
+              photo.lng != null &&
+              !isNaN(Number(photo.lat)) &&
+              !isNaN(Number(photo.lng)),
+          )
+          .map((photo) => ({
           type: "Feature" as const,
           properties: {
             cluster: false,
@@ -192,13 +205,18 @@ export default function PhotoMap() {
           },
           geometry: {
             type: "Point" as const,
-            coordinates: [photo.lng, photo.lat],
+            coordinates: [Number(photo.lng), Number(photo.lat)],
           },
         }))
       : mapData.events
           .filter(
             (event) =>
-              event.lat && event.lng && event.photos && event.photos.length > 0,
+              event.lat != null &&
+              event.lng != null &&
+              !isNaN(Number(event.lat)) &&
+              !isNaN(Number(event.lng)) &&
+              event.photos &&
+              event.photos.length > 0,
           )
           .map((event) => ({
             type: "Feature" as const,
@@ -210,7 +228,7 @@ export default function PhotoMap() {
             },
             geometry: {
               type: "Point" as const,
-              coordinates: [event.lng, event.lat],
+              coordinates: [Number(event.lng), Number(event.lat)],
             },
           }));
   const { clusters, supercluster } = useSupercluster({

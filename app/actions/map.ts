@@ -64,15 +64,17 @@ export async function getMapData(eventSlug?: string | null) {
     const accessibleMedia = [];
     for (const item of results) {
       if (accessibleEventIds.has(item.eventId)) {
-        if (item.latitude !== null && item.longitude !== null) {
+        const lat = Number(item.latitude);
+        const lng = Number(item.longitude);
+        if (item.latitude !== null && item.longitude !== null && !isNaN(lat) && !isNaN(lng)) {
           accessibleMedia.push({
             id: item.id,
             filename: item.filename,
             mimeType: item.mimeType,
             thumbnailS3Key: item.thumbnailS3Key,
             s3Key: item.s3Key,
-            lat: item.latitude,
-            lng: item.longitude,
+            lat: lat,
+            lng: lng,
             uploadedAt: item.uploadedAt,
             event: {
               id: item.eventId,
@@ -113,6 +115,10 @@ export async function getMapData(eventSlug?: string | null) {
     const accessibleEvents = [];
     for (const event of eventsWithLocation) {
       if (accessibleLocationEventIds.has(event.id)) {
+        const lat = Number(event.latitude);
+        const lng = Number(event.longitude);
+        if (isNaN(lat) || isNaN(lng)) continue;
+        
         const eventPhotos = await db
           .select({
             id: media.id,
@@ -131,8 +137,8 @@ export async function getMapData(eventSlug?: string | null) {
           slug: event.slug,
           city: event.locationCity,
           country: event.locationCountry,
-          lat: event.latitude,
-          lng: event.longitude,
+          lat: lat,
+          lng: lng,
           photos: eventPhotos,
         });
       }
