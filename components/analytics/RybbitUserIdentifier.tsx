@@ -20,10 +20,11 @@ declare global {
 
 function getUserTraits(user: SessionUser): RybbitProperties {
   return {
-    username: user.handle ?? user.name,
+    username: user.handle ?? user.slackId ?? user.name,
     name: user.name,
     email: user.email,
     handle: user.handle ?? null,
+    user_id: user.slackId ?? null,
     hackclub_id: user.hackclubId,
     slack_id: user.slackId ?? null,
     is_global_admin: user.isGlobalAdmin,
@@ -44,7 +45,10 @@ function withRybbit(callback: (rybbit: RybbitApi) => void, attempts = 20) {
 
 export function identifyRybbitUser(user: SessionUser) {
   withRybbit((rybbit) => {
-    rybbit.identify?.(user.id, getUserTraits(user));
+    rybbit.identify?.(
+      user.slackId ?? user.handle ?? user.id,
+      getUserTraits(user),
+    );
   });
 }
 
@@ -85,14 +89,17 @@ export default function RybbitUserIdentifier({
     clearedRef.current = false;
     identifyRybbitUser(user);
 
-    if (identifiedUserIdRef.current !== user.id) {
+    const analyticsUserId = user.slackId ?? user.handle ?? user.id;
+    if (identifiedUserIdRef.current !== analyticsUserId) {
       trackRybbitEvent("user_session_identified", {
-        user_id: user.id,
+        user_id: user.slackId ?? null,
         handle: user.handle ?? null,
         slack_id: user.slackId ?? null,
+        name: user.name,
+        email: user.email,
         has_admin_access: user.hasAdminAccess ?? false,
       });
-      identifiedUserIdRef.current = user.id;
+      identifiedUserIdRef.current = analyticsUserId;
     }
   }, [loading, user]);
 

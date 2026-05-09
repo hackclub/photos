@@ -36,9 +36,11 @@ export default function OnboardingPage() {
         if (data.user?.handle) {
           setAlreadyOnboarded(true);
           trackRybbitEvent("onboarding_already_completed", {
-            user_id: data.user.id,
+            user_id: data.user.slackId ?? null,
             handle: data.user.handle,
             slack_id: data.user.slackId ?? null,
+            name: data.user.name ?? null,
+            email: data.user.email ?? null,
           });
         } else if (!data.user && !data.onboardingUser) {
           router.push("/");
@@ -46,9 +48,11 @@ export default function OnboardingPage() {
           trackRybbitEvent("onboarding_started", {
             has_existing_user: Boolean(data.user),
             has_onboarding_user: Boolean(data.onboardingUser),
-            user_id: data.user?.id ?? null,
+            user_id: data.user?.slackId ?? data.onboardingUser?.slackId ?? null,
             slack_id:
               data.user?.slackId ?? data.onboardingUser?.slackId ?? null,
+            name: data.user?.name ?? data.onboardingUser?.name ?? null,
+            email: data.user?.email ?? data.onboardingUser?.email ?? null,
           });
         }
       });

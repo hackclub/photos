@@ -55,9 +55,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchUser]);
   const signOut = async () => {
     trackRybbitEvent("user_logout", {
-      user_id: user?.id ?? null,
+      user_id: user?.slackId ?? null,
       handle: user?.handle ?? null,
       slack_id: user?.slackId ?? null,
+      name: user?.name ?? null,
+      email: user?.email ?? null,
     });
     clearRybbitUser();
     await fetch("/api/auth/signout", { method: "POST" });
