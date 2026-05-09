@@ -124,6 +124,7 @@ export default function MediaGallery({
     selectedThumbnailUrl,
     fullSizeUrl,
     refreshFullSizeUrl,
+    prefetchFullSizeUrls,
     sortedMedia,
     eventMap,
     updateUrl,
@@ -188,6 +189,18 @@ export default function MediaGallery({
       const items = sortedMedia.filter((mediaItem) => idSet.has(mediaItem.id));
       void loadThumbnailUrls(items);
     }, 80);
+  };
+
+  const prefetchAdjacentMedia = (item: MediaItem) => {
+    const currentIndex = sortedMedia.findIndex((m) => m.id === item.id);
+    if (currentIndex === -1) return;
+    void prefetchFullSizeUrls(
+      [
+        sortedMedia[currentIndex - 1],
+        sortedMedia[currentIndex + 1],
+        sortedMedia[currentIndex + 2],
+      ].filter((mediaItem): mediaItem is MediaItem => Boolean(mediaItem)),
+    );
   };
   const handleDeleteConfirm = async () => {
     if (!mediaToDelete) return;
@@ -490,6 +503,7 @@ export default function MediaGallery({
                     } else {
                       setSelectedMedia(item);
                       updateUrl(item.id);
+                      prefetchAdjacentMedia(item);
                     }
                   }}
                   aria-label={`View ${item.filename}`}
@@ -629,6 +643,7 @@ export default function MediaGallery({
               const nextMedia = sortedMedia[currentIndex + 1];
               setSelectedMedia(nextMedia);
               updateUrl(nextMedia.id);
+              prefetchAdjacentMedia(nextMedia);
             }
           }}
           onPrevious={() => {
@@ -639,6 +654,7 @@ export default function MediaGallery({
               const prevMedia = sortedMedia[currentIndex - 1];
               setSelectedMedia(prevMedia);
               updateUrl(prevMedia.id);
+              prefetchAdjacentMedia(prevMedia);
             }
           }}
           hasNext={

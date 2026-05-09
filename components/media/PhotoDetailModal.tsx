@@ -210,6 +210,7 @@ export default function PhotoDetailModal({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [previousImageUrl, setPreviousImageUrl] = useState<string | null>(null);
   const [videoError, setVideoError] = useState(false);
   const [videoRetryCount, setVideoRetryCount] = useState(0);
 
@@ -353,6 +354,7 @@ export default function PhotoDetailModal({
 
   useEffect(() => {
     if (effectiveUrl) {
+      setPreviousImageUrl((current) => current ?? effectiveUrl);
       setImageLoaded(false);
       setImageError(false);
     }
@@ -1067,37 +1069,7 @@ export default function PhotoDetailModal({
         onKeyDown={(e) => e.stopPropagation()}
         role="presentation"
       >
-        <div className="relative flex min-h-0 flex-[1_1_auto] items-center justify-center overflow-hidden rounded-2xl bg-black shadow-2xl shadow-black/30 lg:h-full lg:flex-1">
-          {!imageLoaded &&
-            !imageError &&
-            effectiveUrl &&
-            media.mimeType.startsWith("image/") && (
-              <div className="absolute inset-0 z-10">
-                {thumbnailUrl && (
-                  <img
-                    src={thumbnailUrl}
-                    alt={media.filename}
-                    className="absolute inset-0 h-full w-full object-contain blur-md scale-110 opacity-60"
-                    aria-hidden="true"
-                  />
-                )}
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 gap-4">
-                  <LoadingSpinner size="xl" label="Loading image..." center />
-                  <div className="text-xs text-zinc-500 font-mono max-w-xs text-center space-y-1">
-                    <p>
-                      {media.mimeType === "image/heic" ||
-                      media.mimeType === "image/heif"
-                        ? "Converting HEIC on server..."
-                        : "Fetching image..."}
-                    </p>
-                    <p className="text-[10px] opacity-50 break-all">
-                      {effectiveUrl}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
+        <div className="relative flex min-h-[42dvh] flex-[1_1_auto] items-center justify-center overflow-hidden rounded-2xl bg-black shadow-2xl shadow-black/30 sm:min-h-[50dvh] lg:h-full lg:min-h-0 lg:flex-1">
           {media.mimeType.startsWith("image/") ? (
             imageError ? (
               <div className="flex flex-col items-center justify-center text-zinc-400 p-4 text-center max-w-md z-20">
@@ -1148,15 +1120,32 @@ export default function PhotoDetailModal({
                 </div>
               </div>
             ) : (
-              <div className="relative flex h-full min-h-[42dvh] w-full items-center justify-center sm:min-h-[50dvh] lg:min-h-0">
-                {effectiveUrl ? (
+              <div className="relative flex h-full w-full items-center justify-center">
+                {!effectiveUrl && thumbnailUrl && (
+                  <img
+                    src={thumbnailUrl}
+                    alt={media.filename}
+                    className="absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain opacity-65 blur-sm"
+                    aria-hidden="true"
+                  />
+                )}
+                {previousImageUrl && effectiveUrl !== previousImageUrl && (
+                  <img
+                    src={previousImageUrl}
+                    alt=""
+                    className="absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain opacity-35 transition-opacity duration-200"
+                    aria-hidden="true"
+                  />
+                )}
+                {effectiveUrl && (
                   <img
                     src={effectiveUrl}
                     alt={media.filename}
-                    className={`absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain transition-opacity duration-300 ${
+                    className={`absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain transition-opacity duration-500 ease-out ${
                       imageLoaded ? "opacity-100" : "opacity-0"
                     }`}
                     onLoad={() => {
+                      setPreviousImageUrl(effectiveUrl);
                       setImageLoaded(true);
                       setImageError(false);
                     }}
@@ -1176,13 +1165,14 @@ export default function PhotoDetailModal({
                       setImageError(true);
                     }}
                   />
-                ) : thumbnailUrl ? (
-                  <img
-                    src={thumbnailUrl}
-                    alt={media.filename}
-                    className="absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain opacity-60 blur-sm"
-                  />
-                ) : null}
+                )}
+                {!imageLoaded && !imageError && (
+                  <div className="absolute inset-x-0 bottom-4 z-10 flex justify-center pointer-events-none">
+                    <div className="rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-xs text-zinc-300 shadow-lg backdrop-blur-md">
+                      Loading photo...
+                    </div>
+                  </div>
+                )}
               </div>
             )
           ) : (

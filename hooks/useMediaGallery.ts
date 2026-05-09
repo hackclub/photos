@@ -22,6 +22,7 @@ export function useMediaGalleryData(
     string | null
   >(null);
   const [fullSizeUrl, setFullSizeUrl] = useState<string | null>(null);
+  const fullSizeUrlCacheRef = useRef<Record<string, string>>({});
   const fullSizeRequestSeqRef = useRef(0);
   const router = useRouter();
   const pathname = usePathname();
@@ -162,7 +163,7 @@ export function useMediaGalleryData(
         return;
       }
       const requestSeq = ++fullSizeRequestSeqRef.current;
-      setFullSizeUrl(null);
+      setFullSizeUrl(fullSizeUrlCacheRef.current[target.id] ?? null);
       try {
         const data = await getBulkMediaUrls(undefined, [target.id]);
         let url = data.urls?.[target.id] ?? null;
@@ -180,6 +181,7 @@ export function useMediaGalleryData(
           url = urlObj.toString();
         }
 
+        if (url) fullSizeUrlCacheRef.current[target.id] = url;
         setFullSizeUrl(url);
       } catch (error) {
         if (requestSeq !== fullSizeRequestSeqRef.current) return;
@@ -188,6 +190,22 @@ export function useMediaGalleryData(
     },
     [selectedMedia],
   );
+
+  const prefetchFullSizeUrls = useCallback(async (items: MediaItem[]) => {
+    const mediaIds = items
+      .filter((item) => !fullSizeUrlCacheRef.current[item.id])
+      .map((item) => item.id);
+    if (mediaIds.length === 0) return;
+
+    try {
+      const data = await getBulkMediaUrls(undefined, mediaIds);
+      Object.entries(data.urls ?? {}).forEach(([id, url]) => {
+        fullSizeUrlCacheRef.current[id] = url;
+      });
+    } catch (error) {
+      console.error("Failed to prefetch full-size images:", error);
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -223,6 +241,7 @@ export function useMediaGalleryData(
     fullSizeUrl,
     setFullSizeUrl,
     refreshFullSizeUrl,
+    prefetchFullSizeUrls,
     sortedMedia,
     eventMap,
     updateUrl,
