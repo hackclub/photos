@@ -1,5 +1,3 @@
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { eq } from "drizzle-orm";
 import {
   HiCalendar,
@@ -14,7 +12,7 @@ import {
 } from "react-icons/hi2";
 import { db } from "@/lib/db";
 import { events, series, tags, users } from "@/lib/db/schema";
-import { s3Client } from "@/lib/media/s3";
+import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 import { generateOgImage } from "@/lib/og";
 import { getSlackAvatarUrl, getUserDisplayName } from "@/lib/user-display";
 export async function GET(request: Request) {
@@ -36,11 +34,10 @@ export async function GET(request: Request) {
       if (!event) return errorImage("Event not found");
       let bannerUrl: string | undefined;
       if (event.bannerS3Key) {
-        const command = new GetObjectCommand({
-          Bucket: process.env.S3_BUCKET_NAME!,
-          Key: event.bannerS3Key,
-        });
-        bannerUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+        bannerUrl = absoluteUrl(
+          request,
+          getAssetProxyUrl("event-banner", event.id),
+        );
       }
       return generateOgImage({
         title: event.name,
@@ -57,11 +54,10 @@ export async function GET(request: Request) {
       if (!seriesData) return errorImage("Series not found");
       let bannerUrl: string | undefined;
       if (seriesData.bannerS3Key) {
-        const command = new GetObjectCommand({
-          Bucket: process.env.S3_BUCKET_NAME!,
-          Key: seriesData.bannerS3Key,
-        });
-        bannerUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+        bannerUrl = absoluteUrl(
+          request,
+          getAssetProxyUrl("series-banner", seriesData.id),
+        );
       }
       return generateOgImage({
         title: seriesData.name,
@@ -125,11 +121,10 @@ export async function GET(request: Request) {
       let previewUrl: string | undefined;
       const mediaItem = tag.media[0];
       if (mediaItem?.media.thumbnailS3Key) {
-        const command = new GetObjectCommand({
-          Bucket: process.env.S3_BUCKET_NAME!,
-          Key: mediaItem.media.thumbnailS3Key,
-        });
-        previewUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+        previewUrl = absoluteUrl(
+          request,
+          getMediaProxyUrl(mediaItem.media.id, "thumbnail"),
+        );
       }
       return generateOgImage({
         title: `#${tag.name}`,
@@ -176,6 +171,9 @@ export async function GET(request: Request) {
     console.error(e);
     return errorImage("Failed to generate image");
   }
+}
+function absoluteUrl(request: Request, path: string) {
+  return new URL(path, request.url).toString();
 }
 function errorImage(message: string) {
   return generateOgImage({

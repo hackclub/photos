@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import {
@@ -11,6 +12,8 @@ import {
 } from "react-icons/hi2";
 import { getSharedMedia } from "@/app/actions/sharing";
 import SharedPageMapWrapper from "@/components/map/SharedPageMapWrapper";
+import { APP_URL } from "@/lib/constants";
+import { db } from "@/lib/db";
 import {
   type ExifData,
   formatAperture,
@@ -18,6 +21,87 @@ import {
   formatFocalLength,
   formatISO,
 } from "@/lib/media/exif";
+
+async function getSharedMediaForOg(token: string) {
+  return await db.query.shareLinks.findFirst({
+    where: (links, { and, eq }) =>
+      and(eq(links.token, token), eq(links.isRevoked, false)),
+    with: {
+      media: {
+        with: {
+          uploadedBy: {
+            columns: {
+              preferredName: true,
+              handle: true,
+            },
+          },
+          event: true,
+        },
+      },
+      createdBy: {
+        columns: {
+          preferredName: true,
+          handle: true,
+        },
+      },
+    },
+  });
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{
+    token: string;
+  }>;
+}): Promise<Metadata> {
+  const { token } = await params;
+  const link = await getSharedMediaForOg(token);
+  if (!link?.media) {
+    return {
+      title: "Shared Photo Not Found",
+    };
+  }
+
+  const { media } = link;
+  const title = media.caption || media.filename;
+  const sharerName =
+    link.createdBy.preferredName || link.createdBy.handle || "someone";
+  const description = media.event
+    ? `Shared from ${media.event.name} on Hack Club Photos`
+    : `Shared by ${sharerName} on Hack Club Photos`;
+  const rawPath = `/share/${token}/raw`;
+  const imagePath =
+    media.mimeType === "image/heic" || media.mimeType === "image/heif"
+      ? `${rawPath}?variant=display`
+      : rawPath;
+  const imageUrl = new URL(imagePath, APP_URL).toString();
+  const pageUrl = new URL(`/share/${token}`, APP_URL).toString();
+
+  return {
+    title: `${title} | Hack Club Photos`,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "article",
+      url: pageUrl,
+      images: [
+        {
+          url: imageUrl,
+          alt: title,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [imageUrl],
+    },
+  };
+}
+
 export default async function SharedMediaPage({
   params,
 }: {
