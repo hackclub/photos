@@ -105,7 +105,7 @@ export default function MediaGallery({
       if (!result.success || !result.url) {
         throw new Error(result.error || "Failed to get download URL");
       }
-      const downloadUrl = new URL(result.url);
+      const downloadUrl = new URL(result.url, window.location.origin);
       downloadUrl.searchParams.set("variant", "original");
       const a = document.createElement("a");
       a.href = downloadUrl.toString();

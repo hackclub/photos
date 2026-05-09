@@ -219,7 +219,7 @@ export default function PhotoDetailModal({
     if (!displayUrl) return null;
     if (retryCount === 0) return displayUrl;
     try {
-      const url = new URL(displayUrl);
+      const url = new URL(displayUrl, window.location.origin);
       url.searchParams.set("t", Date.now().toString());
       return url.toString();
     } catch (_e) {
