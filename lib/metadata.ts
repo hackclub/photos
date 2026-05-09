@@ -12,6 +12,8 @@ export function createOgMetadata({
   imagePath,
   imageAlt,
   type = "website",
+  imageWidth = 1200,
+  imageHeight = 630,
 }: {
   title: string;
   description: string;
@@ -19,6 +21,8 @@ export function createOgMetadata({
   imagePath: string;
   imageAlt?: string;
   type?: "website" | "article" | "profile";
+  imageWidth?: number;
+  imageHeight?: number;
 }): Metadata {
   const url = absoluteAppUrl(path);
   const imageUrl = absoluteAppUrl(imagePath);
@@ -34,8 +38,8 @@ export function createOgMetadata({
       images: [
         {
           url: imageUrl,
-          width: 1200,
-          height: 630,
+          width: imageWidth,
+          height: imageHeight,
           alt: imageAlt ?? title,
         },
       ],

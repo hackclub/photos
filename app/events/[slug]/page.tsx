@@ -19,6 +19,7 @@ import ParticipantsList from "@/components/events/ParticipantsList";
 import MediaGallery from "@/components/media/MediaGallery";
 import UploadButton from "@/components/media/UploadButton";
 import { getSession } from "@/lib/auth";
+import { APP_URL } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { eventParticipants, events, media } from "@/lib/db/schema";
 import { getAssetProxyUrl } from "@/lib/media/s3";
@@ -62,7 +63,7 @@ export async function generateMetadata({
         title: `${photoMedia.caption || photoMedia.filename} | ${event.name}`,
         description,
         path: `/events/${slug}?photo=${photo}`,
-        imagePath,
+        imagePath: new URL(imagePath, APP_URL).toString(),
         imageAlt: photoMedia.caption || photoMedia.filename,
       });
     }
@@ -71,7 +72,10 @@ export async function generateMetadata({
     title,
     description,
     path: `/events/${slug}`,
-    imagePath: `/api/og?type=event&id=${encodeURIComponent(slug)}`,
+    imagePath: new URL(
+      `/api/og?type=event&id=${encodeURIComponent(slug)}`,
+      APP_URL,
+    ).toString(),
     imageAlt: event.name,
   });
 }

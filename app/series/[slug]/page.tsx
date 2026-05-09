@@ -1,6 +1,7 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
+import { APP_URL } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { media, series } from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
@@ -50,7 +51,7 @@ export async function generateMetadata({
         title: `${photoMedia.caption || photoMedia.filename} | ${seriesData.name}`,
         description,
         path: `/series/${slug}?photo=${photo}`,
-        imagePath,
+        imagePath: new URL(imagePath, APP_URL).toString(),
         imageAlt: photoMedia.caption || photoMedia.filename,
       });
     }
@@ -59,7 +60,10 @@ export async function generateMetadata({
     title,
     description,
     path: `/series/${slug}`,
-    imagePath: `/api/og?type=series&id=${encodeURIComponent(slug)}`,
+    imagePath: new URL(
+      `/api/og?type=series&id=${encodeURIComponent(slug)}`,
+      APP_URL,
+    ).toString(),
     imageAlt: seriesData.name,
   });
 }

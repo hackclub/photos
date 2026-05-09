@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { HiExclamationCircle } from "react-icons/hi2";
 import { getSession } from "@/lib/auth";
+import { APP_URL } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { media, users } from "@/lib/db/schema";
 import { createOgMetadata } from "@/lib/metadata";
@@ -50,7 +51,7 @@ export async function generateMetadata({
         title: `${photoMedia.caption || photoMedia.filename} | ${displayName}`,
         description,
         path: `/users/${username}?photo=${photo}`,
-        imagePath,
+        imagePath: new URL(imagePath, APP_URL).toString(),
         imageAlt: photoMedia.caption || photoMedia.filename,
       });
     }
@@ -59,7 +60,10 @@ export async function generateMetadata({
     title,
     description,
     path: `/users/${username}`,
-    imagePath: `/api/og?type=user&id=${encodeURIComponent(username)}`,
+    imagePath: new URL(
+      `/api/og?type=user&id=${encodeURIComponent(username)}`,
+      APP_URL,
+    ).toString(),
     imageAlt: displayName,
     type: "profile",
   });
