@@ -7,7 +7,7 @@ export const metadata: Metadata = createOgMetadata({
   title: "Search | Hack Club Photos",
   description: "Search for photos and videos",
   path: "/search",
-  imagePath: "/api/og?type=search",
+  imagePath: new URL("/api/og?type=search", APP_URL).toString(),
   imageAlt: "Search Hack Club Photos",
 });
 interface Props {
