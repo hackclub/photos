@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { finalizeUpload, getPresignedUrl } from "@/app/actions/upload";
+import { trackRybbitEvent } from "@/components/analytics/RybbitUserIdentifier";
 import {
   extractMetadata,
   generateThumbnail,
@@ -58,6 +59,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   const lastTimeRef = useRef<number>(Date.now());
   const smoothedSpeedRef = useRef<number>(0);
   const filesRef = useRef(files);
+  const activeBatchIdRef = useRef<string | null>(null);
   useEffect(() => {
     filesRef.current = files;
   }, [files]);
@@ -90,6 +92,32 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           : `${count} files rejected: ${rejectedFiles.slice(0, 3).join(", ")}${count > 3 ? ` and ${count - 3} more` : ""}`;
       setError(message);
     }
+    if (validFiles.length > 0) {
+      const totalBytes = validFiles.reduce((sum, file) => sum + file.size, 0);
+      const imageCount = validFiles.filter((file) =>
+        file.type.startsWith("image/"),
+      ).length;
+      const videoCount = validFiles.filter((file) =>
+        file.type.startsWith("video/"),
+      ).length;
+      const batchId = crypto.randomUUID?.() ?? Math.random().toString(36);
+      activeBatchIdRef.current = batchId;
+      trackRybbitEvent("upload_added", {
+        batch_id: batchId,
+        event_id: eventId,
+        file_count: validFiles.length,
+        rejected_count: rejectedFiles.length,
+        image_count: imageCount,
+        video_count: videoCount,
+        total_bytes: totalBytes,
+      });
+    } else if (rejectedFiles.length > 0) {
+      trackRybbitEvent("upload_rejected", {
+        event_id: eventId,
+        rejected_count: rejectedFiles.length,
+        attempted_count: newFiles.length,
+      });
+    }
     const uploadFiles: UploadFile[] = validFiles.map((file) => ({
       id: Math.random().toString(36).substring(7),
       file,
@@ -113,6 +141,13 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
   const cancelUpload = useCallback(() => {
+    trackRybbitEvent("upload_cancelled", {
+      batch_id: activeBatchIdRef.current,
+      total_count: filesRef.current.length,
+      active_count: filesRef.current.filter(
+        (f) => f.status === "uploading" || f.status === "pending",
+      ).length,
+    });
     setIsUploading(false);
     setFiles((prev) => {
       prev.forEach((f) => {
@@ -352,6 +387,15 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     const activeFiles = [...uploadingFiles, ...processingFiles];
     if (pendingFiles.length === 0) {
       if (activeFiles.length === 0) {
+        const successCount = files.filter((f) => f.status === "success").length;
+        const errorCount = files.filter((f) => f.status === "error").length;
+        trackRybbitEvent("upload_finished", {
+          batch_id: activeBatchIdRef.current,
+          total_count: files.length,
+          success_count: successCount,
+          error_count: errorCount,
+        });
+        activeBatchIdRef.current = null;
         setIsUploading(false);
         router.refresh();
       }

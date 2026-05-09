@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { HiWrenchScrewdriver } from "react-icons/hi2";
 import "./globals.css";
+import RybbitScript from "@/components/analytics/RybbitScript";
 import ComingSoon from "@/components/ComingSoon";
 import { comingSoon, maintenanceMode } from "@/flags";
 import { APP_URL } from "@/lib/constants";
@@ -64,6 +65,7 @@ export default async function RootLayout({
         <Suspense fallback={null}>
           <ClientLayout>{children}</ClientLayout>
         </Suspense>
+        <RybbitScript />
       </body>
     </html>
   );

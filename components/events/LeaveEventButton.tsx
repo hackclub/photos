@@ -7,6 +7,7 @@ import {
   HiXMark,
 } from "react-icons/hi2";
 import { leaveEvent } from "@/app/actions/events";
+import { trackRybbitEvent } from "@/components/analytics/RybbitUserIdentifier";
 
 interface LeaveEventButtonProps {
   eventId: string;
@@ -21,17 +22,35 @@ export default function LeaveEventButton({
   const router = useRouter();
   const handleLeave = async () => {
     setIsLeaving(true);
+    trackRybbitEvent("event_leave_started", {
+      event_id: eventId,
+      photo_count: photoCount,
+    });
     try {
       const result = await leaveEvent(eventId);
       if (result.success) {
+        trackRybbitEvent("event_left", {
+          event_id: eventId,
+          photo_count: photoCount,
+        });
         router.push("/events");
         router.refresh();
       } else {
+        trackRybbitEvent("event_leave_failed", {
+          event_id: eventId,
+          photo_count: photoCount,
+          error: result.error || "unknown",
+        });
         alert(result.error || "Failed to leave event");
         setIsLeaving(false);
       }
     } catch (error) {
       console.error("Error leaving event:", error);
+      trackRybbitEvent("event_leave_failed", {
+        event_id: eventId,
+        photo_count: photoCount,
+        error: "client_exception",
+      });
       alert("Failed to leave event");
       setIsLeaving(false);
     }
@@ -40,7 +59,13 @@ export default function LeaveEventButton({
     <>
       <button
         type="button"
-        onClick={() => setShowDialog(true)}
+        onClick={() => {
+          trackRybbitEvent("event_leave_dialog_opened", {
+            event_id: eventId,
+            photo_count: photoCount,
+          });
+          setShowDialog(true);
+        }}
         className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-all border border-zinc-700"
       >
         <HiArrowRightOnRectangle className="w-5 h-5" />
@@ -64,7 +89,13 @@ export default function LeaveEventButton({
               </div>
               <button
                 type="button"
-                onClick={() => setShowDialog(false)}
+                onClick={() => {
+                  trackRybbitEvent("event_leave_dialog_closed", {
+                    event_id: eventId,
+                    photo_count: photoCount,
+                  });
+                  setShowDialog(false);
+                }}
                 className="text-zinc-500 hover:text-zinc-300 transition-colors"
                 disabled={isLeaving}
               >
@@ -88,7 +119,13 @@ export default function LeaveEventButton({
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setShowDialog(false)}
+                onClick={() => {
+                  trackRybbitEvent("event_leave_cancelled", {
+                    event_id: eventId,
+                    photo_count: photoCount,
+                  });
+                  setShowDialog(false);
+                }}
                 disabled={isLeaving}
                 className="flex-1 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-all border border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >

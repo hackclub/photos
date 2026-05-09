@@ -56,6 +56,21 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "100mb",
     },
   },
+  async rewrites() {
+    const rybbitHost =
+      process.env.NEXT_PUBLIC_RYBBIT_HOST || "https://logging.deployor.dev";
+
+    return [
+      {
+        source: "/api/script.js",
+        destination: `${rybbitHost}/api/script.js`,
+      },
+      {
+        source: "/api/track",
+        destination: `${rybbitHost}/api/track`,
+      },
+    ];
+  },
   async headers() {
     return [
       {

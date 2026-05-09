@@ -6,6 +6,10 @@ import {
   useEffect,
   useState,
 } from "react";
+import RybbitUserIdentifier, {
+  clearRybbitUser,
+  trackRybbitEvent,
+} from "@/components/analytics/RybbitUserIdentifier";
 import type { SessionUser } from "@/lib/auth";
 
 interface AuthContextType {
@@ -50,6 +54,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fetchUser();
   }, [fetchUser]);
   const signOut = async () => {
+    trackRybbitEvent("user_logout", {
+      user_id: user?.id ?? null,
+      handle: user?.handle ?? null,
+      slack_id: user?.slackId ?? null,
+    });
+    clearRybbitUser();
     await fetch("/api/auth/signout", { method: "POST" });
     setUser(null);
     window.location.href = "/";
@@ -58,6 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{ user, loading, refreshUser: fetchUser, signOut }}
     >
+      <RybbitUserIdentifier user={user} loading={loading} />
       {children}
     </AuthContext.Provider>
   );

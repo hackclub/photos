@@ -12,6 +12,7 @@ import {
   HiUserGroup,
 } from "react-icons/hi2";
 import { useDebounce } from "use-debounce";
+import { trackRybbitEvent } from "@/components/analytics/RybbitUserIdentifier";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
 export default function OnboardingPage() {
@@ -34,11 +35,30 @@ export default function OnboardingPage() {
       .then((data) => {
         if (data.user?.handle) {
           setAlreadyOnboarded(true);
+          trackRybbitEvent("onboarding_already_completed", {
+            user_id: data.user.id,
+            handle: data.user.handle,
+            slack_id: data.user.slackId ?? null,
+          });
         } else if (!data.user && !data.onboardingUser) {
           router.push("/");
+        } else {
+          trackRybbitEvent("onboarding_started", {
+            has_existing_user: Boolean(data.user),
+            has_onboarding_user: Boolean(data.onboardingUser),
+            user_id: data.user?.id ?? null,
+            slack_id:
+              data.user?.slackId ?? data.onboardingUser?.slackId ?? null,
+          });
         }
       });
   }, [router]);
+
+  useEffect(() => {
+    trackRybbitEvent("onboarding_step_viewed", {
+      step,
+    });
+  }, [step]);
 
   useEffect(() => {
     if (debouncedHandle.length < 3) {
@@ -86,10 +106,20 @@ export default function OnboardingPage() {
         setLoading(false);
       }
     }
+    trackRybbitEvent("onboarding_next_clicked", {
+      from_step: step,
+      handle_length: handle.length,
+      handle_available: isHandleAvailable ?? null,
+    });
     setStep((current) => current + 1);
   };
 
-  const handleBack = () => setStep((current) => current - 1);
+  const handleBack = () => {
+    trackRybbitEvent("onboarding_back_clicked", {
+      from_step: step,
+    });
+    setStep((current) => current - 1);
+  };
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -97,11 +127,22 @@ export default function OnboardingPage() {
       const { completeOnboarding } = await import("@/app/actions/onboarding");
       const result = await completeOnboarding({ handle });
       if (!result.success) {
+        trackRybbitEvent("onboarding_failed", {
+          handle_length: handle.length,
+          error: result.error || "unknown",
+        });
         setError(result.error || "Failed to complete onboarding");
         return;
       }
+      trackRybbitEvent("onboarding_completed", {
+        handle_length: handle.length,
+      });
       window.location.href = "/";
     } catch (_err) {
+      trackRybbitEvent("onboarding_failed", {
+        handle_length: handle.length,
+        error: "client_exception",
+      });
       setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
