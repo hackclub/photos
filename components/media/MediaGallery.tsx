@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   HiArrowDownTray,
   HiArrowPath,
@@ -20,6 +20,65 @@ import ServerActionModal from "../ui/ServerActionModal";
 import MediaGalleryToolbar from "./MediaGalleryToolbar";
 import PhotoDetailModal from "./PhotoDetailModal";
 import VideoIndicator from "./VideoIndicator";
+
+const INITIAL_VISIBLE_ITEMS = 60;
+const VISIBLE_ITEMS_INCREMENT = 60;
+const THUMBNAIL_BATCH_SIZE = 24;
+
+function LazyGalleryImage({
+  src,
+  alt,
+  onVisible,
+}: {
+  src?: string;
+  alt: string;
+  onVisible: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        setIsVisible(true);
+        onVisible();
+        observer.disconnect();
+      },
+      { rootMargin: "900px 0px" },
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [onVisible]);
+
+  return (
+    <div ref={ref} className="relative h-full w-full bg-zinc-800">
+      {(!isVisible || !src || !isLoaded) && (
+        <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
+          <HiPhoto className="w-12 h-12 text-zinc-600 animate-pulse" />
+        </div>
+      )}
+      {isVisible && src && (
+        <img
+          src={src}
+          alt={alt}
+          decoding="async"
+          loading="eager"
+          key={src}
+          className={`h-full w-full object-cover transition-opacity duration-700 ease-out ${
+            isLoaded ? "opacity-100" : "opacity-0"
+          }`}
+          onLoad={() => setIsLoaded(true)}
+        />
+      )}
+    </div>
+  );
+}
 
 interface MediaGalleryProps {
   media: MediaItem[];
@@ -59,6 +118,7 @@ export default function MediaGallery({
     setDateOrder,
     setRandomSeed,
     presignedUrls,
+    loadThumbnailUrls,
     selectedMedia,
     setSelectedMedia,
     selectedThumbnailUrl,
@@ -81,7 +141,54 @@ export default function MediaGallery({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [mediaToDelete, setMediaToDelete] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_ITEMS);
+  const [_isPending, startTransition] = useTransition();
   const abortControllerRef = useRef<AbortController | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const queuedThumbnailIdsRef = useRef<Set<string>>(new Set());
+  const thumbnailFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  useEffect(() => {
+    const element = loadMoreRef.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        startTransition(() => {
+          setVisibleCount((count) =>
+            Math.min(count + VISIBLE_ITEMS_INCREMENT, sortedMedia.length),
+          );
+        });
+      },
+      { rootMargin: "1200px 0px" },
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [sortedMedia.length]);
+
+  const queueThumbnailLoad = (item: MediaItem) => {
+    if (!item.thumbnailS3Key || presignedUrls[item.id]) return;
+    queuedThumbnailIdsRef.current.add(item.id);
+    if (thumbnailFlushTimerRef.current) return;
+
+    thumbnailFlushTimerRef.current = setTimeout(() => {
+      thumbnailFlushTimerRef.current = null;
+      const ids = Array.from(queuedThumbnailIdsRef.current).slice(
+        0,
+        THUMBNAIL_BATCH_SIZE,
+      );
+      ids.forEach((id) => {
+        queuedThumbnailIdsRef.current.delete(id);
+      });
+      const idSet = new Set(ids);
+      const items = sortedMedia.filter((mediaItem) => idSet.has(mediaItem.id));
+      void loadThumbnailUrls(items);
+    }, 80);
+  };
   const handleDeleteConfirm = async () => {
     if (!mediaToDelete) return;
     try {
@@ -361,116 +468,121 @@ export default function MediaGallery({
       )}
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4 xl:grid-cols-5">
-        {sortedMedia.map((item) => {
-          const url = presignedUrls[item.id];
-          const isSelected = selectedItems.has(item.id);
-          const isVideo = item.mimeType.startsWith("video/");
-          const event =
-            item.event || (item.eventId ? eventMap.get(item.eventId) : null);
-          return (
-            <div
-              key={item.id}
-              className="group relative aspect-square overflow-hidden rounded-xl border border-zinc-800 bg-zinc-800 transition-all duration-300 hover:border-zinc-700 hover:shadow-xl md:hover:scale-[1.02]"
-            >
-              <button
-                type="button"
-                className="h-full w-full touch-manipulation focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
-                onClick={() => {
-                  if (selectionMode) {
-                    toggleSelection(item.id);
-                  } else {
-                    setSelectedMedia(item);
-                    updateUrl(item.id);
-                  }
-                }}
-                aria-label={`View ${item.filename}`}
+        {sortedMedia
+          .slice(0, Math.min(visibleCount, sortedMedia.length))
+          .map((item) => {
+            const url = presignedUrls[item.id];
+            const isSelected = selectedItems.has(item.id);
+            const isVideo = item.mimeType.startsWith("video/");
+            const event =
+              item.event || (item.eventId ? eventMap.get(item.eventId) : null);
+            return (
+              <div
+                key={item.id}
+                className="group relative aspect-square overflow-hidden rounded-xl border border-zinc-800 bg-zinc-800 transition-all duration-300 hover:border-zinc-700 hover:shadow-xl md:hover:scale-[1.02]"
               >
-                {!url ? (
-                  <div className="flex h-full w-full items-center justify-center bg-zinc-800">
-                    <HiPhoto className="w-12 h-12 text-zinc-600 animate-pulse" />
-                  </div>
-                ) : (
-                  <img
+                <button
+                  type="button"
+                  className="h-full w-full touch-manipulation focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
+                  onClick={() => {
+                    if (selectionMode) {
+                      toggleSelection(item.id);
+                    } else {
+                      setSelectedMedia(item);
+                      updateUrl(item.id);
+                    }
+                  }}
+                  aria-label={`View ${item.filename}`}
+                >
+                  <LazyGalleryImage
                     src={url}
                     alt={item.filename}
-                    className="h-full w-full object-cover"
+                    onVisible={() => queueThumbnailLoad(item)}
                   />
-                )}
 
-                {isVideo && url && <VideoIndicator size="lg" />}
+                  {isVideo && url && <VideoIndicator size="lg" />}
 
-                {sortBy === "date" && (
-                  <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-lg bg-black/70 px-2 py-1 text-xs text-white backdrop-blur-sm">
-                    <HiClock className="w-3 h-3" />
-                    <span>
-                      {new Date(
-                        (
-                          item.exifData as {
-                            DateTimeOriginal?: string;
-                            dateTimeOriginal?: string;
-                          }
-                        )?.DateTimeOriginal ||
+                  {sortBy === "date" && (
+                    <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-lg bg-black/70 px-2 py-1 text-xs text-white backdrop-blur-sm">
+                      <HiClock className="w-3 h-3" />
+                      <span>
+                        {new Date(
                           (
                             item.exifData as {
                               DateTimeOriginal?: string;
                               dateTimeOriginal?: string;
                             }
-                          )?.dateTimeOriginal ||
-                          item.uploadedAt,
-                      ).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "2-digit",
-                        day: "2-digit",
-                      })}
-                    </span>
-                  </div>
-                )}
-                {sortBy === "event" && event && (
-                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 backdrop-blur-sm rounded-lg text-xs text-white flex items-center gap-1">
-                    <HiCalendar className="w-3 h-3" />
-                    <span className="truncate">{event.name}</span>
-                  </div>
-                )}
-                {sortBy === "uploader" && (
-                  <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-lg bg-black/70 px-2 py-1 text-xs text-white backdrop-blur-sm">
-                    <HiUser className="w-3 h-3" />
-                    <span className="truncate">
-                      {item.uploadedBy?.name || "Unknown"}
-                    </span>
-                  </div>
-                )}
-                {sortBy === "likes" && (
-                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 backdrop-blur-sm rounded-lg text-xs text-white flex items-center gap-1">
-                    <HiHeart className="w-3 h-3" />
-                    <span>{item.likeCount || 0}</span>
-                  </div>
-                )}
-              </button>
+                          )?.DateTimeOriginal ||
+                            (
+                              item.exifData as {
+                                DateTimeOriginal?: string;
+                                dateTimeOriginal?: string;
+                              }
+                            )?.dateTimeOriginal ||
+                            item.uploadedAt,
+                        ).toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "2-digit",
+                          day: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                  )}
+                  {sortBy === "event" && event && (
+                    <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 backdrop-blur-sm rounded-lg text-xs text-white flex items-center gap-1">
+                      <HiCalendar className="w-3 h-3" />
+                      <span className="truncate">{event.name}</span>
+                    </div>
+                  )}
+                  {sortBy === "uploader" && (
+                    <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-lg bg-black/70 px-2 py-1 text-xs text-white backdrop-blur-sm">
+                      <HiUser className="w-3 h-3" />
+                      <span className="truncate">
+                        {item.uploadedBy?.name || "Unknown"}
+                      </span>
+                    </div>
+                  )}
+                  {sortBy === "likes" && (
+                    <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 backdrop-blur-sm rounded-lg text-xs text-white flex items-center gap-1">
+                      <HiHeart className="w-3 h-3" />
+                      <span>{item.likeCount || 0}</span>
+                    </div>
+                  )}
+                </button>
 
-              {selectionMode && (
-                <div className="absolute top-2 left-2 z-10">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleSelection(item.id);
-                    }}
-                    className={`w-8 h-8 rounded-lg backdrop-blur-sm border-2 flex items-center justify-center transition-all hover:bg-zinc-800 ${
-                      isSelected
-                        ? "bg-red-600 border-red-600"
-                        : "bg-zinc-900/80 border-white"
-                    }`}
-                  >
-                    {isSelected && <HiCheck className="w-5 h-5 text-white" />}
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
+                {selectionMode && (
+                  <div className="absolute top-2 left-2 z-10">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSelection(item.id);
+                      }}
+                      className={`w-8 h-8 rounded-lg backdrop-blur-sm border-2 flex items-center justify-center transition-all hover:bg-zinc-800 ${
+                        isSelected
+                          ? "bg-red-600 border-red-600"
+                          : "bg-zinc-900/80 border-white"
+                      }`}
+                    >
+                      {isSelected && <HiCheck className="w-5 h-5 text-white" />}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
       </div>
 
-      {selectedMedia && fullSizeUrl && (
+      {visibleCount < sortedMedia.length && (
+        <div
+          ref={loadMoreRef}
+          className="flex h-24 items-center justify-center text-sm text-zinc-500"
+        >
+          Loading more photos...
+        </div>
+      )}
+
+      {selectedMedia && (
         <PhotoDetailModal
           media={selectedMedia}
           fullSizeUrl={fullSizeUrl}

@@ -546,7 +546,7 @@ export default function SearchGallery({
         })}
       </div>
 
-      {selectedMedia && fullSizeUrl && (
+      {selectedMedia && (
         <PhotoDetailModal
           media={selectedMedia}
           fullSizeUrl={fullSizeUrl}

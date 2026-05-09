@@ -175,7 +175,7 @@ interface MentionedUser {
 }
 interface Props {
   media: MediaItem;
-  fullSizeUrl: string;
+  fullSizeUrl: string | null;
   thumbnailUrl?: string | null;
   event?: Event;
   currentUserId?: string;
@@ -214,7 +214,7 @@ export default function PhotoDetailModal({
   const [videoRetryCount, setVideoRetryCount] = useState(0);
 
   const MAX_IMAGE_AUTO_RETRIES = 2;
-  const { displayUrl } = useHeicUrl(fullSizeUrl, media.filename);
+  const { displayUrl } = useHeicUrl(fullSizeUrl ?? "", media.filename);
   const effectiveUrl = useMemo(() => {
     if (!displayUrl) return null;
     if (retryCount === 0) return displayUrl;
@@ -1070,6 +1070,7 @@ export default function PhotoDetailModal({
         <div className="relative flex min-h-0 flex-[1_1_auto] items-center justify-center overflow-hidden rounded-2xl bg-black shadow-2xl shadow-black/30 lg:h-full lg:flex-1">
           {!imageLoaded &&
             !imageError &&
+            effectiveUrl &&
             media.mimeType.startsWith("image/") && (
               <div className="absolute inset-0 z-10">
                 {thumbnailUrl && (
@@ -1136,7 +1137,7 @@ export default function PhotoDetailModal({
                     Retry
                   </button>
                   <a
-                    href={fullSizeUrl}
+                    href={fullSizeUrl ?? "#"}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition-colors flex items-center gap-2"
@@ -1148,7 +1149,7 @@ export default function PhotoDetailModal({
               </div>
             ) : (
               <div className="relative flex h-full min-h-[42dvh] w-full items-center justify-center sm:min-h-[50dvh] lg:min-h-0">
-                {effectiveUrl && (
+                {effectiveUrl ? (
                   <img
                     src={effectiveUrl}
                     alt={media.filename}
@@ -1175,7 +1176,13 @@ export default function PhotoDetailModal({
                       setImageError(true);
                     }}
                   />
-                )}
+                ) : thumbnailUrl ? (
+                  <img
+                    src={thumbnailUrl}
+                    alt={media.filename}
+                    className="absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain opacity-60 blur-sm"
+                  />
+                ) : null}
               </div>
             )
           ) : (
@@ -1201,7 +1208,7 @@ export default function PhotoDetailModal({
                       Retry
                     </button>
                     <a
-                      href={fullSizeUrl}
+                      href={fullSizeUrl ?? "#"}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition-colors flex items-center gap-2"
@@ -1212,19 +1219,23 @@ export default function PhotoDetailModal({
                   </div>
                 </div>
               )}
-              <video
-                key={`${media.id}:${videoRetryCount}`}
-                src={fullSizeUrl}
-                className="h-full max-h-full w-full max-w-full object-contain"
-                controls
-                autoPlay
-                playsInline
-                loop
-                muted
-                preload="auto"
-                onError={() => setVideoError(true)}
-                onCanPlay={() => setVideoError(false)}
-              />
+              {fullSizeUrl ? (
+                <video
+                  key={`${media.id}:${videoRetryCount}`}
+                  src={fullSizeUrl}
+                  className="h-full max-h-full w-full max-w-full object-contain"
+                  controls
+                  autoPlay
+                  playsInline
+                  loop
+                  muted
+                  preload="metadata"
+                  onError={() => setVideoError(true)}
+                  onCanPlay={() => setVideoError(false)}
+                />
+              ) : (
+                <LoadingSpinner size="xl" label="Loading video..." center />
+              )}
             </div>
           )}
         </div>

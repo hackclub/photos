@@ -1,5 +1,5 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getBulkMediaUrls } from "@/app/actions/bulk";
 import type { Event, MediaItem } from "@/types/media";
 export function useMediaGalleryData(
@@ -22,6 +22,7 @@ export function useMediaGalleryData(
     string | null
   >(null);
   const [fullSizeUrl, setFullSizeUrl] = useState<string | null>(null);
+  const fullSizeRequestSeqRef = useRef(0);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -100,38 +101,49 @@ export function useMediaGalleryData(
     }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
-  useEffect(() => {
-    const loadThumbnails = async () => {
-      if (localMedia.length === 0) {
-        setPresignedUrls({});
-        return;
-      }
-      const thumbnailKeys = localMedia
-        .filter((item) => item.thumbnailS3Key)
-        .map((item) => item.thumbnailS3Key!);
-      if (thumbnailKeys.length === 0) {
-        setPresignedUrls({});
-        return;
-      }
+  const loadThumbnailUrls = useCallback(
+    async (items: MediaItem[]) => {
+      const unloadedItems = items.filter(
+        (item) => item.thumbnailS3Key && !presignedUrls[item.id],
+      );
+      if (unloadedItems.length === 0) return;
+
       try {
-        const allUrls: Record<string, string> = {};
-        for (let i = 0; i < thumbnailKeys.length; i += 100) {
-          const batch = thumbnailKeys.slice(i, i + 100);
-          const data = await getBulkMediaUrls(batch);
-          Object.assign(allUrls, data.urls);
-        }
+        const data = await getBulkMediaUrls(
+          unloadedItems.map((item) => item.thumbnailS3Key!),
+        );
         const newUrls: Record<string, string> = {};
-        localMedia.forEach((item) => {
-          if (item.thumbnailS3Key && allUrls[item.thumbnailS3Key]) {
-            newUrls[item.id] = allUrls[item.thumbnailS3Key];
+        const urls = data.urls ?? {};
+        unloadedItems.forEach((item) => {
+          if (item.thumbnailS3Key && urls[item.thumbnailS3Key]) {
+            newUrls[item.id] = urls[item.thumbnailS3Key];
           }
         });
-        setPresignedUrls(newUrls);
+        if (Object.keys(newUrls).length > 0) {
+          setPresignedUrls((prev) => ({ ...prev, ...newUrls }));
+        }
       } catch (error) {
         console.error("Failed to load thumbnails:", error);
       }
-    };
-    loadThumbnails();
+    },
+    [presignedUrls],
+  );
+
+  useEffect(() => {
+    setPresignedUrls((prev) => {
+      if (localMedia.length === 0) return {};
+      const ids = new Set(localMedia.map((item) => item.id));
+      let changed = false;
+      const next: Record<string, string> = {};
+      Object.entries(prev).forEach(([id, url]) => {
+        if (ids.has(id)) {
+          next[id] = url;
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
   }, [localMedia]);
   useEffect(() => {
     if (!selectedMedia) {
@@ -149,9 +161,12 @@ export function useMediaGalleryData(
         setFullSizeUrl(null);
         return;
       }
+      const requestSeq = ++fullSizeRequestSeqRef.current;
+      setFullSizeUrl(null);
       try {
         const data = await getBulkMediaUrls(undefined, [target.id]);
         let url = data.urls?.[target.id] ?? null;
+        if (requestSeq !== fullSizeRequestSeqRef.current) return;
 
         if (
           url &&
@@ -167,6 +182,7 @@ export function useMediaGalleryData(
 
         setFullSizeUrl(url);
       } catch (error) {
+        if (requestSeq !== fullSizeRequestSeqRef.current) return;
         console.error("Failed to load full-size image:", error);
       }
     },
@@ -200,6 +216,7 @@ export function useMediaGalleryData(
     randomSeed,
     setRandomSeed,
     presignedUrls,
+    loadThumbnailUrls,
     selectedMedia,
     setSelectedMedia,
     selectedThumbnailUrl,

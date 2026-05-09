@@ -393,7 +393,7 @@ export default function ReportsList() {
         </div>
       )}
 
-      {selectedMedia && fullSizeUrl && (
+      {selectedMedia && (
         <PhotoDetailModal
           media={selectedMedia as any}
           fullSizeUrl={fullSizeUrl}

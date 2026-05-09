@@ -392,7 +392,7 @@ export default function ReportsClient() {
         </Table>
       </TableContainer>
 
-      {selectedMedia && fullSizeUrl && (
+      {selectedMedia && (
         <PhotoDetailModal
           media={selectedMedia as any}
           fullSizeUrl={fullSizeUrl}

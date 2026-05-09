@@ -382,7 +382,7 @@ export default function ActivityFeed({
         <HiArrowUp className="w-6 h-6" />
       </button>
 
-      {selectedMedia && fullSizeUrl && (
+      {selectedMedia && (
         <PhotoDetailModal
           media={{
             id: selectedMedia.id,
@@ -404,6 +404,7 @@ export default function ActivityFeed({
           currentUserId={currentUserId || undefined}
           onClose={() => setSelectedMedia(null)}
           onDownload={async () => {
+            if (!fullSizeUrl) return;
             try {
               const response = await fetch(fullSizeUrl);
               const blob = await response.blob();
