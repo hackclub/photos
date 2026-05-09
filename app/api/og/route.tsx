@@ -16,7 +16,7 @@ import { events, series, tags, users } from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 import { getSlackAvatarUrl, getUserDisplayName } from "@/lib/user-display";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 const OG_BASE_URL =
   process.env.NEXT_PUBLIC_APP_URL || "https://photos.hackclub.com";

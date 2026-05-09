@@ -1,1 +1,3 @@
-export { GET, runtime } from "../og/route";
+export const runtime = "nodejs";
+
+export { GET } from "../og/route";
