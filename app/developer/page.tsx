@@ -6,18 +6,15 @@ import {
   AdminPageHeader,
 } from "@/components/ui/AdminPageLayout";
 import { getSession } from "@/lib/auth";
+import { createOgMetadata } from "@/lib/metadata";
 import DeveloperDashboard from "./DeveloperClient";
-export const metadata: Metadata = {
+export const metadata: Metadata = createOgMetadata({
   title: "Developer Dashboard | Hack Club Photos",
   description: "Manage your API keys and test the Public API.",
-  openGraph: {
-    images: ["/api/og?type=developer"],
-  },
-  twitter: {
-    card: "summary_large_image",
-    images: ["/api/og?type=developer"],
-  },
-};
+  path: "/developer",
+  imagePath: "/api/og?type=developer",
+  imageAlt: "Hack Club Photos developer dashboard",
+});
 export default async function DeveloperPage() {
   const session = await getSession();
   if (!session) {

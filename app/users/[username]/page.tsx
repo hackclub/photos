@@ -3,18 +3,24 @@ import { notFound } from "next/navigation";
 import { HiExclamationCircle } from "react-icons/hi2";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
+import { media, users } from "@/lib/db/schema";
+import { createOgMetadata } from "@/lib/metadata";
 import { getUserContext } from "@/lib/policy";
 import { getUserDisplayName } from "@/lib/user-display";
 import UserProfileClient from "./UserProfileClient";
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{
     username: string;
   }>;
+  searchParams: Promise<{
+    photo?: string;
+  }>;
 }) {
   const { username } = await params;
+  const { photo } = await searchParams;
   const isUuid =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
       username,
@@ -28,17 +34,35 @@ export async function generateMetadata({
     };
   }
   const displayName = getUserDisplayName(user);
-  return {
-    title: `${displayName}${user.handle ? ` (@${user.handle})` : ""} | Hack Club Photos`,
-    description: user.bio || `@${user.handle} on Hack Club Photos`,
-    openGraph: {
-      images: [`/api/og?type=user&id=${username}`],
-    },
-    twitter: {
-      card: "summary_large_image",
-      images: [`/api/og?type=user&id=${username}`],
-    },
-  };
+  const title = `${displayName}${user.handle ? ` (@${user.handle})` : ""} | Hack Club Photos`;
+  const description = user.bio || `@${user.handle} on Hack Club Photos`;
+  if (photo) {
+    const photoMedia = await db.query.media.findFirst({
+      where: eq(media.id, photo),
+    });
+    if (photoMedia?.uploadedById === user.id) {
+      const imagePath =
+        photoMedia.mimeType === "image/heic" ||
+        photoMedia.mimeType === "image/heif"
+          ? `/media/${photoMedia.id}/display`
+          : `/media/${photoMedia.id}`;
+      return createOgMetadata({
+        title: `${photoMedia.caption || photoMedia.filename} | ${displayName}`,
+        description,
+        path: `/users/${username}?photo=${photo}`,
+        imagePath,
+        imageAlt: photoMedia.caption || photoMedia.filename,
+      });
+    }
+  }
+  return createOgMetadata({
+    title,
+    description,
+    path: `/users/${username}`,
+    imagePath: `/api/og?type=user&id=${encodeURIComponent(username)}`,
+    imageAlt: displayName,
+    type: "profile",
+  });
 }
 export default async function UserProfilePage({
   params,

@@ -20,18 +20,24 @@ import MediaGallery from "@/components/media/MediaGallery";
 import UploadButton from "@/components/media/UploadButton";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { eventParticipants, events } from "@/lib/db/schema";
+import { eventParticipants, events, media } from "@/lib/db/schema";
 import { getAssetProxyUrl } from "@/lib/media/s3";
+import { createOgMetadata } from "@/lib/metadata";
 import { can, getUserContext } from "@/lib/policy";
 import { toPublicUser } from "@/lib/user-display";
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{
     slug: string;
   }>;
+  searchParams: Promise<{
+    photo?: string;
+  }>;
 }) {
   const { slug } = await params;
+  const { photo } = await searchParams;
   const event = await db.query.events.findFirst({
     where: eq(events.slug, slug),
   });
@@ -40,17 +46,34 @@ export async function generateMetadata({
       title: "Event Not Found",
     };
   }
-  return {
-    title: `${event.name} | Hack Club Photos`,
-    description: event.description || `Photos from ${event.name}`,
-    openGraph: {
-      images: [`/api/og?type=event&id=${slug}`],
-    },
-    twitter: {
-      card: "summary_large_image",
-      images: [`/api/og?type=event&id=${slug}`],
-    },
-  };
+  const title = `${event.name} | Hack Club Photos`;
+  const description = event.description || `Photos from ${event.name}`;
+  if (photo) {
+    const photoMedia = await db.query.media.findFirst({
+      where: eq(media.id, photo),
+    });
+    if (photoMedia?.eventId === event.id) {
+      const imagePath =
+        photoMedia.mimeType === "image/heic" ||
+        photoMedia.mimeType === "image/heif"
+          ? `/media/${photoMedia.id}/display`
+          : `/media/${photoMedia.id}`;
+      return createOgMetadata({
+        title: `${photoMedia.caption || photoMedia.filename} | ${event.name}`,
+        description,
+        path: `/events/${slug}?photo=${photo}`,
+        imagePath,
+        imageAlt: photoMedia.caption || photoMedia.filename,
+      });
+    }
+  }
+  return createOgMetadata({
+    title,
+    description,
+    path: `/events/${slug}`,
+    imagePath: `/api/og?type=event&id=${encodeURIComponent(slug)}`,
+    imageAlt: event.name,
+  });
 }
 export default async function EventPage({
   params,

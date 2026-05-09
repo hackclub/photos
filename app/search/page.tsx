@@ -1,18 +1,15 @@
 import type { Metadata } from "next";
 import SearchClient from "@/app/search/SearchClient";
 import { getSession } from "@/lib/auth";
+import { createOgMetadata } from "@/lib/metadata";
 import { getUserContext } from "@/lib/policy";
-export const metadata: Metadata = {
+export const metadata: Metadata = createOgMetadata({
   title: "Search | Hack Club Photos",
   description: "Search for photos and videos",
-  openGraph: {
-    images: ["/api/og?type=search"],
-  },
-  twitter: {
-    card: "summary_large_image",
-    images: ["/api/og?type=search"],
-  },
-};
+  path: "/search",
+  imagePath: "/api/og?type=search",
+  imageAlt: "Search Hack Club Photos",
+});
 interface Props {
   searchParams: Promise<{
     q?: string;

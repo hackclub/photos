@@ -4,36 +4,64 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { media, series } from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
+import { createOgMetadata } from "@/lib/metadata";
 import { can, getUserContext } from "@/lib/policy";
 import { toPublicUser } from "@/lib/user-display";
 import SeriesDetailClient from "./SeriesDetailClient";
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{
     slug: string;
   }>;
+  searchParams: Promise<{
+    photo?: string;
+  }>;
 }) {
   const { slug } = await params;
+  const { photo } = await searchParams;
   const seriesData = await db.query.series.findFirst({
     where: eq(series.slug, slug),
+    with: {
+      events: true,
+    },
   });
   if (!seriesData) {
     return {
       title: "Series Not Found",
     };
   }
-  return {
-    title: `${seriesData.name} | Hack Club Photos`,
-    description: seriesData.description || `Photo series: ${seriesData.name}`,
-    openGraph: {
-      images: [`/api/og?type=series&id=${slug}`],
-    },
-    twitter: {
-      card: "summary_large_image",
-      images: [`/api/og?type=series&id=${slug}`],
-    },
-  };
+  const title = `${seriesData.name} | Hack Club Photos`;
+  const description =
+    seriesData.description || `Photo series: ${seriesData.name}`;
+  if (photo) {
+    const photoMedia = await db.query.media.findFirst({
+      where: eq(media.id, photo),
+    });
+    const eventIds = new Set(seriesData.events.map((event) => event.id));
+    if (photoMedia && eventIds.has(photoMedia.eventId)) {
+      const imagePath =
+        photoMedia.mimeType === "image/heic" ||
+        photoMedia.mimeType === "image/heif"
+          ? `/media/${photoMedia.id}/display`
+          : `/media/${photoMedia.id}`;
+      return createOgMetadata({
+        title: `${photoMedia.caption || photoMedia.filename} | ${seriesData.name}`,
+        description,
+        path: `/series/${slug}?photo=${photo}`,
+        imagePath,
+        imageAlt: photoMedia.caption || photoMedia.filename,
+      });
+    }
+  }
+  return createOgMetadata({
+    title,
+    description,
+    path: `/series/${slug}`,
+    imagePath: `/api/og?type=series&id=${encodeURIComponent(slug)}`,
+    imageAlt: seriesData.name,
+  });
 }
 export default async function SeriesDetailPage({
   params,

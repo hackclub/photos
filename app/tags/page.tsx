@@ -5,22 +5,19 @@ import { HiTag } from "react-icons/hi2";
 import { getAllTags } from "@/app/actions/tags";
 import type { tags as tagsSchema } from "@/lib/db/schema";
 import { getMediaProxyUrl } from "@/lib/media/s3";
+import { createOgMetadata } from "@/lib/metadata";
 
 type TagWithCount = typeof tagsSchema.$inferSelect & {
   count: number;
   previewMediaId: string | null;
 };
-export const metadata: Metadata = {
+export const metadata: Metadata = createOgMetadata({
   title: "Tags | Hack Club Photos",
   description: "Browse photos by tags",
-  openGraph: {
-    images: ["/api/og?type=search"],
-  },
-  twitter: {
-    card: "summary_large_image",
-    images: ["/api/og?type=search"],
-  },
-};
+  path: "/tags",
+  imagePath: "/api/og?type=search",
+  imageAlt: "Browse Hack Club Photos tags",
+});
 const TAG_COLORS: Record<string, string> = {
   blue: "from-blue-500/10 to-blue-900/10 border-blue-500/20 text-blue-400",
   red: "from-red-500/10 to-red-900/10 border-red-600/20 text-red-400",

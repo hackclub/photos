@@ -5,19 +5,18 @@ import "./globals.css";
 import ComingSoon from "@/components/ComingSoon";
 import { comingSoon, maintenanceMode } from "@/flags";
 import { APP_URL } from "@/lib/constants";
+import { createOgMetadata } from "@/lib/metadata";
 import ClientLayout from "./ClientLayout";
 
 export const metadata: Metadata = {
+  ...createOgMetadata({
+    title: "Hack Club Photos",
+    description: "A place for all Hack Club photos and videos from events",
+    path: "/",
+    imagePath: "/api/og",
+    imageAlt: "Hack Club Photos",
+  }),
   metadataBase: new URL(APP_URL),
-  title: "Hack Club Photos",
-  description: "A place for all Hack Club photos and videos from events",
-  openGraph: {
-    images: ["/api/og"],
-  },
-  twitter: {
-    card: "summary_large_image",
-    images: ["/api/og"],
-  },
 };
 export default async function RootLayout({
   children,
