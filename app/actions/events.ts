@@ -212,8 +212,13 @@ export async function updateEvent(eventId: string, data: EventInput) {
     revalidatePath("/events");
     revalidatePath("/admin/events");
     return { success: true, event: updatedEvent };
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error("Update event error:", error);
+    if (error?.code === "23505") {
+      if (error?.constraint_name === "events_slug_unique" || error?.constraint === "events_slug_unique") {
+        return { success: false, error: "An event with this slug already exists." };
+      }
+    }
     const errorMessage =
       error instanceof Error ? error.message : "Failed to update event";
     return { success: false, error: errorMessage };
@@ -338,8 +343,13 @@ export async function createEvent(data: EventInput) {
     revalidatePath("/events");
     revalidatePath("/admin/events");
     return { success: true, event: newEvent };
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error("Create event error:", error);
+    if (error?.code === "23505") {
+      if (error?.constraint_name === "events_slug_unique" || error?.constraint === "events_slug_unique") {
+        return { success: false, error: "An event with this slug already exists." };
+      }
+    }
     const errorMessage =
       error instanceof Error ? error.message : "Failed to create event";
     return { success: false, error: errorMessage };
