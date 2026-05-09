@@ -8,7 +8,7 @@ export const metadata = createOgMetadata({
   title: "Activity Feed | Hack Club Photos",
   description: "See the latest photos from Hack Club events",
   path: "/feed",
-  imagePath: new URL("/api/og?type=feed", APP_URL).toString(),
+  imagePath: new URL("/api/og/feed.png", APP_URL).toString(),
   imageAlt: "Hack Club Photos activity feed",
 });
 export default function FeedPage() {

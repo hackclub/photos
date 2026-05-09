@@ -16,7 +16,7 @@ export const metadata: Metadata = createOgMetadata({
   title: "Tags | Hack Club Photos",
   description: "Browse photos by tags",
   path: "/tags",
-  imagePath: new URL("/api/og?type=search", APP_URL).toString(),
+  imagePath: new URL("/api/og/search.png", APP_URL).toString(),
   imageAlt: "Browse Hack Club Photos tags",
 });
 const TAG_COLORS: Record<string, string> = {

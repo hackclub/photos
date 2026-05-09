@@ -148,12 +148,14 @@ export function generateOgImage(props: OgImageProps) {
 
         <h1
           style={{
-            fontSize: "80px",
+            fontSize: "72px",
             fontWeight: 800,
             color: "white",
             margin: "0 0 24px 0",
             lineHeight: 1.1,
             letterSpacing: "-0.03em",
+            maxWidth: "1050px",
+            wordBreak: "break-word",
           }}
         >
           {title}
@@ -167,6 +169,7 @@ export function generateOgImage(props: OgImageProps) {
               margin: 0,
               lineHeight: 1.5,
               maxWidth: "1000px",
+              wordBreak: "break-word",
             }}
           >
             {description}

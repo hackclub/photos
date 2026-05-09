@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     title: "Hack Club Photos",
     description: "A place for all Hack Club photos and videos from events",
     path: "/",
-    imagePath: new URL("/api/og", APP_URL).toString(),
+    imagePath: new URL("/api/og.png", APP_URL).toString(),
     imageAlt: "Hack Club Photos",
   }),
   metadataBase: new URL(APP_URL),

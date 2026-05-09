@@ -13,7 +13,7 @@ export const metadata: Metadata = createOgMetadata({
   title: "Developer Dashboard | Hack Club Photos",
   description: "Manage your API keys and test the Public API.",
   path: "/developer",
-  imagePath: new URL("/api/og?type=developer", APP_URL).toString(),
+  imagePath: new URL("/api/og/developer.png", APP_URL).toString(),
   imageAlt: "Hack Club Photos developer dashboard",
 });
 export default async function DeveloperPage() {

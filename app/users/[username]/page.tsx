@@ -61,7 +61,7 @@ export async function generateMetadata({
     description,
     path: `/users/${username}`,
     imagePath: new URL(
-      `/api/og?type=user&id=${encodeURIComponent(username)}`,
+      `/api/og/user/${encodeURIComponent(username)}.png`,
       APP_URL,
     ).toString(),
     imageAlt: displayName,

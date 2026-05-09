@@ -73,7 +73,7 @@ export async function generateMetadata({
     description,
     path: `/events/${slug}`,
     imagePath: new URL(
-      `/api/og?type=event&id=${encodeURIComponent(slug)}`,
+      `/api/og/event/${encodeURIComponent(slug)}.png`,
       APP_URL,
     ).toString(),
     imageAlt: event.name,
