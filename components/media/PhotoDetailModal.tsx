@@ -1121,11 +1121,11 @@ export default function PhotoDetailModal({
               </div>
             ) : (
               <div className="relative flex h-full w-full items-center justify-center">
-                {!effectiveUrl && thumbnailUrl && (
+                {!imageLoaded && thumbnailUrl && (
                   <img
                     src={thumbnailUrl}
                     alt={media.filename}
-                    className="absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain opacity-65 blur-sm"
+                    className="absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain opacity-65 blur-md scale-[1.02] transition-opacity duration-300"
                     aria-hidden="true"
                   />
                 )}
@@ -1167,9 +1167,13 @@ export default function PhotoDetailModal({
                   />
                 )}
                 {!imageLoaded && !imageError && (
-                  <div className="absolute inset-x-0 bottom-4 z-10 flex justify-center pointer-events-none">
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black/25 pointer-events-none">
+                    <LoadingSpinner size="xl" label="Loading image..." center />
                     <div className="rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-xs text-zinc-300 shadow-lg backdrop-blur-md">
-                      Loading photo...
+                      {media.mimeType === "image/heic" ||
+                      media.mimeType === "image/heif"
+                        ? "Converting HEIC..."
+                        : "Loading photo..."}
                     </div>
                   </div>
                 )}
