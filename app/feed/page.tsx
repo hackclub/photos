@@ -2,12 +2,13 @@ import { Suspense } from "react";
 import { getGlobalFeed } from "@/app/actions/feed";
 import ActivityFeed from "@/components/feed/ActivityFeed";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { APP_URL } from "@/lib/constants";
 import { createOgMetadata } from "@/lib/metadata";
 export const metadata = createOgMetadata({
   title: "Activity Feed | Hack Club Photos",
   description: "See the latest photos from Hack Club events",
   path: "/feed",
-  imagePath: "/api/og?type=feed",
+  imagePath: new URL("/api/og?type=feed", APP_URL).toString(),
   imageAlt: "Hack Club Photos activity feed",
 });
 export default function FeedPage() {

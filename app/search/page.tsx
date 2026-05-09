@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import SearchClient from "@/app/search/SearchClient";
 import { getSession } from "@/lib/auth";
+import { APP_URL } from "@/lib/constants";
 import { createOgMetadata } from "@/lib/metadata";
 import { getUserContext } from "@/lib/policy";
 export const metadata: Metadata = createOgMetadata({

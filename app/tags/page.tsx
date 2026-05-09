@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { HiTag } from "react-icons/hi2";
 import { getAllTags } from "@/app/actions/tags";
+import { APP_URL } from "@/lib/constants";
 import type { tags as tagsSchema } from "@/lib/db/schema";
 import { getMediaProxyUrl } from "@/lib/media/s3";
 import { createOgMetadata } from "@/lib/metadata";
@@ -15,7 +16,7 @@ export const metadata: Metadata = createOgMetadata({
   title: "Tags | Hack Club Photos",
   description: "Browse photos by tags",
   path: "/tags",
-  imagePath: "/api/og?type=search",
+  imagePath: new URL("/api/og?type=search", APP_URL).toString(),
   imageAlt: "Browse Hack Club Photos tags",
 });
 const TAG_COLORS: Record<string, string> = {

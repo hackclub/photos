@@ -15,7 +15,9 @@ import { events, series, tags, users } from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 import { generateOgImage } from "@/lib/og";
 import { getSlackAvatarUrl, getUserDisplayName } from "@/lib/user-display";
-const OG_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://photos.hackclub.com";
+
+const OG_BASE_URL =
+  process.env.NEXT_PUBLIC_APP_URL || "https://photos.hackclub.com";
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -52,7 +54,9 @@ export async function GET(request: Request) {
       if (!seriesData) return errorImage("Series not found");
       let bannerUrl: string | undefined;
       if (seriesData.bannerS3Key) {
-        bannerUrl = absoluteUrl(getAssetProxyUrl("series-banner", seriesData.id));
+        bannerUrl = absoluteUrl(
+          getAssetProxyUrl("series-banner", seriesData.id),
+        );
       }
       return generateOgImage({
         title: seriesData.name,
@@ -116,7 +120,9 @@ export async function GET(request: Request) {
       let previewUrl: string | undefined;
       const mediaItem = tag.media[0];
       if (mediaItem?.media.thumbnailS3Key) {
-        previewUrl = absoluteUrl(getMediaProxyUrl(mediaItem.media.id, "thumbnail"));
+        previewUrl = absoluteUrl(
+          getMediaProxyUrl(mediaItem.media.id, "thumbnail"),
+        );
       }
       return generateOgImage({
         title: `#${tag.name}`,
