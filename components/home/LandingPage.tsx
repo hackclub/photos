@@ -5,7 +5,7 @@ export default function LandingPage() {
   return (
     <main className="min-h-screen bg-black text-white flex items-center justify-center px-4">
       <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950/80 p-8 text-center shadow-2xl">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-zinc-900 ring-1 ring-zinc-800">
+        <div className="mx-auto mb-6 h-16 w-16 overflow-hidden">
           <Image
             src="/hackclub-icon.png"
             alt="Hack Club"
