@@ -1,11 +1,19 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export default function LandingPage() {
   return (
     <main className="min-h-screen bg-black text-white flex items-center justify-center px-4">
       <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950/80 p-8 text-center shadow-2xl">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-600/10 text-3xl font-black text-red-500">
-          HC
+        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-zinc-900 ring-1 ring-zinc-800">
+          <Image
+            src="/hackclub-icon.png"
+            alt="Hack Club"
+            width={64}
+            height={64}
+            className="h-full w-full object-cover"
+            priority
+          />
         </div>
         <h1 className="text-3xl font-bold tracking-tight">WIP</h1>
         <p className="mt-3 text-sm text-zinc-400">
