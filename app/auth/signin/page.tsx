@@ -29,7 +29,7 @@ export default async function SignInPage({
               Welcome to Hack Club Photos
             </h1>
             <p className="text-zinc-400 mb-1">
-              The photo hub for teenage hackers
+              The centralized photo place for Hack Club
             </p>
             <p className="text-sm text-zinc-500">
               For Hack Club members under 18
