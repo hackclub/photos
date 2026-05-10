@@ -33,6 +33,8 @@ export default function ActivityFeed({
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const itemsLengthRef = useRef(0);
+  const isFetchingRef = useRef(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [isLive, setIsLive] = useState(false);
@@ -41,11 +43,16 @@ export default function ActivityFeed({
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [mediaToDelete, setMediaToDelete] = useState<string | null>(null);
+  useEffect(() => {
+    itemsLengthRef.current = items.length;
+  }, [items.length]);
   const fetchFeed = useCallback(
     async (append = false) => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
       try {
         setLoading(true);
-        const offset = append ? items.length : 0;
+        const offset = append ? itemsLengthRef.current : 0;
         const result = await fetchData(20, offset);
         if (!result.success) {
           throw new Error(result.error || "Failed to fetch feed");
@@ -88,10 +95,11 @@ export default function ActivityFeed({
         console.error("Feed error:", err);
         setError(err instanceof Error ? err.message : "Failed to load feed");
       } finally {
+        isFetchingRef.current = false;
         setLoading(false);
       }
     },
-    [fetchData, items.length],
+    [fetchData],
   );
   useEffect(() => {
     fetchFeed(false);
