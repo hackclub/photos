@@ -1,9 +1,9 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { count, desc, eq, inArray } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { APP_URL } from "@/lib/constants";
 import { db } from "@/lib/db";
-import { media, series } from "@/lib/db/schema";
+import { media, mediaLikes, series } from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 import { createOgMetadata } from "@/lib/metadata";
 import { can, getUserContext } from "@/lib/policy";
@@ -107,11 +107,26 @@ export default async function SeriesDetailPage({
                 slackId: true,
               },
             },
-            likes: true,
           },
           orderBy: desc(media.uploadedAt),
         })
       : [];
+  const likeCounts =
+    allMedia.length > 0
+      ? await db
+          .select({ mediaId: mediaLikes.mediaId, count: count() })
+          .from(mediaLikes)
+          .where(
+            inArray(
+              mediaLikes.mediaId,
+              allMedia.map((m) => m.id),
+            ),
+          )
+          .groupBy(mediaLikes.mediaId)
+      : [];
+  const likeCountByMediaId = new Map(
+    likeCounts.map((item) => [item.mediaId, item.count]),
+  );
   const photoCount = allMedia.filter((m) =>
     m.mimeType.startsWith("image/"),
   ).length;
@@ -155,7 +170,7 @@ export default async function SeriesDetailPage({
         ...m,
         uploadedBy: toPublicUser(m.uploadedBy),
         exifData: m.exifData as Record<string, unknown> | null,
-        likeCount: m.likes.length,
+        likeCount: likeCountByMediaId.get(m.id) ?? 0,
       }))}
       photoCount={photoCount}
       videoCount={videoCount}

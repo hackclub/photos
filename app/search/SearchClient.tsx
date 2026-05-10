@@ -109,9 +109,9 @@ export default function SearchClient({
   useEffect(() => {
     const performSearch = async () => {
       const searchQuery = searchParams.get("q") || "";
-      if (searchQuery !== query) {
-        setQuery(searchQuery);
-      }
+      setQuery((currentQuery) =>
+        currentQuery === searchQuery ? currentQuery : searchQuery,
+      );
       const hasActiveFilters =
         filters.tagIds.length > 0 ||
         filters.uploaderIds.length > 0 ||
@@ -147,7 +147,7 @@ export default function SearchClient({
       }
     };
     performSearch();
-  }, [query, searchParams, filters]);
+  }, [searchParams, filters]);
   const updateUrl = (newQuery: string, newFilters: typeof filters) => {
     const params = new URLSearchParams();
     if (newQuery) params.set("q", newQuery);

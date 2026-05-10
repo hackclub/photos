@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -21,7 +21,7 @@ import UploadButton from "@/components/media/UploadButton";
 import { getSession } from "@/lib/auth";
 import { APP_URL } from "@/lib/constants";
 import { db } from "@/lib/db";
-import { eventParticipants, events, media } from "@/lib/db/schema";
+import { eventParticipants, events, media, mediaLikes } from "@/lib/db/schema";
 import { getAssetProxyUrl } from "@/lib/media/s3";
 import { createOgMetadata } from "@/lib/metadata";
 import { can, getUserContext } from "@/lib/policy";
@@ -108,7 +108,6 @@ export default async function EventPage({
               slackId: true,
             },
           },
-          likes: true,
           apiKey: true,
         },
         orderBy: (media, { desc }) => [desc(media.uploadedAt)],
@@ -136,11 +135,13 @@ export default async function EventPage({
         ),
     });
     isParticipant = !!participant;
-    const userPhotos = await db.query.media.findMany({
-      where: (media, { and, eq }) =>
+    const [userPhotos] = await db
+      .select({ count: count() })
+      .from(media)
+      .where(
         and(eq(media.eventId, event.id), eq(media.uploadedById, session.id)),
-    });
-    userPhotoCount = userPhotos.length;
+      );
+    userPhotoCount = userPhotos?.count ?? 0;
   }
   const participants = await db.query.eventParticipants.findMany({
     where: eq(eventParticipants.eventId, event.id),
@@ -160,6 +161,22 @@ export default async function EventPage({
     event.media?.filter((m) => m.mimeType.startsWith("image/")).length || 0;
   const videoCount =
     event.media?.filter((m) => m.mimeType.startsWith("video/")).length || 0;
+  const likeCounts =
+    event.media && event.media.length > 0
+      ? await db
+          .select({ mediaId: mediaLikes.mediaId, count: count() })
+          .from(mediaLikes)
+          .where(
+            inArray(
+              mediaLikes.mediaId,
+              event.media.map((m) => m.id),
+            ),
+          )
+          .groupBy(mediaLikes.mediaId)
+      : [];
+  const likeCountByMediaId = new Map(
+    likeCounts.map((item) => [item.mediaId, item.count]),
+  );
   let bannerUrl: string | null = null;
   if (event.bannerS3Key) {
     bannerUrl = getAssetProxyUrl("event-banner", event.id);
@@ -367,7 +384,7 @@ export default async function EventPage({
                 ...m,
                 uploadedBy: toPublicUser(m.uploadedBy),
                 exifData: m.exifData as Record<string, unknown> | null,
-                likeCount: m.likes.length,
+                likeCount: likeCountByMediaId.get(m.id) ?? 0,
               }))}
               currentUserId={session?.id}
               eventId={event.id}

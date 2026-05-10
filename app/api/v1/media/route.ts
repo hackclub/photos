@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { unauthorizedResponse, validateApiKey } from "@/lib/auth-api";
 import { APP_URL } from "@/lib/constants";
@@ -41,9 +41,10 @@ export async function GET(req: NextRequest) {
       .from(media)
       .innerJoin(events, eq(media.eventId, events.id))
       .where(and(...conditions));
-    const mediaItems = await (isRandom
-      ? baseQuery.orderBy(sql`RANDOM()`).limit(limit)
-      : baseQuery.orderBy(desc(media.uploadedAt)).limit(limit).offset(offset));
+    const mediaItems = await baseQuery
+      .orderBy(desc(media.uploadedAt))
+      .limit(limit)
+      .offset(isRandom ? 0 : offset);
     const mediaWithUrls = mediaItems.map((item) => {
       const downloadBaseUrl = `${APP_URL}/api/v1/download/${item.id}`;
       const viewBaseUrl = `${APP_URL}/api/v1/view/${item.id}`;

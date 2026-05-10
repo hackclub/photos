@@ -1,4 +1,5 @@
 "use client";
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import {
   HiCheck,
@@ -11,12 +12,16 @@ import { getBulkMediaUrls } from "@/app/actions/bulk";
 import { deleteMedia } from "@/app/actions/media";
 import { getReports, resolveReport } from "@/app/actions/reports";
 import { banUser } from "@/app/actions/users";
-import PhotoDetailModal from "@/components/media/PhotoDetailModal";
 import VideoIndicator from "@/components/media/VideoIndicator";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { useAuth } from "@/hooks/useAuth";
+
+const PhotoDetailModal = dynamic(
+  () => import("@/components/media/PhotoDetailModal"),
+  { ssr: false },
+);
 
 interface Report {
   id: string;

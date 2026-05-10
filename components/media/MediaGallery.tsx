@@ -1,4 +1,5 @@
 "use client";
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   HiArrowDownTray,
@@ -18,8 +19,11 @@ import type { Event, MediaItem } from "@/types/media";
 import ConfirmModal from "../ui/ConfirmModal";
 import ServerActionModal from "../ui/ServerActionModal";
 import MediaGalleryToolbar from "./MediaGalleryToolbar";
-import PhotoDetailModal from "./PhotoDetailModal";
 import VideoIndicator from "./VideoIndicator";
+
+const PhotoDetailModal = dynamic(() => import("./PhotoDetailModal"), {
+  ssr: false,
+});
 
 const INITIAL_VISIBLE_ITEMS = 60;
 const VISIBLE_ITEMS_INCREMENT = 60;

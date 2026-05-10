@@ -1,10 +1,10 @@
-import { count, desc, eq, sql } from "drizzle-orm";
+import { count, desc, eq, inArray } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import LandingPage from "@/components/home/LandingPage";
 import UserDashboard from "@/components/home/UserDashboard";
 import { deleteSession, getSession, refreshUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { eventParticipants, events, media } from "@/lib/db/schema";
+import { eventParticipants, media } from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 export default async function HomePage() {
   const session = await getSession();
@@ -14,71 +14,7 @@ export default async function HomePage() {
     if (onboardingSession) {
       redirect("/onboarding");
     }
-    const recentEvents = await db.query.events.findMany({
-      where: eq(events.visibility, "public"),
-      limit: 10,
-      orderBy: [desc(events.createdAt)],
-      with: {
-        series: true,
-      },
-    });
-    const eventBannerUrls = new Map<string, string>();
-    const eventStats = new Map<
-      string,
-      {
-        mediaCount: number;
-        participantCount: number;
-      }
-    >();
-    await Promise.all(
-      recentEvents.map(async (event) => {
-        if (event.bannerS3Key) {
-          eventBannerUrls.set(
-            event.id,
-            getAssetProxyUrl("event-banner", event.id),
-          );
-        }
-        const [mediaCountResult] = await db
-          .select({ value: count() })
-          .from(media)
-          .where(eq(media.eventId, event.id));
-        const [participantCountResult] = await db
-          .select({ value: count() })
-          .from(eventParticipants)
-          .where(eq(eventParticipants.eventId, event.id));
-        eventStats.set(event.id, {
-          mediaCount: mediaCountResult?.value ?? 0,
-          participantCount: participantCountResult?.value ?? 0,
-        });
-      }),
-    );
-    const randomMedia = await db.query.media.findMany({
-      limit: 50,
-      orderBy: sql`RANDOM()`,
-      with: {
-        event: true,
-      },
-    });
-    const heroImages = randomMedia
-      .filter((m) => m.event.visibility === "public")
-      .map((m) => {
-        try {
-          if (m.thumbnailS3Key) {
-            return getMediaProxyUrl(m.id, "thumbnail");
-          }
-          return getMediaProxyUrl(m.id);
-        } catch (_e) {
-          return null;
-        }
-      });
-    return (
-      <LandingPage
-        recentEvents={recentEvents}
-        eventStats={eventStats}
-        eventBannerUrls={eventBannerUrls}
-        heroImages={heroImages.filter((url): url is string => !!url)}
-      />
-    );
+    return <LandingPage />;
   }
   const refreshedUser = await refreshUser(session.id);
   if (refreshedUser?.isBanned) {
@@ -97,10 +33,11 @@ export default async function HomePage() {
     orderBy: [desc(eventParticipants.joinedAt)],
     limit: 6,
   });
-  const userMedia = await db.query.media.findMany({
-    where: eq(media.uploadedById, session.id),
-  });
-  const userPhotoCount = userMedia.length;
+  const [userMediaCount] = await db
+    .select({ value: count() })
+    .from(media)
+    .where(eq(media.uploadedById, session.id));
+  const userPhotoCount = userMediaCount?.value ?? 0;
   const eventsJoinedCount = userParticipations.length;
   const eventBannerUrls = new Map<string, string>();
   const eventStats = new Map<
@@ -110,35 +47,48 @@ export default async function HomePage() {
       participantCount: number;
     }
   >();
-  await Promise.all(
-    userParticipations.map(async (participation) => {
-      if (participation.event.bannerS3Key) {
-        eventBannerUrls.set(
-          participation.event.id,
-          getAssetProxyUrl("event-banner", participation.event.id),
-        );
-      }
-      const [mediaCountResult] = await db
-        .select({ value: count() })
+  const participationEventIds = userParticipations.map((item) => item.event.id);
+  for (const participation of userParticipations) {
+    if (participation.event.bannerS3Key) {
+      eventBannerUrls.set(
+        participation.event.id,
+        getAssetProxyUrl("event-banner", participation.event.id),
+      );
+    }
+  }
+  if (participationEventIds.length > 0) {
+    const [mediaCounts, participantCounts] = await Promise.all([
+      db
+        .select({ eventId: media.eventId, value: count() })
         .from(media)
-        .where(eq(media.eventId, participation.event.id));
-      const [participantCountResult] = await db
-        .select({ value: count() })
+        .where(inArray(media.eventId, participationEventIds))
+        .groupBy(media.eventId),
+      db
+        .select({ eventId: eventParticipants.eventId, value: count() })
         .from(eventParticipants)
-        .where(eq(eventParticipants.eventId, participation.event.id));
-      eventStats.set(participation.event.id, {
-        mediaCount: mediaCountResult?.value ?? 0,
-        participantCount: participantCountResult?.value ?? 0,
+        .where(inArray(eventParticipants.eventId, participationEventIds))
+        .groupBy(eventParticipants.eventId),
+    ]);
+    const mediaCountMap = new Map(
+      mediaCounts.map((item) => [item.eventId, item.value]),
+    );
+    const participantCountMap = new Map(
+      participantCounts.map((item) => [item.eventId, item.value]),
+    );
+    for (const id of participationEventIds) {
+      eventStats.set(id, {
+        mediaCount: mediaCountMap.get(id) ?? 0,
+        participantCount: participantCountMap.get(id) ?? 0,
       });
-    }),
-  );
+    }
+  }
   const joinedEventIds = userParticipations.map((p) => p.eventId);
   let heroImages: string[] = [];
   if (joinedEventIds.length > 0) {
     const randomMedia = await db.query.media.findMany({
       where: (media, { inArray }) => inArray(media.eventId, joinedEventIds),
       limit: 20,
-      orderBy: sql`RANDOM()`,
+      orderBy: [desc(media.uploadedAt)],
     });
     const urls = randomMedia.map((m) => {
       try {

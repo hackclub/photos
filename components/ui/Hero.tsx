@@ -24,11 +24,8 @@ export default function Hero({
   }, []);
   let displayImages: string[] = [];
   if (images.length > 0) {
-    displayImages = [...images];
-    while (displayImages.length < 12) {
-      displayImages = [...displayImages, ...images];
-    }
-    displayImages = [...displayImages, ...displayImages, ...displayImages];
+    const baseImages = images.slice(0, 8);
+    displayImages = [...baseImages, ...baseImages];
   }
   const hasImages = displayImages.length > 0;
   return (
@@ -44,7 +41,7 @@ export default function Hero({
             <div
               className="flex h-full animate-scroll-left w-max"
               style={{
-                animationDuration: `${displayImages.length * 2}s`,
+                animationDuration: `${Math.max(displayImages.length * 2, 24)}s`,
               }}
             >
               {displayImages.map((src, index) => (
@@ -55,6 +52,9 @@ export default function Hero({
                   <img
                     src={src}
                     alt=""
+                    loading={index < 4 ? "eager" : "lazy"}
+                    decoding="async"
+                    fetchPriority={index < 2 ? "high" : "low"}
                     className="absolute inset-0 w-full h-full object-cover blur-[4px]"
                   />
                 </div>

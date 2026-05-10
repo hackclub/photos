@@ -1,6 +1,14 @@
 "use client";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { FaDice } from "react-icons/fa";
 import {
   HiArrowDown,
@@ -16,10 +24,96 @@ import {
 } from "react-icons/hi2";
 import { bulkDeleteMedia, getBulkMediaUrls } from "@/app/actions/bulk";
 import { deleteMedia } from "@/app/actions/media";
-import PhotoDetailModal from "@/components/media/PhotoDetailModal";
 import VideoIndicator from "@/components/media/VideoIndicator";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import ServerActionModal from "@/components/ui/ServerActionModal";
+
+const PhotoDetailModal = dynamic(
+  () => import("@/components/media/PhotoDetailModal"),
+  { ssr: false },
+);
+
+const INITIAL_VISIBLE_ITEMS = 60;
+const VISIBLE_ITEMS_INCREMENT = 60;
+const THUMBNAIL_BATCH_SIZE = 24;
+
+let searchGalleryImageObserver: IntersectionObserver | null = null;
+
+function getSearchGalleryImageObserver() {
+  if (typeof window === "undefined") return null;
+  if (searchGalleryImageObserver) return searchGalleryImageObserver;
+  searchGalleryImageObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const element = entry.target as HTMLElement;
+        searchGalleryImageObserver?.unobserve(element);
+        element.dispatchEvent(new CustomEvent("search-gallery-image-visible"));
+      }
+    },
+    { rootMargin: "900px 0px" },
+  );
+  return searchGalleryImageObserver;
+}
+
+function LazySearchGalleryImage({
+  src,
+  alt,
+  onVisible,
+}: {
+  src?: string;
+  alt: string;
+  onVisible: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const observer = getSearchGalleryImageObserver();
+    const handleVisible = () => {
+      setIsVisible(true);
+      onVisible();
+    };
+    element.addEventListener("search-gallery-image-visible", handleVisible, {
+      once: true,
+    });
+    observer?.observe(element);
+    return () => {
+      element.removeEventListener(
+        "search-gallery-image-visible",
+        handleVisible,
+      );
+      observer?.unobserve(element);
+    };
+  }, [onVisible]);
+
+  return (
+    <div ref={ref} className="relative h-full w-full bg-zinc-800">
+      {(!isVisible || !src || !isLoaded) && (
+        <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+          <HiPhoto className="w-12 h-12 text-zinc-600 animate-pulse" />
+        </div>
+      )}
+      {isVisible && src && (
+        <img
+          key={src}
+          src={src}
+          alt={alt}
+          loading="eager"
+          decoding="async"
+          fetchPriority="low"
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-out ${
+            isLoaded ? "opacity-100" : "opacity-0"
+          }`}
+          onLoad={() => setIsLoaded(true)}
+        />
+      )}
+    </div>
+  );
+}
 export interface MediaItem {
   id: string;
   s3Url: string;
@@ -78,6 +172,16 @@ export default function SearchGallery({
   const [presignedUrls, setPresignedUrls] = useState<Record<string, string>>(
     {},
   );
+  const thumbnailUrlCacheRef = useRef<Record<string, string>>({});
+  const fullSizeUrlCacheRef = useRef<Record<string, string>>({});
+  const fullSizeRequestSeqRef = useRef(0);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const queuedThumbnailIdsRef = useRef<Set<string>>(new Set());
+  const thumbnailFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_ITEMS);
+  const [_isPending, startTransition] = useTransition();
   const [completed, setCompleted] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -88,6 +192,7 @@ export default function SearchGallery({
   const [mediaToDelete, setMediaToDelete] = useState<string | null>(null);
   useEffect(() => {
     setLocalMedia(media);
+    startTransition(() => setVisibleCount(INITIAL_VISIBLE_ITEMS));
   }, [media]);
   const sortedMedia = useMemo(() => {
     return [...localMedia].sort((a, b) => {
@@ -127,6 +232,9 @@ export default function SearchGallery({
       return 0;
     });
   }, [localMedia, sortBy, dateOrder, randomSeed]);
+  const resetVisibleItems = () => {
+    startTransition(() => setVisibleCount(INITIAL_VISIBLE_ITEMS));
+  };
   const updateUrl = (mediaId: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
     if (mediaId) {
@@ -137,38 +245,88 @@ export default function SearchGallery({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
   useEffect(() => {
-    const loadThumbnails = async () => {
-      if (localMedia.length === 0) {
-        setPresignedUrls({});
-        return;
-      }
-      const thumbnailKeys = localMedia
-        .filter((item) => item.thumbnailS3Key)
-        .map((item) => item.thumbnailS3Key!);
-      if (thumbnailKeys.length === 0) {
-        setPresignedUrls({});
-        return;
-      }
-      try {
-        const allUrls: Record<string, string> = {};
-        for (let i = 0; i < thumbnailKeys.length; i += 100) {
-          const batch = thumbnailKeys.slice(i, i + 100);
-          const data = await getBulkMediaUrls(batch);
-          Object.assign(allUrls, data.urls);
+    setPresignedUrls((prev) => {
+      if (localMedia.length === 0) return {};
+      const ids = new Set(localMedia.map((item) => item.id));
+      const next: Record<string, string> = {};
+      let changed = false;
+      for (const [id, url] of Object.entries(prev)) {
+        if (ids.has(id)) {
+          next[id] = url;
+        } else {
+          changed = true;
+          delete thumbnailUrlCacheRef.current[id];
         }
-        const newUrls: Record<string, string> = {};
-        localMedia.forEach((item) => {
-          if (item.thumbnailS3Key && allUrls[item.thumbnailS3Key]) {
-            newUrls[item.id] = allUrls[item.thumbnailS3Key];
-          }
+      }
+      return changed ? next : prev;
+    });
+  }, [localMedia]);
+
+  const loadThumbnailUrls = useCallback(async (items: MediaItem[]) => {
+    const unloadedItems = items.filter(
+      (item) => item.thumbnailS3Key && !thumbnailUrlCacheRef.current[item.id],
+    );
+    if (unloadedItems.length === 0) return;
+    try {
+      const data = await getBulkMediaUrls(
+        unloadedItems.map((item) => item.thumbnailS3Key!),
+      );
+      const urls = data.urls ?? {};
+      const newUrls: Record<string, string> = {};
+      for (const item of unloadedItems) {
+        if (item.thumbnailS3Key && urls[item.thumbnailS3Key]) {
+          newUrls[item.id] = urls[item.thumbnailS3Key];
+        }
+      }
+      if (Object.keys(newUrls).length > 0) {
+        Object.assign(thumbnailUrlCacheRef.current, newUrls);
+        setPresignedUrls((prev) => ({ ...prev, ...newUrls }));
+      }
+    } catch (error) {
+      console.error("Failed to load thumbnails:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    const element = loadMoreRef.current;
+    if (!element) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        startTransition(() => {
+          setVisibleCount((count) =>
+            Math.min(count + VISIBLE_ITEMS_INCREMENT, sortedMedia.length),
+          );
         });
-        setPresignedUrls(newUrls);
-      } catch (error) {
-        console.error("Failed to load thumbnails:", error);
+      },
+      { rootMargin: "1200px 0px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [sortedMedia.length]);
+
+  const queueThumbnailLoad = (item: MediaItem) => {
+    if (!item.thumbnailS3Key || presignedUrls[item.id]) return;
+    queuedThumbnailIdsRef.current.add(item.id);
+    if (thumbnailFlushTimerRef.current) return;
+    const flush = () => {
+      thumbnailFlushTimerRef.current = null;
+      const ids = Array.from(queuedThumbnailIdsRef.current).slice(
+        0,
+        THUMBNAIL_BATCH_SIZE,
+      );
+      ids.forEach((id) => {
+        queuedThumbnailIdsRef.current.delete(id);
+      });
+      const idSet = new Set(ids);
+      const items = sortedMedia.filter((mediaItem) => idSet.has(mediaItem.id));
+      void loadThumbnailUrls(items);
+      if (queuedThumbnailIdsRef.current.size > 0) {
+        thumbnailFlushTimerRef.current = setTimeout(flush, 120);
       }
     };
-    loadThumbnails();
-  }, [localMedia]);
+    thumbnailFlushTimerRef.current = setTimeout(flush, 80);
+  };
   const [fullSizeUrl, setFullSizeUrl] = useState<string | null>(null);
   useEffect(() => {
     const loadFullSize = async () => {
@@ -176,16 +334,48 @@ export default function SearchGallery({
         setFullSizeUrl(null);
         return;
       }
+      const requestSeq = ++fullSizeRequestSeqRef.current;
+      setFullSizeUrl(fullSizeUrlCacheRef.current[selectedMedia.id] ?? null);
       try {
         const data = await getBulkMediaUrls(undefined, [selectedMedia.id]);
         const url = data.urls?.[selectedMedia.id] ?? null;
+        if (requestSeq !== fullSizeRequestSeqRef.current) return;
+        if (url) fullSizeUrlCacheRef.current[selectedMedia.id] = url;
         setFullSizeUrl(url);
       } catch (error) {
+        if (requestSeq !== fullSizeRequestSeqRef.current) return;
         console.error("Failed to load full-size image:", error);
       }
     };
     loadFullSize();
   }, [selectedMedia]);
+
+  const prefetchFullSizeUrls = useCallback(async (items: MediaItem[]) => {
+    const mediaIds = items
+      .filter((item) => !fullSizeUrlCacheRef.current[item.id])
+      .map((item) => item.id);
+    if (mediaIds.length === 0) return;
+    try {
+      const data = await getBulkMediaUrls(undefined, mediaIds);
+      Object.entries(data.urls ?? {}).forEach(([id, url]) => {
+        fullSizeUrlCacheRef.current[id] = url;
+      });
+    } catch (error) {
+      console.error("Failed to prefetch full-size images:", error);
+    }
+  }, []);
+
+  const prefetchAdjacentMedia = (item: MediaItem) => {
+    const currentIndex = sortedMedia.findIndex((m) => m.id === item.id);
+    if (currentIndex === -1) return;
+    void prefetchFullSizeUrls(
+      [
+        sortedMedia[currentIndex - 1],
+        sortedMedia[currentIndex + 1],
+        sortedMedia[currentIndex + 2],
+      ].filter((mediaItem): mediaItem is MediaItem => Boolean(mediaItem)),
+    );
+  };
   const handleDeleteConfirm = async () => {
     if (!mediaToDelete) return;
     try {
@@ -394,7 +584,10 @@ export default function SearchGallery({
             <div className="flex gap-0">
               <button
                 type="button"
-                onClick={() => setSortBy("date")}
+                onClick={() => {
+                  setSortBy("date");
+                  resetVisibleItems();
+                }}
                 className={`px-3 sm:px-4 py-2 sm:py-2.5 text-sm rounded-l-lg font-medium transition-all flex items-center gap-1 sm:gap-2 ${
                   sortBy === "date"
                     ? "bg-red-600 text-white shadow-lg "
@@ -407,9 +600,10 @@ export default function SearchGallery({
               {sortBy === "date" && (
                 <button
                   type="button"
-                  onClick={() =>
-                    setDateOrder(dateOrder === "desc" ? "asc" : "desc")
-                  }
+                  onClick={() => {
+                    setDateOrder(dateOrder === "desc" ? "asc" : "desc");
+                    resetVisibleItems();
+                  }}
                   className="px-2 sm:px-3 py-2 sm:py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-r-lg transition-all shadow-lg border-l border-red-600"
                   title={dateOrder === "desc" ? "Newest first" : "Oldest first"}
                 >
@@ -423,7 +617,10 @@ export default function SearchGallery({
             </div>
             <button
               type="button"
-              onClick={() => setSortBy("likes")}
+              onClick={() => {
+                setSortBy("likes");
+                resetVisibleItems();
+              }}
               className={`px-3 sm:px-4 py-2 sm:py-2.5 text-sm rounded-lg font-medium transition-all flex items-center gap-1 sm:gap-2 ${
                 sortBy === "likes"
                   ? "bg-red-600 text-white shadow-lg "
@@ -438,6 +635,7 @@ export default function SearchGallery({
               onClick={() => {
                 setSortBy("random");
                 setRandomSeed(Math.random());
+                resetVisibleItems();
               }}
               className={`px-3 sm:px-4 py-2 sm:py-2.5 text-sm rounded-lg font-medium transition-all flex items-center gap-1 sm:gap-2 ${
                 sortBy === "random"
@@ -453,98 +651,104 @@ export default function SearchGallery({
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
-        {sortedMedia.map((item) => {
-          const url = presignedUrls[item.id];
-          const isSelected = selectedItems.has(item.id);
-          const isVideo = item.mimeType.startsWith("video/");
-          const _event = item.event;
-          return (
-            <div
-              key={item.id}
-              className="relative aspect-square bg-zinc-800 rounded-lg overflow-hidden border border-zinc-800 hover:border-zinc-700 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl group"
-            >
-              <button
-                type="button"
-                className="w-full h-full"
-                onClick={() => {
-                  if (selectionMode) {
-                    toggleSelection(item.id);
-                  } else {
-                    updateUrl(item.id);
-                  }
-                }}
-                aria-label={`View ${item.filename}`}
+        {sortedMedia
+          .slice(0, Math.min(visibleCount, sortedMedia.length))
+          .map((item) => {
+            const url = presignedUrls[item.id];
+            const isSelected = selectedItems.has(item.id);
+            const isVideo = item.mimeType.startsWith("video/");
+            const _event = item.event;
+            return (
+              <div
+                key={item.id}
+                className="relative aspect-square bg-zinc-800 rounded-lg overflow-hidden border border-zinc-800 hover:border-zinc-700 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl group"
               >
-                {!url ? (
-                  <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
-                    <HiPhoto className="w-12 h-12 text-zinc-600 animate-pulse" />
-                  </div>
-                ) : (
-                  <img
+                <button
+                  type="button"
+                  className="w-full h-full"
+                  onClick={() => {
+                    if (selectionMode) {
+                      toggleSelection(item.id);
+                    } else {
+                      updateUrl(item.id);
+                      prefetchAdjacentMedia(item);
+                    }
+                  }}
+                  aria-label={`View ${item.filename}`}
+                >
+                  <LazySearchGalleryImage
                     src={url}
                     alt={item.filename}
-                    className="absolute inset-0 w-full h-full object-cover"
+                    onVisible={() => queueThumbnailLoad(item)}
                   />
-                )}
 
-                {isVideo && url && <VideoIndicator size="lg" />}
+                  {isVideo && url && <VideoIndicator size="lg" />}
 
-                {sortBy === "date" && (
-                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 backdrop-blur-sm rounded-full text-xs text-white flex items-center gap-1">
-                    <HiClock className="w-3 h-3" />
-                    <span>
-                      {new Date(
-                        (
-                          item.exifData as {
-                            DateTimeOriginal?: string;
-                            dateTimeOriginal?: string;
-                          }
-                        )?.DateTimeOriginal ||
+                  {sortBy === "date" && (
+                    <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 backdrop-blur-sm rounded-full text-xs text-white flex items-center gap-1">
+                      <HiClock className="w-3 h-3" />
+                      <span>
+                        {new Date(
                           (
                             item.exifData as {
                               DateTimeOriginal?: string;
                               dateTimeOriginal?: string;
                             }
-                          )?.dateTimeOriginal ||
-                          item.uploadedAt,
-                      ).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "2-digit",
-                        day: "2-digit",
-                      })}
-                    </span>
-                  </div>
-                )}
-                {sortBy === "likes" && (
-                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 backdrop-blur-sm rounded-full text-xs text-white flex items-center gap-1">
-                    <HiHeart className="w-3 h-3" />
-                    <span>{item.likeCount || 0}</span>
-                  </div>
-                )}
-              </button>
+                          )?.DateTimeOriginal ||
+                            (
+                              item.exifData as {
+                                DateTimeOriginal?: string;
+                                dateTimeOriginal?: string;
+                              }
+                            )?.dateTimeOriginal ||
+                            item.uploadedAt,
+                        ).toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "2-digit",
+                          day: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                  )}
+                  {sortBy === "likes" && (
+                    <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 backdrop-blur-sm rounded-full text-xs text-white flex items-center gap-1">
+                      <HiHeart className="w-3 h-3" />
+                      <span>{item.likeCount || 0}</span>
+                    </div>
+                  )}
+                </button>
 
-              {selectionMode && (
-                <div className="absolute top-2 left-2 z-10">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleSelection(item.id);
-                    }}
-                    className={`w-8 h-8 rounded-lg backdrop-blur-sm border-2 flex items-center justify-center transition-all hover:bg-zinc-800 ${
-                      isSelected
-                        ? "bg-red-600 border-red-600"
-                        : "bg-zinc-900/80 border-white"
-                    }`}
-                  >
-                    {isSelected && <HiCheck className="w-5 h-5 text-white" />}
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
+                {selectionMode && (
+                  <div className="absolute top-2 left-2 z-10">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSelection(item.id);
+                      }}
+                      className={`w-8 h-8 rounded-lg backdrop-blur-sm border-2 flex items-center justify-center transition-all hover:bg-zinc-800 ${
+                        isSelected
+                          ? "bg-red-600 border-red-600"
+                          : "bg-zinc-900/80 border-white"
+                      }`}
+                    >
+                      {isSelected && <HiCheck className="w-5 h-5 text-white" />}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
       </div>
+
+      {visibleCount < sortedMedia.length && (
+        <div
+          ref={loadMoreRef}
+          className="flex h-24 items-center justify-center text-sm text-zinc-500"
+        >
+          Loading more photos...
+        </div>
+      )}
 
       {selectedMedia && (
         <PhotoDetailModal
@@ -583,6 +787,7 @@ export default function SearchGallery({
             if (currentIndex < sortedMedia.length - 1) {
               const nextMedia = sortedMedia[currentIndex + 1];
               updateUrl(nextMedia.id);
+              prefetchAdjacentMedia(nextMedia);
             }
           }}
           onPrevious={() => {
@@ -592,6 +797,7 @@ export default function SearchGallery({
             if (currentIndex > 0) {
               const prevMedia = sortedMedia[currentIndex - 1];
               updateUrl(prevMedia.id);
+              prefetchAdjacentMedia(prevMedia);
             }
           }}
           hasNext={

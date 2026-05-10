@@ -36,6 +36,10 @@ export async function GET(
           headers: {
             "Content-Type": "image/jpeg",
             "Cache-Control": "public, max-age=31536000, immutable",
+            "CDN-Cache-Control":
+              "public, max-age=31536000, stale-while-revalidate=604800",
+            "Cloudflare-CDN-Cache-Control":
+              "public, max-age=31536000, stale-while-revalidate=604800",
           },
         });
       } catch (e) {
@@ -62,7 +66,24 @@ export async function GET(
     if (s3Response.ContentLength) {
       headers.set("Content-Length", String(s3Response.ContentLength));
     }
-    headers.set("Cache-Control", "public, max-age=3600, s-maxage=31536000");
+    if (s3Response.ETag) {
+      headers.set("ETag", s3Response.ETag);
+    }
+    if (s3Response.LastModified) {
+      headers.set("Last-Modified", s3Response.LastModified.toUTCString());
+    }
+    headers.set(
+      "Cache-Control",
+      "public, max-age=86400, stale-while-revalidate=604800",
+    );
+    headers.set(
+      "CDN-Cache-Control",
+      "public, max-age=31536000, stale-while-revalidate=604800",
+    );
+    headers.set(
+      "Cloudflare-CDN-Cache-Control",
+      "public, max-age=31536000, stale-while-revalidate=604800",
+    );
     headers.set("Content-Disposition", `inline; filename="${media.filename}"`);
     return new NextResponse(s3Response.Body as ReadableStream, {
       status: 200,

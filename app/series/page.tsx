@@ -1,11 +1,11 @@
-import { eq, sql } from "drizzle-orm";
+import { count, desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { HiFolder } from "react-icons/hi2";
 import SeriesCard from "@/components/series/SeriesCard";
 import Hero from "@/components/ui/Hero";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { series as seriesTable } from "@/lib/db/schema";
+import { media, series as seriesTable } from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 import { can, getUserContext } from "@/lib/policy";
 export default async function SeriesPage() {
@@ -16,15 +16,7 @@ export default async function SeriesPage() {
     const allSeries = await db.query.series.findMany({
       orderBy: (series, { desc }) => [desc(series.createdAt)],
       with: {
-        events: {
-          with: {
-            media: {
-              columns: {
-                id: true,
-              },
-            },
-          },
-        },
+        events: true,
       },
     });
     series = (
@@ -42,15 +34,7 @@ export default async function SeriesPage() {
       where: eq(seriesTable.visibility, "public"),
       orderBy: (series, { desc }) => [desc(series.createdAt)],
       with: {
-        events: {
-          with: {
-            media: {
-              columns: {
-                id: true,
-              },
-            },
-          },
-        },
+        events: true,
       },
     });
   }
@@ -61,12 +45,23 @@ export default async function SeriesPage() {
     }
   }
   const eventIds = series.flatMap((s) => s.events.map((e) => e.id));
+  const mediaCounts =
+    eventIds.length > 0
+      ? await db
+          .select({ eventId: media.eventId, count: count() })
+          .from(media)
+          .where(inArray(media.eventId, eventIds))
+          .groupBy(media.eventId)
+      : [];
+  const mediaCountByEventId = new Map(
+    mediaCounts.map((item) => [item.eventId, item.count]),
+  );
   let heroImages: string[] = [];
   if (eventIds.length > 0) {
     const randomMedia = await db.query.media.findMany({
-      where: (media, { inArray }) => inArray(media.eventId, eventIds),
+      where: inArray(media.eventId, eventIds),
       limit: 20,
-      orderBy: sql`RANDOM()`,
+      orderBy: [desc(media.uploadedAt)],
     });
     heroImages = randomMedia
       .map((m) => {
@@ -115,7 +110,8 @@ export default async function SeriesPage() {
                   bannerUrl: seriesBannerUrls.get(s.id),
                   eventCount: s.events.length,
                   totalPhotos: s.events.reduce(
-                    (total, event) => total + (event.media?.length || 0),
+                    (total, event) =>
+                      total + (mediaCountByEventId.get(event.id) ?? 0),
                     0,
                   ),
                 }}

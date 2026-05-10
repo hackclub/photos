@@ -113,6 +113,9 @@ export default function FeedItem({
                 <img
                   src={imageUrl}
                   alt={item.media.filename}
+                  loading={index < 6 ? "eager" : "lazy"}
+                  decoding="async"
+                  fetchPriority={index < 3 ? "high" : "low"}
                   className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover/media:scale-105"
                 />
                 {isVideo && <VideoIndicator size="lg" />}

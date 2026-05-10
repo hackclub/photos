@@ -1,4 +1,4 @@
-import { count, eq, sql } from "drizzle-orm";
+import { count, desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { HiCalendar } from "react-icons/hi2";
 import EventCard from "@/components/events/EventCard";
@@ -42,42 +42,46 @@ export default async function EventsPage() {
       participants: number;
     }
   >();
-  await Promise.all(
-    events.map(async (event) => {
-      if (event.bannerS3Key) {
-        eventBannerUrls.set(
-          event.id,
-          getAssetProxyUrl("event-banner", event.id),
-        );
-      }
-      try {
-        const [mediaCount] = await db
-          .select({ count: count() })
-          .from(media)
-          .where(eq(media.eventId, event.id));
-        const [participantCount] = await db
-          .select({ count: count() })
-          .from(eventParticipants)
-          .where(eq(eventParticipants.eventId, event.id));
-        eventCounts.set(event.id, {
-          media: mediaCount.count,
-          participants: participantCount.count,
-        });
-      } catch (error) {
-        console.error(`Error fetching counts for event ${event.id}:`, error);
-        eventCounts.set(event.id, { media: 0, participants: 0 });
-      }
-    }),
-  );
-  const randomMedia = await db.query.media.findMany({
-    where: (media, { inArray }) =>
-      inArray(
-        media.eventId,
-        events.map((e) => e.id),
-      ),
-    limit: 20,
-    orderBy: sql`RANDOM()`,
-  });
+  const eventIds = events.map((event) => event.id);
+  for (const event of events) {
+    if (event.bannerS3Key) {
+      eventBannerUrls.set(event.id, getAssetProxyUrl("event-banner", event.id));
+    }
+  }
+  if (eventIds.length > 0) {
+    const [mediaCounts, participantCounts] = await Promise.all([
+      db
+        .select({ eventId: media.eventId, count: count() })
+        .from(media)
+        .where(inArray(media.eventId, eventIds))
+        .groupBy(media.eventId),
+      db
+        .select({ eventId: eventParticipants.eventId, count: count() })
+        .from(eventParticipants)
+        .where(inArray(eventParticipants.eventId, eventIds))
+        .groupBy(eventParticipants.eventId),
+    ]);
+    const mediaCountMap = new Map(
+      mediaCounts.map((item) => [item.eventId, item.count]),
+    );
+    const participantCountMap = new Map(
+      participantCounts.map((item) => [item.eventId, item.count]),
+    );
+    for (const id of eventIds) {
+      eventCounts.set(id, {
+        media: mediaCountMap.get(id) ?? 0,
+        participants: participantCountMap.get(id) ?? 0,
+      });
+    }
+  }
+  const randomMedia =
+    eventIds.length > 0
+      ? await db.query.media.findMany({
+          where: inArray(media.eventId, eventIds),
+          limit: 20,
+          orderBy: [desc(media.uploadedAt)],
+        })
+      : [];
   const heroImages = randomMedia
     .map((m) => {
       try {

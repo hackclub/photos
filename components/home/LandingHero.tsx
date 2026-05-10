@@ -1,7 +1,6 @@
 "use client";
 import { Anton } from "next/font/google";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { twMerge } from "tailwind-merge";
 
 const heroFont = Anton({
@@ -20,24 +19,18 @@ export default function LandingHero({
   subtitle,
   actions,
 }: LandingHeroProps) {
-  const [_mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-  const row1 = [...images].sort(() => Math.random() - 0.5);
-  const row2 = [...images].sort(() => Math.random() - 0.5);
-  const row3 = [...images].sort(() => Math.random() - 0.5);
-  const prepareRow = (imgs: string[]) => {
-    if (imgs.length === 0) return [];
-    let displayImages = [...imgs];
-    while (displayImages.length < 10) {
-      displayImages = [...displayImages, ...imgs];
-    }
-    return [...displayImages, ...displayImages, ...displayImages];
+  const baseImages = images.slice(0, 12);
+  const prepareRow = (offset: number) => {
+    if (baseImages.length === 0) return [];
+    const rowImages = Array.from(
+      { length: Math.min(baseImages.length, 6) },
+      (_, i) => baseImages[(i + offset) % baseImages.length],
+    );
+    return [...rowImages, ...rowImages];
   };
-  const displayRow1 = prepareRow(row1);
-  const displayRow2 = prepareRow(row2);
-  const displayRow3 = prepareRow(row3);
+  const displayRow1 = prepareRow(0);
+  const displayRow2 = prepareRow(4);
+  const displayRow3 = prepareRow(8);
   return (
     <div className="relative min-h-[60vh] flex flex-col justify-center overflow-hidden bg-black">
       <div className="absolute inset-0 z-0 opacity-60 select-none pointer-events-none">
@@ -58,6 +51,9 @@ export default function LandingHero({
                   <img
                     src={src}
                     alt=""
+                    loading={i < 3 ? "eager" : "lazy"}
+                    decoding="async"
+                    fetchPriority={i < 2 ? "high" : "low"}
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                 </div>
@@ -78,6 +74,9 @@ export default function LandingHero({
                   <img
                     src={src}
                     alt=""
+                    loading={i < 2 ? "eager" : "lazy"}
+                    decoding="async"
+                    fetchPriority="low"
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                 </div>
@@ -98,6 +97,9 @@ export default function LandingHero({
                   <img
                     src={src}
                     alt=""
+                    loading="lazy"
+                    decoding="async"
+                    fetchPriority="low"
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                 </div>

@@ -1,4 +1,4 @@
-import { and, desc, eq, like, not, sql } from "drizzle-orm";
+import { and, desc, eq, like, not } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { unauthorizedResponse, validateApiKey } from "@/lib/auth-api";
 import { APP_URL } from "@/lib/constants";
@@ -44,9 +44,10 @@ export async function GET(req: NextRequest) {
       .from(media)
       .innerJoin(events, eq(media.eventId, events.id))
       .where(and(...conditions));
-    const photos = await (isRandom
-      ? baseQuery.orderBy(sql`RANDOM()`).limit(limit)
-      : baseQuery.orderBy(desc(media.uploadedAt)).limit(limit).offset(offset));
+    const photos = await baseQuery
+      .orderBy(desc(media.uploadedAt))
+      .limit(limit)
+      .offset(isRandom ? 0 : offset);
     const photosWithUrls = photos.map((photo) => {
       const baseUrl = `${APP_URL}/api/v1/download/${photo.id}`;
       return {

@@ -1,14 +1,18 @@
 "use client";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { HiArrowUp } from "react-icons/hi2";
 import { deleteMedia } from "@/app/actions/media";
-import PhotoDetailModal from "../media/PhotoDetailModal";
 import ConfirmModal from "../ui/ConfirmModal";
 import LoadingSpinner from "../ui/LoadingSpinner";
 import FeedEmptyState from "./FeedEmptyState";
 import FeedItem from "./FeedItem";
 import FeedLiveIndicator from "./FeedLiveIndicator";
 import type { FeedItemType } from "./types";
+
+const PhotoDetailModal = dynamic(() => import("../media/PhotoDetailModal"), {
+  ssr: false,
+});
 
 type ActivityFeedProps = {
   fetchData: (limit: number, offset: number) => Promise<any>;

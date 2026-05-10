@@ -98,8 +98,21 @@ export async function GET(
   if (s3Response.ContentLength) {
     headers.set("Content-Length", String(s3Response.ContentLength));
   }
+  if (s3Response.ETag) {
+    headers.set("ETag", s3Response.ETag);
+  }
+  if (s3Response.LastModified) {
+    headers.set("Last-Modified", s3Response.LastModified.toUTCString());
+  }
   if (mediaItem.event.visibility === "public") {
-    headers.set("Cache-Control", "public, max-age=3600, s-maxage=31536000");
+    const browserCache =
+      variant === "thumbnail"
+        ? "public, max-age=31536000, immutable"
+        : "public, max-age=86400, stale-while-revalidate=604800";
+    const cdnCache = "public, max-age=31536000, stale-while-revalidate=604800";
+    headers.set("Cache-Control", browserCache);
+    headers.set("CDN-Cache-Control", cdnCache);
+    headers.set("Cloudflare-CDN-Cache-Control", cdnCache);
   } else {
     headers.set("Cache-Control", "private, max-age=3600");
   }

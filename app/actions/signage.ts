@@ -42,7 +42,7 @@ export async function getRandomMedia(filter: SignageFilter = {}, limit = 50) {
     ];
     const randomMedia = await db.query.media.findMany({
       where: and(...conditions),
-      orderBy: sql`RANDOM()`,
+      orderBy: [desc(media.uploadedAt)],
       limit: limit,
       with: {
         event: true,
