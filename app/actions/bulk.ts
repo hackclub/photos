@@ -12,27 +12,27 @@ export async function getBulkMediaUrls(s3Keys?: string[], mediaIds?: string[]) {
   try {
     const urls: Record<string, string> = {};
     if (s3Keys && s3Keys.length > 0) {
-      await Promise.all(
-        s3Keys.map(async (key) => {
-          try {
-            const mediaItem = await db.query.media.findFirst({
-              where: eq(media.thumbnailS3Key, key),
-            });
-            if (mediaItem) {
-              urls[key] = getMediaProxyUrl(mediaItem.id, "thumbnail");
-            } else {
-              const match = key.match(/^media\/([^/]+)\/thumbnail\.jpg$/);
-              if (match?.[1]) {
-                urls[key] = getMediaProxyUrl(match[1], "thumbnail");
-              } else {
-                console.warn(`Could not resolve media ID for key: ${key}`);
-              }
-            }
-          } catch (error) {
-            console.error(`Failed to sign URL for key ${key}:`, error);
-          }
-        }),
+      const uniqueKeys = Array.from(new Set(s3Keys));
+      const mediaItems = await db.query.media.findMany({
+        where: inArray(media.thumbnailS3Key, uniqueKeys),
+        columns: {
+          id: true,
+          thumbnailS3Key: true,
+        },
+      });
+      const mediaByThumbnailKey = new Map(
+        mediaItems
+          .filter((item) => item.thumbnailS3Key)
+          .map((item) => [item.thumbnailS3Key!, item.id]),
       );
+      for (const key of uniqueKeys) {
+        const mediaId =
+          mediaByThumbnailKey.get(key) ??
+          key.match(/^media\/([^/]+)\/thumbnail\.jpg$/)?.[1];
+        if (mediaId) {
+          urls[key] = getMediaProxyUrl(mediaId, "thumbnail");
+        }
+      }
     }
     if (mediaIds && mediaIds.length > 0) {
       const session = await getSession();

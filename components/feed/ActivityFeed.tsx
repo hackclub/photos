@@ -34,6 +34,7 @@ export default function ActivityFeed({
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const itemsLengthRef = useRef(0);
+  const itemsRef = useRef<FeedItemType[]>([]);
   const isFetchingRef = useRef(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -45,7 +46,8 @@ export default function ActivityFeed({
   const [mediaToDelete, setMediaToDelete] = useState<string | null>(null);
   useEffect(() => {
     itemsLengthRef.current = items.length;
-  }, [items.length]);
+    itemsRef.current = items;
+  }, [items]);
   const fetchFeed = useCallback(
     async (append = false) => {
       if (isFetchingRef.current) return;
@@ -229,8 +231,9 @@ export default function ActivityFeed({
         if (!result.success) return;
         const data = result;
         const newItems = data.items || [];
-        if (newItems.length > 0 && items.length > 0) {
-          const existingIds = new Set(items.map((item) => item.id));
+        const currentItems = itemsRef.current;
+        if (newItems.length > 0 && currentItems.length > 0) {
+          const existingIds = new Set(currentItems.map((item) => item.id));
           const uniqueNewItems = newItems.filter(
             (item: FeedItemType) => !existingIds.has(item.id),
           );
@@ -267,7 +270,7 @@ export default function ActivityFeed({
         clearInterval(pollIntervalRef.current);
       }
     };
-  }, [fetchData, pollInterval, items]);
+  }, [fetchData, pollInterval]);
   useEffect(() => {
     if (!loadMoreRef.current || !hasMore) return;
     observerRef.current = new IntersectionObserver(

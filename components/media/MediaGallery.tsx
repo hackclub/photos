@@ -25,6 +25,25 @@ const INITIAL_VISIBLE_ITEMS = 60;
 const VISIBLE_ITEMS_INCREMENT = 60;
 const THUMBNAIL_BATCH_SIZE = 24;
 
+let galleryImageObserver: IntersectionObserver | null = null;
+
+function getGalleryImageObserver() {
+  if (typeof window === "undefined") return null;
+  if (galleryImageObserver) return galleryImageObserver;
+  galleryImageObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const element = entry.target as HTMLElement;
+        galleryImageObserver?.unobserve(element);
+        element.dispatchEvent(new CustomEvent("gallery-image-visible"));
+      }
+    },
+    { rootMargin: "900px 0px" },
+  );
+  return galleryImageObserver;
+}
+
 function LazyGalleryImage({
   src,
   alt,
@@ -41,19 +60,21 @@ function LazyGalleryImage({
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
+    const observer = getGalleryImageObserver();
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
-        setIsVisible(true);
-        onVisible();
-        observer.disconnect();
-      },
-      { rootMargin: "900px 0px" },
-    );
+    const handleVisible = () => {
+      setIsVisible(true);
+      onVisible();
+    };
 
-    observer.observe(element);
-    return () => observer.disconnect();
+    element.addEventListener("gallery-image-visible", handleVisible, {
+      once: true,
+    });
+    observer?.observe(element);
+    return () => {
+      element.removeEventListener("gallery-image-visible", handleVisible);
+      observer?.unobserve(element);
+    };
   }, [onVisible]);
 
   return (
@@ -69,6 +90,7 @@ function LazyGalleryImage({
           alt={alt}
           decoding="async"
           loading="eager"
+          fetchPriority="low"
           key={src}
           className={`h-full w-full object-cover transition-opacity duration-700 ease-out ${
             isLoaded ? "opacity-100" : "opacity-0"
@@ -176,7 +198,7 @@ export default function MediaGallery({
     queuedThumbnailIdsRef.current.add(item.id);
     if (thumbnailFlushTimerRef.current) return;
 
-    thumbnailFlushTimerRef.current = setTimeout(() => {
+    const flush = () => {
       thumbnailFlushTimerRef.current = null;
       const ids = Array.from(queuedThumbnailIdsRef.current).slice(
         0,
@@ -188,7 +210,13 @@ export default function MediaGallery({
       const idSet = new Set(ids);
       const items = sortedMedia.filter((mediaItem) => idSet.has(mediaItem.id));
       void loadThumbnailUrls(items);
-    }, 80);
+
+      if (queuedThumbnailIdsRef.current.size > 0) {
+        thumbnailFlushTimerRef.current = setTimeout(flush, 120);
+      }
+    };
+
+    thumbnailFlushTimerRef.current = setTimeout(flush, 80);
   };
 
   const prefetchAdjacentMedia = (item: MediaItem) => {

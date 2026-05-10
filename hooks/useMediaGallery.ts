@@ -23,6 +23,7 @@ export function useMediaGalleryData(
   >(null);
   const [fullSizeUrl, setFullSizeUrl] = useState<string | null>(null);
   const fullSizeUrlCacheRef = useRef<Record<string, string>>({});
+  const thumbnailUrlCacheRef = useRef<Record<string, string>>({});
   const fullSizeRequestSeqRef = useRef(0);
   const router = useRouter();
   const pathname = usePathname();
@@ -102,33 +103,31 @@ export function useMediaGalleryData(
     }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
-  const loadThumbnailUrls = useCallback(
-    async (items: MediaItem[]) => {
-      const unloadedItems = items.filter(
-        (item) => item.thumbnailS3Key && !presignedUrls[item.id],
-      );
-      if (unloadedItems.length === 0) return;
+  const loadThumbnailUrls = useCallback(async (items: MediaItem[]) => {
+    const unloadedItems = items.filter(
+      (item) => item.thumbnailS3Key && !thumbnailUrlCacheRef.current[item.id],
+    );
+    if (unloadedItems.length === 0) return;
 
-      try {
-        const data = await getBulkMediaUrls(
-          unloadedItems.map((item) => item.thumbnailS3Key!),
-        );
-        const newUrls: Record<string, string> = {};
-        const urls = data.urls ?? {};
-        unloadedItems.forEach((item) => {
-          if (item.thumbnailS3Key && urls[item.thumbnailS3Key]) {
-            newUrls[item.id] = urls[item.thumbnailS3Key];
-          }
-        });
-        if (Object.keys(newUrls).length > 0) {
-          setPresignedUrls((prev) => ({ ...prev, ...newUrls }));
+    try {
+      const data = await getBulkMediaUrls(
+        unloadedItems.map((item) => item.thumbnailS3Key!),
+      );
+      const newUrls: Record<string, string> = {};
+      const urls = data.urls ?? {};
+      unloadedItems.forEach((item) => {
+        if (item.thumbnailS3Key && urls[item.thumbnailS3Key]) {
+          newUrls[item.id] = urls[item.thumbnailS3Key];
         }
-      } catch (error) {
-        console.error("Failed to load thumbnails:", error);
+      });
+      if (Object.keys(newUrls).length > 0) {
+        Object.assign(thumbnailUrlCacheRef.current, newUrls);
+        setPresignedUrls((prev) => ({ ...prev, ...newUrls }));
       }
-    },
-    [presignedUrls],
-  );
+    } catch (error) {
+      console.error("Failed to load thumbnails:", error);
+    }
+  }, []);
 
   useEffect(() => {
     setPresignedUrls((prev) => {
