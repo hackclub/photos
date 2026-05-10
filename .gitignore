@@ -28,7 +28,6 @@ out/
 # package manager artifacts (choose one; repo uses npm via Dockerfile)
 yarn.lock
 pnpm-lock.yaml
-bun.lock
 
 mobile
 
