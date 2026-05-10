@@ -316,27 +316,37 @@ async function checkCommentPermission(
   }
   return false;
 }
+import { unstable_cache } from "next/cache";
+
+export const getCachedUserContext = unstable_cache(
+  async (userId: string) => {
+    return await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: {
+        id: true,
+        slackId: true,
+        isGlobalAdmin: true,
+        isBanned: true,
+      },
+      with: {
+        seriesAdminRoles: {
+          columns: { seriesId: true },
+        },
+        eventAdminRoles: {
+          columns: { eventId: true },
+        },
+      },
+    });
+  },
+  ["user-context"],
+  { revalidate: 3600, tags: ["user"] }
+);
+
 export async function getUserContext(
   userId: string | undefined,
 ): Promise<UserContext | null> {
   if (!userId) return null;
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-    columns: {
-      id: true,
-      slackId: true,
-      isGlobalAdmin: true,
-      isBanned: true,
-    },
-    with: {
-      seriesAdminRoles: {
-        columns: { seriesId: true },
-      },
-      eventAdminRoles: {
-        columns: { eventId: true },
-      },
-    },
-  });
+  const user = await getCachedUserContext(userId);
   if (!user) return null;
   return {
     id: user.id,

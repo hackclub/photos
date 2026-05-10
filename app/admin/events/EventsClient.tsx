@@ -202,8 +202,7 @@ export default function EventsClient({ events }: EventsClientProps) {
               : "Create your first event to start collecting photos from Hack Club gatherings"}
           </p>
           {!(searchQuery || visibilityFilter !== "all") && (
-            <Link
-              href="/admin/events/new"
+            <Link prefetch={false} href="/admin/events/new"
               className="inline-flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all"
             >
               <HiPlus className="text-xl" />

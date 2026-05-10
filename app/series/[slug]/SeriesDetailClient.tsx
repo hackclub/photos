@@ -94,8 +94,7 @@ export default function SeriesDetailClient({
 
         <div className="absolute inset-0 flex flex-col justify-end">
           <div className="px-8 pb-8">
-            <Link
-              href="/series"
+            <Link prefetch={false} href="/series"
               className="inline-flex items-center gap-2 text-white/80 hover:text-white mb-6 transition-colors"
             >
               <HiArrowLeft className="w-5 h-5" />
@@ -114,8 +113,7 @@ export default function SeriesDetailClient({
 
             {canEdit && (
               <div className="mb-6">
-                <Link
-                  href={`/admin/series/${series.id}/edit`}
+                <Link prefetch={false} href={`/admin/series/${series.id}/edit`}
                   className="inline-flex items-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold rounded-lg transition-all border border-zinc-700"
                 >
                   <HiPencil className="w-5 h-5" />

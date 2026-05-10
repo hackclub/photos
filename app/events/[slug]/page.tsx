@@ -212,8 +212,7 @@ export default async function EventPage({
         <div className="relative">
           <div className="px-4 sm:px-8 pt-6 sm:pt-8 pb-6 sm:pb-8">
             <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <Link
-                href="/events"
+              <Link prefetch={false} href="/events"
                 className="inline-flex items-center gap-2 text-white/80 hover:text-white transition-colors"
               >
                 <HiArrowLeft className="w-5 h-5" />
@@ -222,8 +221,7 @@ export default async function EventPage({
               </Link>
 
               {event.series && (
-                <Link
-                  href={`/series/${event.series.slug}`}
+                <Link prefetch={false} href={`/series/${event.series.slug}`}
                   className="inline-block"
                 >
                   <div className="inline-flex items-center gap-2 px-4 py-2 bg-red-600/20 backdrop-blur-sm border border-red-600/30 rounded-lg text-red-400 hover:bg-red-700/30 transition-all">
@@ -264,8 +262,7 @@ export default async function EventPage({
                 event.locationCountry ||
                 event.location ||
                 (event.latitude && event.longitude)) && (
-                <Link
-                  href="/map"
+                <Link prefetch={false} href="/map"
                   className="flex items-center gap-2 text-zinc-300 hover:text-white transition-colors"
                 >
                   <HiMapPin className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -298,8 +295,7 @@ export default async function EventPage({
             {session ? (
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
                 {canEdit && (
-                  <Link
-                    href={`/admin/events/${event.id}/edit`}
+                  <Link prefetch={false} href={`/admin/events/${event.id}/edit`}
                     className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold rounded-lg transition-all border border-zinc-700"
                   >
                     <HiPencilSquare className="w-5 h-5" />
@@ -323,8 +319,7 @@ export default async function EventPage({
                 )}
               </div>
             ) : (
-              <Link
-                href="/auth/signin"
+              <Link prefetch={false} href="/auth/signin"
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all shadow-lg w-full sm:w-auto"
               >
                 <HiUserPlus className="w-5 h-5" />
@@ -381,9 +376,21 @@ export default async function EventPage({
             </div>
             <MediaGallery
               media={mediaWithPermissions.map((m) => ({
-                ...m,
-                uploadedBy: toPublicUser(m.uploadedBy),
+                id: m.id,
+                filename: m.filename,
+                mimeType: m.mimeType,
+                width: m.width,
+                height: m.height,
                 exifData: m.exifData as Record<string, unknown> | null,
+                latitude: m.latitude,
+                longitude: m.longitude,
+                uploadedAt: m.uploadedAt,
+                caption: m.caption,
+                canDelete: (m as any).canDelete,
+                s3Url: m.s3Url,
+                s3Key: m.s3Key,
+                thumbnailS3Key: m.thumbnailS3Key,
+                uploadedBy: toPublicUser(m.uploadedBy),
                 likeCount: likeCountByMediaId.get(m.id) ?? 0,
               }))}
               currentUserId={session?.id}

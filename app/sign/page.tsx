@@ -8,8 +8,7 @@ export default async function SignPage() {
       </h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl w-full">
-        <Link
-          href="/sign/random"
+        <Link prefetch={false} href="/sign/random"
           className="group relative overflow-hidden rounded-3xl bg-zinc-900 border border-zinc-800 p-8 hover:bg-zinc-800 transition-all duration-300 flex flex-col items-center text-center aspect-square justify-center"
         >
           <div className="mb-6 p-6 rounded-full bg-red-600/10 text-red-600 group-hover:scale-110 transition-transform duration-300">
@@ -21,8 +20,7 @@ export default async function SignPage() {
           </p>
         </Link>
 
-        <Link
-          href="/sign/feed"
+        <Link prefetch={false} href="/sign/feed"
           className="group relative overflow-hidden rounded-3xl bg-zinc-900 border border-zinc-800 p-8 hover:bg-zinc-800 transition-all duration-300 flex flex-col items-center text-center aspect-square justify-center"
         >
           <div className="mb-6 p-6 rounded-full bg-red-600/10 text-red-600 group-hover:scale-110 transition-transform duration-300">
@@ -36,7 +34,7 @@ export default async function SignPage() {
       </div>
 
       <div className="mt-12 text-zinc-500">
-        <Link href="/" className="hover:text-white transition-colors">
+        <Link prefetch={false} href="/" className="hover:text-white transition-colors">
           &larr; Back to Dashboard
         </Link>
       </div>

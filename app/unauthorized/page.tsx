@@ -22,8 +22,7 @@ export default function UnauthorizedPage() {
           (This is admin-only territory, offer snacks to negotiate!)
         </p>
 
-        <Link
-          href="/"
+        <Link prefetch={false} href="/"
           className="inline-flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
         >
           <HiHome className="w-5 h-5" />

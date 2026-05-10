@@ -108,8 +108,7 @@ export default async function EventsPage() {
         actions={
           (ctx?.isGlobalAdmin ||
             (ctx?.seriesAdmins && ctx.seriesAdmins.length > 0)) && (
-            <Link
-              href="/admin/events"
+            <Link prefetch={false} href="/admin/events"
               className="inline-block px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all shadow-lg hover:scale-105"
             >
               + Create Event
@@ -155,8 +154,7 @@ export default async function EventsPage() {
             </p>
             {(ctx?.isGlobalAdmin ||
               (ctx?.seriesAdmins && ctx.seriesAdmins.length > 0)) && (
-              <Link
-                href="/admin/events"
+              <Link prefetch={false} href="/admin/events"
                 className="inline-block px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all shadow-lg "
               >
                 + Create First Event

@@ -89,8 +89,7 @@ export default async function SeriesPage() {
         images={heroImages}
         actions={
           ctx?.isGlobalAdmin && (
-            <Link
-              href="/admin/series"
+            <Link prefetch={false} href="/admin/series"
               className="inline-block px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all shadow-lg hover:scale-105"
             >
               + Create Series
@@ -135,8 +134,7 @@ export default async function SeriesPage() {
                 : "No public series available at this time."}
             </p>
             {ctx?.isGlobalAdmin && (
-              <Link
-                href="/admin/series"
+              <Link prefetch={false} href="/admin/series"
                 className="inline-block px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all shadow-lg "
               >
                 + Create First Series

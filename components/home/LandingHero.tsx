@@ -153,15 +153,13 @@ export default function LandingHero({
           </div>
         ) : (
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link
-              href="/auth/signin"
+            <Link prefetch={false} href="/auth/signin"
               className="group relative px-8 py-4 bg-red-600 text-white font-bold text-lg rounded-xl transition-all hover:scale-105 hover:bg-red-700 hover:shadow-[0_0_40px_-10px_rgba(220,38,38,0.5)]"
             >
               <span className="relative z-10">Join the Party</span>
             </Link>
 
-            <Link
-              href="/events"
+            <Link prefetch={false} href="/events"
               className="px-8 py-4 bg-zinc-900 text-white font-bold text-lg rounded-xl border border-zinc-800 transition-all hover:bg-zinc-800 hover:scale-105"
             >
               Explore Events

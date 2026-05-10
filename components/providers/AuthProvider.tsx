@@ -27,9 +27,15 @@ const AuthContext = createContext<AuthContextType>({
 export function useAuth() {
   return useContext(AuthContext);
 }
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [loading, setLoading] = useState(true);
+export function AuthProvider({
+  children,
+  initialSession = null,
+}: {
+  children: React.ReactNode;
+  initialSession?: SessionUser | null;
+}) {
+  const [user, setUser] = useState<SessionUser | null>(initialSession);
+  const [loading, setLoading] = useState(initialSession === undefined);
   const fetchUser = useCallback(async () => {
     try {
       const res = await fetch("/api/auth/session");

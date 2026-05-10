@@ -637,8 +637,7 @@ export default function PhotoMap() {
                         </>
                       )}
                     </p>
-                    <Link
-                      href={`/events/${photo.event.slug}?photo=${photo.id}`}
+                    <Link prefetch={false} href={`/events/${photo.event.slug}?photo=${photo.id}`}
                       className="text-[10px] sm:text-xs font-medium inline-block"
                     >
                       View in {photo.event.name} →
@@ -707,8 +706,7 @@ export default function PhotoMap() {
                       {eventPhotos.length === 1 ? "photo" : "photos"}
                     </div>
 
-                    <Link
-                      href={`/events/${event.slug}`}
+                    <Link prefetch={false} href={`/events/${event.slug}`}
                       className="text-[10px] sm:text-xs font-medium inline-block"
                     >
                       View Event →

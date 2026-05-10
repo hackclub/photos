@@ -491,8 +491,7 @@ export default function BulkCreateClient({
         <div className="max-w-[1600px] mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Link
-                href={`/series/${seriesSlug}`}
+              <Link prefetch={false} href={`/series/${seriesSlug}`}
                 className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
               >
                 <HiArrowLeft className="w-5 h-5" />

@@ -49,8 +49,7 @@ export default function GlobalError({
             <HiArrowPath className="w-5 h-5" />
             <span>Try again</span>
           </button>
-          <Link
-            href="/"
+          <Link prefetch={false} href="/"
             className="inline-flex items-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-medium rounded-lg transition-colors"
           >
             <HiHome className="w-5 h-5" />

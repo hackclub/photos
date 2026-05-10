@@ -167,9 +167,21 @@ export default async function SeriesDetailPage({
     <SeriesDetailClient
       series={seriesData}
       allMedia={allMedia.map((m) => ({
-        ...m,
-        uploadedBy: toPublicUser(m.uploadedBy),
+        id: m.id,
+        filename: m.filename,
+        mimeType: m.mimeType,
+        width: m.width,
+        height: m.height,
         exifData: m.exifData as Record<string, unknown> | null,
+        latitude: m.latitude,
+        longitude: m.longitude,
+        uploadedAt: m.uploadedAt,
+        caption: m.caption,
+        s3Url: m.s3Url,
+        s3Key: m.s3Key,
+        eventId: m.eventId,
+        thumbnailS3Key: m.thumbnailS3Key,
+        uploadedBy: toPublicUser(m.uploadedBy),
         likeCount: likeCountByMediaId.get(m.id) ?? 0,
       }))}
       photoCount={photoCount}

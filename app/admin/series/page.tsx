@@ -35,8 +35,7 @@ export default async function ManageSeriesPage() {
             title="Manage Series"
             description="Organize events into series collections"
           >
-            <Link
-              href="/admin/series/new"
+            <Link prefetch={false} href="/admin/series/new"
               className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors text-sm"
             >
               <HiPlus className="w-5 h-5" />
@@ -125,8 +124,7 @@ export default async function ManageSeriesPage() {
         title="Manage Series"
         description="Organize events into series collections"
       >
-        <Link
-          href="/admin/series/new"
+        <Link prefetch={false} href="/admin/series/new"
           className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors text-sm"
         >
           <HiPlus className="w-5 h-5" />

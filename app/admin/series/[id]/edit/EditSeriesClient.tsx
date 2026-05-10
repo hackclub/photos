@@ -224,8 +224,7 @@ export default function EditSeriesClient({
                 Update series details and settings
               </p>
             </div>
-            <Link
-              href="/admin/series"
+            <Link prefetch={false} href="/admin/series"
               className="flex items-center gap-2 px-4 py-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
             >
               <HiXMark className="w-5 h-5" />
@@ -467,15 +466,13 @@ export default function EditSeriesClient({
           </div>
 
           <div className="flex items-center justify-between">
-            <Link
-              href={`/admin/series/${series.id}/bulk-create`}
+            <Link prefetch={false} href={`/admin/series/${series.id}/bulk-create`}
               className="px-6 py-3 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors font-medium border border-zinc-700 hover:border-zinc-600"
             >
               Bulk Create Events
             </Link>
             <div className="flex items-center gap-3">
-              <Link
-                href="/admin/series"
+              <Link prefetch={false} href="/admin/series"
                 className="px-6 py-3 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors font-medium"
               >
                 Cancel

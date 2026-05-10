@@ -22,8 +22,7 @@ export default async function AccountDeletedPage() {
           :C
         </p>
 
-        <Link
-          href="/"
+        <Link prefetch={false} href="/"
           className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white text-black hover:bg-zinc-200 rounded-xl font-medium transition-colors w-full"
         >
           <HiHome className="w-5 h-5" />

@@ -125,8 +125,7 @@ export default function NewEventClient({ allowedSeries }: NewEventClientProps) {
                 Set up a new photo collection for a Hack Club event
               </p>
             </div>
-            <Link
-              href="/admin/events"
+            <Link prefetch={false} href="/admin/events"
               className="flex items-center gap-2 px-4 py-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
             >
               <HiXMark className="w-5 h-5" />
@@ -393,8 +392,7 @@ export default function NewEventClient({ allowedSeries }: NewEventClientProps) {
           </div>
 
           <div className="flex items-center justify-end gap-3">
-            <Link
-              href="/admin/events"
+            <Link prefetch={false} href="/admin/events"
               className="px-6 py-3 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors font-medium"
             >
               Cancel

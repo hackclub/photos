@@ -10,6 +10,21 @@ import { media } from "@/lib/db/schema";
 import { convertHeicToJpeg } from "@/lib/media/heic";
 import { s3Client } from "@/lib/media/s3";
 import { can } from "@/lib/policy";
+import { unstable_cache } from "next/cache";
+
+const getCachedMedia = unstable_cache(
+  async (mediaId: string) => {
+    return await db.query.media.findFirst({
+      where: eq(media.id, mediaId),
+      with: {
+        event: true,
+      },
+    });
+  },
+  ["media-lookup"],
+  { revalidate: 3600, tags: ["media"] }
+);
+
 export async function GET(
   request: NextRequest,
   {
@@ -25,12 +40,7 @@ export async function GET(
   const variant = variantPath?.[0];
   const searchParams = request.nextUrl.searchParams;
   const download = searchParams.get("download") === "true";
-  const mediaItem = await db.query.media.findFirst({
-    where: eq(media.id, mediaId),
-    with: {
-      event: true,
-    },
-  });
+  const mediaItem = await getCachedMedia(mediaId);
   if (!mediaItem) {
     return new NextResponse("Media not found", { status: 404 });
   }

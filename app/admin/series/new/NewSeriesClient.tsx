@@ -100,8 +100,7 @@ export default function NewSeriesClient() {
                 Organize related events into a series collection
               </p>
             </div>
-            <Link
-              href="/admin/series"
+            <Link prefetch={false} href="/admin/series"
               className="flex items-center gap-2 px-4 py-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
             >
               <HiXMark className="w-5 h-5" />
@@ -192,8 +191,7 @@ export default function NewSeriesClient() {
           </div>
 
           <div className="flex items-center justify-end gap-3">
-            <Link
-              href="/admin/series"
+            <Link prefetch={false} href="/admin/series"
               className="px-6 py-3 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors font-medium"
             >
               Cancel

@@ -358,8 +358,7 @@ export default function UsersClient({
                 ({ user, photoCount, storageUsed, bannedByName }) => (
                   <TableRow key={user.id}>
                     <TableCell>
-                      <Link
-                        href={`/users/${user.handle || user.id}`}
+                      <Link prefetch={false} href={`/users/${user.handle || user.id}`}
                         className="flex items-center gap-2 hover:opacity-80 transition-opacity"
                       >
                         <UserAvatar

@@ -6,6 +6,7 @@ import RybbitScript from "@/components/analytics/RybbitScript";
 import ComingSoon from "@/components/ComingSoon";
 import { comingSoon, maintenanceMode } from "@/flags";
 import { APP_URL } from "@/lib/constants";
+import { getSession } from "@/lib/auth";
 import { createOgMetadata } from "@/lib/metadata";
 import ClientLayout from "./ClientLayout";
 
@@ -26,6 +27,7 @@ export default async function RootLayout({
 }>) {
   const isMaintenanceMode = await maintenanceMode();
   const isComingSoon = await comingSoon();
+  const session = await getSession();
   if (isComingSoon) {
     return <ComingSoon />;
   }
@@ -63,7 +65,7 @@ export default async function RootLayout({
     <html lang="en" className="dark">
       <body className="min-h-screen bg-zinc-950 text-zinc-100">
         <Suspense fallback={null}>
-          <ClientLayout>{children}</ClientLayout>
+          <ClientLayout initialSession={session}>{children}</ClientLayout>
         </Suspense>
         <RybbitScript />
       </body>

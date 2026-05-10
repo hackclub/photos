@@ -231,8 +231,7 @@ export default function RandomSignagePage() {
     <div className="min-h-screen bg-black text-white p-8 flex flex-col items-center justify-center">
       <div className="max-w-md w-full space-y-8">
         <div className="flex items-center justify-between">
-          <Link
-            href="/sign"
+          <Link prefetch={false} href="/sign"
             className="text-zinc-400 hover:text-white transition-colors"
           >
             <HiArrowLeft className="w-6 h-6" />

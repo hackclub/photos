@@ -29,15 +29,13 @@ export default function NotFound() {
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Link
-            href="/"
+          <Link prefetch={false} href="/"
             className="inline-flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
           >
             <HiHome className="w-5 h-5" />
             <span>Take me home</span>
           </Link>
-          <Link
-            href="/events"
+          <Link prefetch={false} href="/events"
             className="inline-flex items-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-medium rounded-lg transition-colors"
           >
             <span>Browse events</span>

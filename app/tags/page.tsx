@@ -76,8 +76,7 @@ export default async function TagsPage() {
                 colorStyle.split(" ").find((c) => c.startsWith("text-")) ||
                 "text-blue-400";
               return (
-                <Link
-                  key={tag.id}
+                <Link prefetch={false} key={tag.id}
                   href={`/search?tag=${tag.id}`}
                   className="group relative aspect-4/3 overflow-hidden rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-zinc-600 transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-black/50"
                 >

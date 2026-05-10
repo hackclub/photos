@@ -125,6 +125,7 @@ export default function EventCard({
         <Link
           href={linkHref}
           className="block touch-manipulation focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
+          prefetch={false}
         >
           {cardImage}
         </Link>
@@ -132,7 +133,7 @@ export default function EventCard({
 
       <div className="p-4">
         <div className="flex items-start justify-between mb-2">
-          <Link href={linkHref} className="min-h-11 flex-1">
+          <Link href={linkHref} className="min-h-11 flex-1" prefetch={false}>
             <h3 className="font-semibold text-white text-lg group-hover:text-red-400 transition-colors line-clamp-1">
               {event.name}
             </h3>
@@ -246,6 +247,7 @@ export default function EventCard({
             <Link
               href={`/admin/events/${event.id}/edit`}
               className="group/btn flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-transparent px-3 py-2 text-sm font-medium text-zinc-400 transition-all hover:border-zinc-700 hover:bg-zinc-800 hover:text-white"
+              prefetch={false}
             >
               <HiPencil className="w-5 h-5 group-hover/btn:text-red-400 transition-colors" />
               Edit
@@ -253,6 +255,7 @@ export default function EventCard({
             <Link
               href={linkHref}
               className="group/btn flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-transparent px-3 py-2 text-sm font-medium text-zinc-400 transition-all hover:border-zinc-700 hover:bg-zinc-800 hover:text-white"
+              prefetch={false}
             >
               <HiEye className="w-5 h-5 group-hover/btn:text-red-400 transition-colors" />
               View

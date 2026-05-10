@@ -51,6 +51,7 @@ export default function FeedItem({
         <Link
           href={`/users/${item.user.handle || item.user.id}`}
           className="shrink-0"
+          prefetch={false}
         >
           <UserAvatar
             user={{
@@ -68,6 +69,7 @@ export default function FeedItem({
             <Link
               href={`/users/${item.user.handle || item.user.id}`}
               className="font-semibold text-white hover:text-red-400 transition-colors text-sm"
+              prefetch={false}
             >
               {item.user.name}
             </Link>
@@ -83,6 +85,7 @@ export default function FeedItem({
               <Link
                 href={`/events/${item.event.slug}`}
                 className="font-medium text-zinc-400 hover:text-zinc-300 transition-colors"
+                prefetch={false}
               >
                 {item.event.name}
               </Link>

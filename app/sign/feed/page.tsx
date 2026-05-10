@@ -56,8 +56,7 @@ export default function LiveFeedPage() {
       <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-8">
         <div className="max-w-md w-full space-y-8 text-center">
           <div className="flex items-center justify-between mb-8">
-            <Link
-              href="/sign"
+            <Link prefetch={false} href="/sign"
               className="text-zinc-400 hover:text-white transition-colors"
             >
               <HiArrowLeft className="w-6 h-6" />

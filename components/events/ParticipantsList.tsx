@@ -69,8 +69,7 @@ export default function ParticipantsList({
               ) : (
                 <div className="space-y-1">
                   {participants.map(({ user }) => (
-                    <Link
-                      key={user.id}
+                    <Link prefetch={false} key={user.id}
                       href={`/users/${user.handle || user.id}`}
                       className="flex items-center gap-3 p-3 hover:bg-zinc-800 rounded-lg transition-colors group"
                     >

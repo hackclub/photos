@@ -6,17 +6,21 @@ import Sidebar from "@/components/layout/Sidebar";
 import GlobalUploader from "@/components/media/GlobalUploader";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { UploadProvider } from "@/components/providers/UploadProvider";
+import type { SessionUser } from "@/lib/auth";
+
 export default function ClientLayout({
   children,
+  initialSession,
 }: {
   children: React.ReactNode;
+  initialSession?: SessionUser | null;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const handleCloseSidebar = useCallback(() => setSidebarOpen(false), []);
   const pathname = usePathname();
   const isSignMode = pathname?.startsWith("/sign");
   return (
-    <AuthProvider>
+    <AuthProvider initialSession={initialSession}>
       <UploadProvider>
         <div className="flex min-h-dvh overflow-x-clip">
           {!isSignMode && (

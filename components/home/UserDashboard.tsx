@@ -65,22 +65,19 @@ export default function UserDashboard({
         images={heroImages}
         actions={
           <>
-            <Link
-              href="/events"
+            <Link prefetch={false} href="/events"
               className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all shadow-lg hover:scale-105"
             >
               <HiCalendar className="w-5 h-5" />
               <span>Browse Events</span>
             </Link>
-            <Link
-              href="/my-photos"
+            <Link prefetch={false} href="/my-photos"
               className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold rounded-lg transition-all border border-zinc-700 hover:scale-105"
             >
               <HiPhoto className="w-5 h-5" />
               <span>My Photos</span>
             </Link>
-            <Link
-              href="/map"
+            <Link prefetch={false} href="/map"
               className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold rounded-lg transition-all border border-zinc-700 hover:scale-105"
             >
               <HiMapPin className="w-5 h-5" />
@@ -101,8 +98,7 @@ export default function UserDashboard({
                 Events you've joined and contributed to
               </p>
             </div>
-            <Link
-              href="/events"
+            <Link prefetch={false} href="/events"
               className="inline-flex items-center gap-2 text-red-400 hover:text-red-300 text-sm font-medium transition-colors"
             >
               <span>Browse all events</span>
@@ -146,8 +142,7 @@ export default function UserDashboard({
               <p className="text-zinc-400 mb-6 max-w-md mx-auto">
                 Browse events and join ones you'd attended to start uploading
               </p>
-              <Link
-                href="/events"
+              <Link prefetch={false} href="/events"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all"
               >
                 <HiCalendar className="w-5 h-5" />
