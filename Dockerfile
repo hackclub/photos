@@ -1,18 +1,18 @@
-FROM node:20-slim AS base
+FROM oven/bun:1.3.6 AS base
 
 FROM base AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+RUN bun run build
 
-FROM node:20-slim AS runner
+FROM oven/bun:1.3.6 AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -32,4 +32,4 @@ COPY --from=builder --chown=nextjs:nodejs /app/drizzle.config.ts ./drizzle.confi
 
 USER nextjs
 EXPOSE 3000
-CMD ["node", "--report-on-signal", "--report-signal=SIGUSR2", "--report-directory=/tmp", "server.js"]
+CMD ["bun", "server.js"]
