@@ -1,12 +1,12 @@
 "use client";
 import { useState } from "react";
+import { FaLinkedin } from "react-icons/fa";
 import { HiArrowPath, HiCheck, HiGlobeAlt, HiXMark } from "react-icons/hi2";
 import {
   SiBluesky,
   SiDiscord,
   SiGithub,
   SiInstagram,
-  SiLinkedin,
   SiMastodon,
   SiReddit,
   SiTelegram,
@@ -278,7 +278,7 @@ export default function EditProfileModal({
                   placeholder="@user@instance.social"
                 />
                 <SocialInput
-                  icon={<SiLinkedin />}
+                  icon={<FaLinkedin />}
                   label="LinkedIn"
                   value={formData.socials.linkedin}
                   onChange={(v) => handleSocialChange("linkedin", v)}

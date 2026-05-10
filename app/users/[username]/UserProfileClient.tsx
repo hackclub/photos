@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { FaLinkedin } from "react-icons/fa";
 import {
   HiArrowDownTray,
   HiCalendar,
@@ -21,7 +22,6 @@ import {
   SiDiscord,
   SiGithub,
   SiInstagram,
-  SiLinkedin,
   SiMastodon,
   SiReddit,
   SiTelegram,
@@ -397,7 +397,7 @@ export default function UserProfileClient({
                   {user.socialLinks.linkedin && (
                     <SocialLink
                       href={`${SOCIAL_URLS.LINKEDIN}${user.socialLinks.linkedin}`}
-                      icon={<SiLinkedin className="w-3 h-3" />}
+                      icon={<FaLinkedin className="w-3 h-3" />}
                       label="LinkedIn"
                     />
                   )}

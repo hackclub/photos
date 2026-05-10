@@ -35,10 +35,6 @@ interface StorageStats {
       size: number;
       count: number;
     };
-    avatars: {
-      size: number;
-      count: number;
-    };
     exports: {
       size: number;
       count: number;
@@ -78,11 +74,14 @@ const COLORS = [
   "#10b981",
   "#3b82f6",
 ];
+
+function formatChartBytes(value: unknown): [string, string] {
+  return [formatBytes(typeof value === "number" ? value : 0), "Size"];
+}
 export default function StorageClient({ stats }: StorageClientProps) {
   const sizeData = [
     { name: "Events", value: stats.breakdown.events.size },
     { name: "Thumbnails", value: stats.breakdown.thumbnails.size },
-    { name: "Avatars", value: stats.breakdown.avatars.size },
     { name: "Exports", value: stats.breakdown.exports.size },
     { name: "Banners", value: stats.breakdown.banners.size },
     { name: "Other", value: stats.breakdown.other.size },
@@ -90,7 +89,6 @@ export default function StorageClient({ stats }: StorageClientProps) {
   const countData = [
     { name: "Events", value: stats.breakdown.events.count },
     { name: "Thumbnails", value: stats.breakdown.thumbnails.count },
-    { name: "Avatars", value: stats.breakdown.avatars.count },
     { name: "Exports", value: stats.breakdown.exports.count },
     { name: "Banners", value: stats.breakdown.banners.count },
     { name: "Other", value: stats.breakdown.other.count },
@@ -183,10 +181,7 @@ export default function StorageClient({ stats }: StorageClientProps) {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value: number | undefined) => [
-                    formatBytes(value || 0),
-                    "Size",
-                  ]}
+                  formatter={formatChartBytes}
                   contentStyle={{
                     backgroundColor: "#18181b",
                     borderColor: "#27272a",
@@ -318,10 +313,7 @@ export default function StorageClient({ stats }: StorageClientProps) {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number | undefined) => [
-                      formatBytes(value || 0),
-                      "Size",
-                    ]}
+                    formatter={formatChartBytes}
                     contentStyle={{
                       backgroundColor: "#18181b",
                       borderColor: "#27272a",
@@ -354,10 +346,7 @@ export default function StorageClient({ stats }: StorageClientProps) {
                     width={150}
                   />
                   <Tooltip
-                    formatter={(value: number | undefined) => [
-                      formatBytes(value || 0),
-                      "Size",
-                    ]}
+                    formatter={formatChartBytes}
                     cursor={{ fill: "#27272a" }}
                     contentStyle={{
                       backgroundColor: "#18181b",
@@ -542,10 +531,7 @@ export default function StorageClient({ stats }: StorageClientProps) {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number | undefined) => [
-                      formatBytes(value || 0),
-                      "Size",
-                    ]}
+                    formatter={formatChartBytes}
                     contentStyle={{
                       backgroundColor: "#18181b",
                       borderColor: "#27272a",
@@ -578,10 +564,7 @@ export default function StorageClient({ stats }: StorageClientProps) {
                     width={150}
                   />
                   <Tooltip
-                    formatter={(value: number | undefined) => [
-                      formatBytes(value || 0),
-                      "Size",
-                    ]}
+                    formatter={formatChartBytes}
                     cursor={{ fill: "#27272a" }}
                     contentStyle={{
                       backgroundColor: "#18181b",

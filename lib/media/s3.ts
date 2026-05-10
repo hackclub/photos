@@ -256,10 +256,6 @@ export async function getDetailedStorageStats(): Promise<{
       size: number;
       count: number;
     };
-    avatars: {
-      size: number;
-      count: number;
-    };
     exports: {
       size: number;
       count: number;
@@ -293,7 +289,6 @@ export async function getDetailedStorageStats(): Promise<{
   const breakdown = {
     events: { size: 0, count: 0 },
     thumbnails: { size: 0, count: 0 },
-    avatars: { size: 0, count: 0 },
     exports: { size: 0, count: 0 },
     banners: { size: 0, count: 0 },
     other: { size: 0, count: 0 },
@@ -366,24 +361,9 @@ export async function getDetailedStorageStats(): Promise<{
         } else if (key.startsWith("thumbnails/")) {
           breakdown.thumbnails.size += size;
           breakdown.thumbnails.count++;
-        } else if (key.startsWith("users/") || key.startsWith("avatars/")) {
-          breakdown.avatars.size += size;
-          breakdown.avatars.count++;
-          const parts = key.split("/");
-          if (parts.length >= 2) {
-            const userId = parts[1];
-            const isUuid =
-              /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-                userId,
-              );
-            if (isUuid) {
-              if (!userBreakdown[userId]) {
-                userBreakdown[userId] = { size: 0, count: 0 };
-              }
-              userBreakdown[userId].size += size;
-              userBreakdown[userId].count++;
-            }
-          }
+        } else if (key.startsWith("users/")) {
+          breakdown.other.size += size;
+          breakdown.other.count++;
         } else if (key.startsWith("series/")) {
           breakdown.banners.size += size;
           breakdown.banners.count++;
