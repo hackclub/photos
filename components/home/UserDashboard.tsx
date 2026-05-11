@@ -34,6 +34,7 @@ interface UserDashboardProps {
       participantCount: number;
     }
   >;
+  adminEventIds: Set<string>;
   eventBannerUrls: Map<string, string>;
   userPhotoCount: number;
   eventsJoinedCount: number;
@@ -42,6 +43,7 @@ interface UserDashboardProps {
 export default function UserDashboard({
   session,
   userParticipations,
+  adminEventIds,
   eventStats,
   eventBannerUrls,
   userPhotoCount,
@@ -120,6 +122,7 @@ export default function UserDashboard({
                     key={event.id}
                     event={{
                       ...event,
+                      isAdmin: adminEventIds.has(event.id),
                       bannerUrl: bannerUrl,
                       mediaCount: stats.mediaCount,
                       participantCount: stats.participantCount,

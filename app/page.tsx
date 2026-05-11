@@ -4,7 +4,12 @@ import LandingPage from "@/components/home/LandingPage";
 import UserDashboard from "@/components/home/UserDashboard";
 import { deleteSession, getSession, refreshUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { eventParticipants, media } from "@/lib/db/schema";
+import {
+  eventAdmins,
+  eventParticipants,
+  media,
+  seriesAdmins,
+} from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 export default async function HomePage() {
   const session = await getSession();
@@ -48,6 +53,35 @@ export default async function HomePage() {
     }
   >();
   const participationEventIds = userParticipations.map((item) => item.event.id);
+  const adminEventIds = new Set<string>();
+  if (session.isGlobalAdmin) {
+    for (const id of participationEventIds) {
+      adminEventIds.add(id);
+    }
+  } else if (participationEventIds.length > 0) {
+    const [directAdminEvents, seriesAdminRows] = await Promise.all([
+      db
+        .select({ eventId: eventAdmins.eventId })
+        .from(eventAdmins)
+        .where(inArray(eventAdmins.eventId, participationEventIds)),
+      db
+        .select({ seriesId: seriesAdmins.seriesId })
+        .from(seriesAdmins)
+        .where(eq(seriesAdmins.userId, session.id)),
+    ]);
+    for (const admin of directAdminEvents) {
+      adminEventIds.add(admin.eventId);
+    }
+    const adminSeriesIds = new Set(seriesAdminRows.map((row) => row.seriesId));
+    for (const participation of userParticipations) {
+      if (
+        participation.event.seriesId &&
+        adminSeriesIds.has(participation.event.seriesId)
+      ) {
+        adminEventIds.add(participation.event.id);
+      }
+    }
+  }
   for (const participation of userParticipations) {
     if (participation.event.bannerS3Key) {
       eventBannerUrls.set(
@@ -106,6 +140,7 @@ export default async function HomePage() {
     <UserDashboard
       session={session}
       userParticipations={userParticipations}
+      adminEventIds={adminEventIds}
       eventStats={eventStats}
       eventBannerUrls={eventBannerUrls}
       userPhotoCount={userPhotoCount}

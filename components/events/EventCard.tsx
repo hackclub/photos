@@ -91,12 +91,10 @@ export default function EventCard({
       )}
 
       {showAdminBadge && (
-        <div
-          className="absolute right-2 top-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full border border-emerald-400/30 bg-black/70 text-emerald-300 shadow-lg backdrop-blur-sm"
+        <HiShieldCheck
+          className="absolute right-2 top-2 z-10 h-5 w-5 text-red-500 drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]"
           title="Admin"
-        >
-          <HiShieldCheck className="h-4 w-4" />
-        </div>
+        />
       )}
 
       {selectionMode && onToggleSelection && (
