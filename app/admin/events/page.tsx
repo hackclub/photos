@@ -98,6 +98,7 @@ export default async function ManageEventsPage() {
       }
       return {
         ...event,
+        isAdmin: true,
         mediaCount,
         totalSize: Number(totalSize || 0),
         thumbnailUrl,

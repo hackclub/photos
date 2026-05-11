@@ -39,6 +39,13 @@ export default async function EventsPage() {
     for (const admin of ctx.eventAdmins) {
       adminEventIds.add(admin.eventId);
     }
+    for (const admin of ctx.seriesAdmins) {
+      for (const event of events) {
+        if (event.seriesId === admin.seriesId) {
+          adminEventIds.add(event.id);
+        }
+      }
+    }
     if (ctx.isGlobalAdmin) {
       for (const event of events) {
         adminEventIds.add(event.id);

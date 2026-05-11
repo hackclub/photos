@@ -25,6 +25,7 @@ interface Event {
   mediaCount: number;
   totalSize: number;
   thumbnailUrl: string | null;
+  isAdmin?: boolean;
 }
 interface EventsClientProps {
   events: Event[];

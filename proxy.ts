@@ -20,8 +20,6 @@ const AUTH_REQUIRED_PATHS = [
   "/users",
 ];
 
-const ADMIN_REQUIRED_PATHS = ["/admin"];
-
 const MEDIA_BYPASS_PATHS = ["/assets", "/media"];
 
 function matchesPath(pathname: string, prefixes: string[]) {
@@ -82,10 +80,6 @@ export async function proxy(request: NextRequest) {
       | undefined;
 
     if (!session || session.isBanned) {
-      return forbidden(request);
-    }
-
-    if (matchesPath(pathname, ADMIN_REQUIRED_PATHS) && !session.isGlobalAdmin) {
       return forbidden(request);
     }
 
