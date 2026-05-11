@@ -13,6 +13,7 @@ import {
   HiPhoto,
   HiServer,
   HiUsers,
+  HiShieldCheck,
 } from "react-icons/hi2";
 import { formatBytes } from "@/lib/format";
 
@@ -32,6 +33,7 @@ interface EventCardProps {
     mediaCount?: number;
     totalSize?: number;
     participantCount?: number;
+    isAdmin?: boolean;
     series?: {
       name: string;
     } | null;
@@ -43,6 +45,7 @@ interface EventCardProps {
   showLocation?: boolean;
   showSeries?: boolean;
   showActions?: boolean;
+  isAdmin?: boolean;
   selectionMode?: boolean;
   isSelected?: boolean;
   onToggleSelection?: () => void;
@@ -59,6 +62,7 @@ export default function EventCard({
   showLocation = false,
   showSeries = true,
   showActions = false,
+  isAdmin = false,
   selectionMode = false,
   isSelected = false,
   onToggleSelection,
@@ -138,6 +142,7 @@ export default function EventCard({
               {event.name}
             </h3>
           </Link>
+          {isAdmin && <HiShieldCheck className="ml-2 h-3.5 w-3.5 text-emerald-400" title="Admin" />}
         </div>
 
         {showSeries && event.series && (

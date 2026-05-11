@@ -10,6 +10,7 @@ import {
   HiPencil,
   HiPhoto,
   HiServer,
+  HiShieldCheck,
 } from "react-icons/hi2";
 import { formatBytes } from "@/lib/format";
 
@@ -25,11 +26,13 @@ interface SeriesCardProps {
     totalSize?: number;
     thumbnailUrl?: string | null;
     bannerUrl?: string | null;
+    isAdmin?: boolean;
   };
   href?: string;
   showVisibilityBadge?: boolean;
   showStats?: boolean;
   showActions?: boolean;
+  isAdmin?: boolean;
   selectionMode?: boolean;
   isSelected?: boolean;
   onToggleSelection?: () => void;
@@ -41,6 +44,7 @@ export default function SeriesCard({
   showVisibilityBadge = false,
   showStats = true,
   showActions = false,
+  isAdmin = false,
   selectionMode = false,
   isSelected = false,
   onToggleSelection,
@@ -112,9 +116,12 @@ export default function SeriesCard({
 
       <div className="p-4">
         <Link href={linkHref} className="block min-h-11" prefetch={false}>
-          <h3 className="font-semibold text-white text-lg mb-2 group-hover:text-red-400 transition-colors line-clamp-1">
-            {series.name}
-          </h3>
+          <div className="mb-2 flex items-center gap-1.5">
+            <h3 className="min-w-0 flex-1 truncate font-semibold text-lg text-white transition-colors group-hover:text-red-400">
+              {series.name}
+            </h3>
+            {isAdmin && <HiShieldCheck className="h-3.5 w-3.5 text-emerald-400" title="Admin" />}
+          </div>
         </Link>
 
         {series.description && (

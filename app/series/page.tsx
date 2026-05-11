@@ -38,6 +38,17 @@ export default async function SeriesPage() {
       },
     });
   }
+  const adminSeriesIds = new Set<string>();
+  if (ctx) {
+    for (const admin of ctx.seriesAdmins) {
+      adminSeriesIds.add(admin.seriesId);
+    }
+    if (ctx.isGlobalAdmin) {
+      for (const s of series) {
+        adminSeriesIds.add(s.id);
+      }
+    }
+  }
   const seriesBannerUrls = new Map<string, string>();
   for (const s of series) {
     if (s.bannerS3Key) {
@@ -106,6 +117,7 @@ export default async function SeriesPage() {
                 key={s.id}
                 series={{
                   ...s,
+                  isAdmin: adminSeriesIds.has(s.id),
                   bannerUrl: seriesBannerUrls.get(s.id),
                   eventCount: s.events.length,
                   totalPhotos: s.events.reduce(

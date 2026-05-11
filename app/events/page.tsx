@@ -34,6 +34,17 @@ export default async function EventsPage() {
       },
     });
   }
+  const adminEventIds = new Set<string>();
+  if (ctx) {
+    for (const admin of ctx.eventAdmins) {
+      adminEventIds.add(admin.eventId);
+    }
+    if (ctx.isGlobalAdmin) {
+      for (const event of events) {
+        adminEventIds.add(event.id);
+      }
+    }
+  }
   const eventBannerUrls = new Map<string, string>();
   const eventCounts = new Map<
     string,
@@ -125,6 +136,7 @@ export default async function EventsPage() {
                 key={event.id}
                 event={{
                   ...event,
+                  isAdmin: adminEventIds.has(event.id),
                   bannerUrl: eventBannerUrls.get(event.id),
                   mediaCount: eventCounts.get(event.id)?.media || 0,
                   participantCount:
