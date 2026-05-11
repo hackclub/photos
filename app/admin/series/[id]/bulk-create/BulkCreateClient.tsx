@@ -84,7 +84,7 @@ export default function BulkCreateClient({
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setRows(parsed);
+          setRows(parsed.map(normalizeRow));
         }
       } catch (e) {
         console.error("Failed to load draft", e);
@@ -124,6 +124,14 @@ export default function BulkCreateClient({
       slugManuallyEdited: false,
       visibility: "auth_required",
       allowPublicSharing: true,
+    };
+  }
+  function normalizeRow(row: Partial<BulkEventRow>): BulkEventRow {
+    return {
+      ...createEmptyRow(),
+      ...row,
+      admins: row.admins || [],
+      pendingAdminSlackIds: row.pendingAdminSlackIds || [],
     };
   }
   const handleAddRow = () => {
@@ -219,10 +227,11 @@ export default function BulkCreateClient({
     if (!row) return;
     const slackIds = parseSlackIds(input);
     if (slackIds.length === 0) return;
-    const existing = new Set(row.pendingAdminSlackIds);
+    const pendingAdminSlackIds = row.pendingAdminSlackIds || [];
+    const existing = new Set(pendingAdminSlackIds);
     updateRow(rowId, {
       pendingAdminSlackIds: [
-        ...row.pendingAdminSlackIds,
+        ...pendingAdminSlackIds,
         ...slackIds.filter((slackId) => !existing.has(slackId)),
       ],
     });
@@ -230,10 +239,9 @@ export default function BulkCreateClient({
   const handleRemovePendingAdmin = (rowId: string, slackId: string) => {
     const row = rows.find((r) => r.id === rowId);
     if (!row) return;
+    const pendingAdminSlackIds = row.pendingAdminSlackIds || [];
     updateRow(rowId, {
-      pendingAdminSlackIds: row.pendingAdminSlackIds.filter(
-        (id) => id !== slackId,
-      ),
+      pendingAdminSlackIds: pendingAdminSlackIds.filter((id) => id !== slackId),
     });
   };
   const toggleRowSelection = (id: string) => {
@@ -300,7 +308,7 @@ export default function BulkCreateClient({
           latitude: sourceRow.latitude,
           longitude: sourceRow.longitude,
           admins: [...sourceRow.admins],
-          pendingAdminSlackIds: [...sourceRow.pendingAdminSlackIds],
+          pendingAdminSlackIds: [...(sourceRow.pendingAdminSlackIds || [])],
           visibility: sourceRow.visibility,
           allowPublicSharing: sourceRow.allowPublicSharing,
         };
@@ -494,7 +502,7 @@ export default function BulkCreateClient({
         longitude: row.longitude,
         eventDate: row.eventDate ? new Date(row.eventDate) : null,
         adminUserIds: row.admins.map((a) => a.id),
-        pendingAdminSlackIds: row.pendingAdminSlackIds,
+        pendingAdminSlackIds: row.pendingAdminSlackIds || [],
         visibility: row.visibility,
         allowPublicSharing: row.allowPublicSharing,
         requiresInvite: false,
@@ -870,7 +878,7 @@ export default function BulkCreateClient({
                             </button>
                           </span>
                         ))}
-                        {row.pendingAdminSlackIds.map((slackId) => (
+                        {(row.pendingAdminSlackIds || []).map((slackId) => (
                           <span
                             key={slackId}
                             className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 pr-3 font-mono text-xs text-amber-300"
@@ -1113,7 +1121,7 @@ export default function BulkCreateClient({
                         </span>
                       </div>
                       {(row.admins.length > 0 ||
-                        row.pendingAdminSlackIds.length > 0) && (
+                        (row.pendingAdminSlackIds || []).length > 0) && (
                         <div className="col-span-2">
                           <span className="text-zinc-500 block text-xs uppercase tracking-wider mb-1">
                             Admins
@@ -1128,7 +1136,7 @@ export default function BulkCreateClient({
                                 {a.name}
                               </span>
                             ))}
-                            {row.pendingAdminSlackIds.map((slackId) => (
+                            {(row.pendingAdminSlackIds || []).map((slackId) => (
                               <span
                                 key={slackId}
                                 className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 font-mono text-xs text-amber-300"
