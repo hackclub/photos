@@ -20,6 +20,7 @@ interface Event {
   slug: string;
   description: string | null;
   eventDate: Date | null;
+  isAdmin?: boolean;
 }
 interface MediaItem {
   id: string;
@@ -241,6 +242,7 @@ export default function SeriesDetailClient({
                   key={event.id}
                   event={{
                     ...event,
+                    isAdmin: isAdmin || event.isAdmin,
                     bannerUrl: eventBannerUrls[event.id] || null,
                     firstMediaUrl: eventMediaUrls[event.id] || null,
                     mediaCount: allMedia.filter((m) => m.eventId === event.id)

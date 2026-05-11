@@ -70,6 +70,7 @@ export default function EventCard({
   showJoinDate = false,
   joinedAt,
 }: EventCardProps) {
+  const showAdminBadge = isAdmin || event.isAdmin;
   const linkHref = href || `/events/${event.slug}`;
   const displayImage =
     event.bannerUrl || event.thumbnailUrl || event.firstMediaUrl;
@@ -86,6 +87,15 @@ export default function EventCard({
       ) : (
         <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center">
           <HiCalendar className="w-12 h-12 text-zinc-700 group-hover:scale-110 transition-transform duration-300" />
+        </div>
+      )}
+
+      {showAdminBadge && (
+        <div
+          className="absolute right-2 top-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full border border-emerald-400/30 bg-black/70 text-emerald-300 shadow-lg backdrop-blur-sm"
+          title="Admin"
+        >
+          <HiShieldCheck className="h-4 w-4" />
         </div>
       )}
 
@@ -142,7 +152,6 @@ export default function EventCard({
               {event.name}
             </h3>
           </Link>
-          {isAdmin && <HiShieldCheck className="ml-2 h-3.5 w-3.5 text-emerald-400" title="Admin" />}
         </div>
 
         {showSeries && event.series && (

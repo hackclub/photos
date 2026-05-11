@@ -93,6 +93,10 @@ export default async function SeriesDetailPage({
     notFound();
   }
   const canEdit = await can(ctx, "manage", "series", seriesData.id);
+  const seriesEvents = seriesData.events.map((event) => ({
+    ...event,
+    isAdmin: canEdit || !!ctx?.eventAdmins.some((admin) => admin.eventId === event.id),
+  }));
   const eventIds = seriesData.events.map((e) => e.id);
   const allMedia =
     eventIds.length > 0
@@ -165,7 +169,7 @@ export default async function SeriesDetailPage({
   }
   return (
     <SeriesDetailClient
-      series={seriesData}
+      series={{ ...seriesData, events: seriesEvents }}
       allMedia={allMedia.map((m) => ({
         id: m.id,
         filename: m.filename,
