@@ -196,11 +196,18 @@ export async function getMediaUrls(
               urls[item.id] = `/api/v1/view/${item.id}`;
             } else {
               const url = getMediaProxyUrl(item.id);
-              urls[item.id] = url;
+              const versionedUrl =
+                item.blurStatus === "approved" && item.s3Key
+                  ? `${url}?v=${encodeURIComponent(item.s3Key)}`
+                  : url;
+              urls[item.id] = versionedUrl;
             }
             if (item.thumbnailS3Key) {
               const thumbUrl = getMediaProxyUrl(item.id, "thumbnail");
-              urls[item.thumbnailS3Key] = thumbUrl;
+              urls[item.thumbnailS3Key] =
+                item.blurStatus === "approved"
+                  ? `${thumbUrl}?v=${encodeURIComponent(item.thumbnailS3Key)}`
+                  : thumbUrl;
             }
           }
           if (s3KeysToFetch.has(item.s3Key)) {

@@ -3,6 +3,7 @@ import {
   type GetObjectCommandOutput,
 } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
+import { unstable_cache } from "next/cache";
 import { type NextRequest, NextResponse } from "next/server";
 import { getUserContext } from "@/lib/auth-api";
 import { db } from "@/lib/db";
@@ -10,7 +11,6 @@ import { media } from "@/lib/db/schema";
 import { convertHeicToJpeg } from "@/lib/media/heic";
 import { s3Client } from "@/lib/media/s3";
 import { can } from "@/lib/policy";
-import { unstable_cache } from "next/cache";
 
 const getCachedMedia = unstable_cache(
   async (mediaId: string) => {
@@ -22,7 +22,7 @@ const getCachedMedia = unstable_cache(
     });
   },
   ["media-lookup"],
-  { revalidate: 3600, tags: ["media"] }
+  { revalidate: 3600, tags: ["media"] },
 );
 
 export async function GET(
@@ -120,7 +120,14 @@ export async function GET(
   if (s3Response.LastModified) {
     headers.set("Last-Modified", s3Response.LastModified.toUTCString());
   }
-  if (mediaItem.event.visibility === "public") {
+  if (variant === "original") {
+    return new NextResponse("Not found", { status: 404 });
+  }
+  if (mediaItem.blurStatus === "approved") {
+    headers.set("Cache-Control", "no-store, max-age=0");
+    headers.set("CDN-Cache-Control", "no-store");
+    headers.set("Cloudflare-CDN-Cache-Control", "no-store");
+  } else if (mediaItem.event.visibility === "public") {
     const browserCache =
       variant === "thumbnail"
         ? "public, max-age=31536000, immutable"
