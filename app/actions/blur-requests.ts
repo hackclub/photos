@@ -33,23 +33,34 @@ async function renderBlurredPhoto(
   const height = metadata.height ?? 0;
   if (!width || !height) throw new Error("Invalid source photo");
   const base = await image.keepMetadata().toBuffer();
-  const overlays = await Promise.all(
-    regions.map(async (region) => {
-      const left = Math.max(0, Math.round(region.x * width));
-      const top = Math.max(0, Math.round(region.y * height));
-      const boxWidth = Math.max(1, Math.round(region.width * width));
-      const boxHeight = Math.max(1, Math.round(region.height * height));
-      const inputBuffer = await sharp(base)
-        .extract({
-          left: Math.min(left, width - 1),
-          top: Math.min(top, height - 1),
-          width: Math.min(boxWidth, width - left),
-          height: Math.min(boxHeight, height - top),
-        })
-        .blur(intensity)
-        .toBuffer();
-      return { input: inputBuffer, left, top };
-    }),
+  const overlays = (
+    await Promise.all(
+      regions.map(async (region) => {
+        const rawLeft = Math.round(region.x * width);
+        const rawTop = Math.round(region.y * height);
+        const rawRight = Math.round((region.x + region.width) * width);
+        const rawBottom = Math.round((region.y + region.height) * height);
+        const left = Math.max(0, Math.min(width, rawLeft));
+        const top = Math.max(0, Math.min(height, rawTop));
+        const right = Math.max(0, Math.min(width, rawRight));
+        const bottom = Math.max(0, Math.min(height, rawBottom));
+        if (right <= left || bottom <= top) return null;
+        const boxWidth = right - left;
+        const boxHeight = bottom - top;
+        const inputBuffer = await sharp(base)
+          .extract({
+            left,
+            top,
+            width: boxWidth,
+            height: boxHeight,
+          })
+          .blur(intensity)
+          .toBuffer();
+        return { input: inputBuffer, left, top };
+      }),
+    )
+  ).filter((overlay): overlay is { input: Buffer; left: number; top: number } =>
+    Boolean(overlay),
   );
   const output = sharp(base).composite(overlays).keepMetadata();
   if (mimeType === "image/png") {
