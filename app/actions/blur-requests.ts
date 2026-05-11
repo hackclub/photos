@@ -27,26 +27,30 @@ async function renderBlurredPhoto(
   const response = await fetch(sourceUrl);
   if (!response.ok) throw new Error("Failed to fetch source photo");
   const input = Buffer.from(await response.arrayBuffer());
-  const image = sharp(input).rotate();
-  const metadata = await image.metadata();
+  const base = await sharp(input).rotate().keepMetadata().toBuffer();
+  const metadata = await sharp(base).metadata();
   const width = metadata.width ?? 0;
   const height = metadata.height ?? 0;
   if (!width || !height) throw new Error("Invalid source photo");
-  const base = await image.keepMetadata().toBuffer();
   const overlays = (
     await Promise.all(
       regions.map(async (region) => {
-        const rawLeft = Math.round(region.x * width);
-        const rawTop = Math.round(region.y * height);
-        const rawRight = Math.round((region.x + region.width) * width);
-        const rawBottom = Math.round((region.y + region.height) * height);
-        const left = Math.max(0, Math.min(width, rawLeft));
-        const top = Math.max(0, Math.min(height, rawTop));
+        const x = Number.isFinite(region.x) ? region.x : 0;
+        const y = Number.isFinite(region.y) ? region.y : 0;
+        const regionWidth = Number.isFinite(region.width) ? region.width : 0;
+        const regionHeight = Number.isFinite(region.height) ? region.height : 0;
+        const rawLeft = Math.floor(Math.min(x, x + regionWidth) * width);
+        const rawTop = Math.floor(Math.min(y, y + regionHeight) * height);
+        const rawRight = Math.ceil(Math.max(x, x + regionWidth) * width);
+        const rawBottom = Math.ceil(Math.max(y, y + regionHeight) * height);
+        const left = Math.max(0, Math.min(width - 1, rawLeft));
+        const top = Math.max(0, Math.min(height - 1, rawTop));
         const right = Math.max(0, Math.min(width, rawRight));
         const bottom = Math.max(0, Math.min(height, rawBottom));
         if (right <= left || bottom <= top) return null;
         const boxWidth = right - left;
         const boxHeight = bottom - top;
+        if (left + boxWidth > width || top + boxHeight > height) return null;
         const inputBuffer = await sharp(base)
           .extract({
             left,
