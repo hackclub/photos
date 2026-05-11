@@ -60,6 +60,11 @@ import {
   formatFocalLength,
   formatISO,
 } from "@/lib/media/exif";
+import {
+  type BlurDraft,
+  type BlurRect,
+  buildBlurPreview,
+} from "./BlurEditorModal";
 import ReportModal from "./ReportModal";
 
 const MiniMap = dynamic(() => import("@/components/map/MiniMap"), {
@@ -189,6 +194,9 @@ interface Props {
   hasNext?: boolean;
   hasPrevious?: boolean;
   onRequestFreshUrl?: () => void;
+  blurMode?: boolean;
+  blurDraft?: BlurDraft;
+  onBlurSave?: (draft: BlurDraft) => void;
 }
 export default function PhotoDetailModal({
   media,
@@ -206,6 +214,9 @@ export default function PhotoDetailModal({
   hasNext = false,
   hasPrevious = false,
   onRequestFreshUrl,
+  blurMode = false,
+  blurDraft,
+  onBlurSave,
 }: Props) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -213,9 +224,23 @@ export default function PhotoDetailModal({
   const [previousImageUrl, setPreviousImageUrl] = useState<string | null>(null);
   const [videoError, setVideoError] = useState(false);
   const [videoRetryCount, setVideoRetryCount] = useState(0);
+  const [blurRegions, setBlurRegions] = useState<BlurRect[]>(
+    blurDraft?.regions ?? [],
+  );
+  const [blurStart, setBlurStart] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  const [currentBlurRegion, setCurrentBlurRegion] = useState<BlurRect | null>(
+    null,
+  );
 
   const MAX_IMAGE_AUTO_RETRIES = 2;
   const { displayUrl } = useHeicUrl(fullSizeUrl ?? "", media.filename);
+  useEffect(() => {
+    setBlurRegions(blurDraft?.regions ?? []);
+    setBlurStart(null);
+    setCurrentBlurRegion(null);
+  }, [blurDraft]);
   const effectiveUrl = useMemo(() => {
     if (!displayUrl) return null;
     if (retryCount === 0) return displayUrl;
@@ -824,6 +849,35 @@ export default function PhotoDetailModal({
       setGeneratingLink(false);
     }
   };
+  const activeBlurRegions = currentBlurRegion
+    ? [...blurRegions, currentBlurRegion]
+    : blurRegions;
+  const getBlurPoint = (
+    element: HTMLElement,
+    clientX: number,
+    clientY: number,
+  ) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
+    };
+  };
+  const saveBlurDraft = async () => {
+    if (
+      !blurMode ||
+      !onBlurSave ||
+      !effectiveUrl ||
+      activeBlurRegions.length === 0
+    ) {
+      return;
+    }
+    const previewDataUrl = await buildBlurPreview(
+      effectiveUrl,
+      activeBlurRegions,
+    );
+    onBlurSave({ media, regions: activeBlurRegions, previewDataUrl });
+  };
   const copyToClipboard = async (text: string, type: "view" | "raw") => {
     try {
       await navigator.clipboard.writeText(text);
@@ -1120,7 +1174,42 @@ export default function PhotoDetailModal({
                 </div>
               </div>
             ) : (
-              <div className="relative flex h-full w-full items-center justify-center">
+              <div
+                className={`relative flex h-full w-full items-center justify-center ${blurMode ? "touch-none select-none" : ""}`}
+                onDragStart={(e) => blurMode && e.preventDefault()}
+                onPointerDown={(e) => {
+                  if (!blurMode) return;
+                  e.preventDefault();
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  const p = getBlurPoint(e.currentTarget, e.clientX, e.clientY);
+                  setBlurStart(p);
+                  setCurrentBlurRegion({ ...p, width: 0, height: 0 });
+                }}
+                onPointerMove={(e) => {
+                  if (!blurMode || !blurStart) return;
+                  e.preventDefault();
+                  const p = getBlurPoint(e.currentTarget, e.clientX, e.clientY);
+                  setCurrentBlurRegion({
+                    x: Math.min(blurStart.x, p.x),
+                    y: Math.min(blurStart.y, p.y),
+                    width: Math.abs(p.x - blurStart.x),
+                    height: Math.abs(p.y - blurStart.y),
+                  });
+                }}
+                onPointerUp={(e) => {
+                  if (!blurMode) return;
+                  e.preventDefault();
+                  if (
+                    currentBlurRegion &&
+                    currentBlurRegion.width > 0.01 &&
+                    currentBlurRegion.height > 0.01
+                  ) {
+                    setBlurRegions((prev) => [...prev, currentBlurRegion]);
+                  }
+                  setBlurStart(null);
+                  setCurrentBlurRegion(null);
+                }}
+              >
                 {!imageLoaded && thumbnailUrl && (
                   <img
                     src={thumbnailUrl}
@@ -1141,6 +1230,7 @@ export default function PhotoDetailModal({
                   <img
                     src={effectiveUrl}
                     alt={media.filename}
+                    draggable={false}
                     className={`absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain transition-opacity duration-500 ease-out ${
                       imageLoaded ? "opacity-100" : "opacity-0"
                     }`}
@@ -1174,6 +1264,46 @@ export default function PhotoDetailModal({
                       media.mimeType === "image/heif"
                         ? "Converting HEIC..."
                         : "Loading photo..."}
+                    </div>
+                  </div>
+                )}
+                {blurMode &&
+                  activeBlurRegions.map((region, index) => (
+                    <div
+                      key={`${region.x}-${region.y}-${index}`}
+                      className="absolute z-20 border-2 border-red-400 bg-red-500/20 pointer-events-none"
+                      style={{
+                        left: `${region.x * 100}%`,
+                        top: `${region.y * 100}%`,
+                        width: `${region.width * 100}%`,
+                        height: `${region.height * 100}%`,
+                      }}
+                    />
+                  ))}
+                {blurMode && (
+                  <div className="absolute bottom-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-zinc-950/85 p-3 backdrop-blur-md">
+                    <div>
+                      <p className="text-sm font-bold text-white">Blur Me</p>
+                      <p className="text-xs text-zinc-400">
+                        Drag boxes over yourself. Use arrows to keep reviewing.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setBlurRegions([])}
+                        className="rounded-xl bg-zinc-800 px-3 py-2 text-sm font-bold text-white hover:bg-zinc-700"
+                      >
+                        Clear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveBlurDraft}
+                        disabled={activeBlurRegions.length === 0}
+                        className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:bg-zinc-700 disabled:text-zinc-400"
+                      >
+                        Save blur
+                      </button>
                     </div>
                   </div>
                 )}

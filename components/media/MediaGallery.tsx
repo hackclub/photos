@@ -120,6 +120,20 @@ interface MediaGalleryProps {
   hideControls?: boolean;
   title?: string;
   emptyMessage?: string;
+  blurMode?: boolean;
+  blurDrafts?: Record<
+    string,
+    {
+      media: MediaItem;
+      regions: { x: number; y: number; width: number; height: number }[];
+      previewDataUrl: string;
+    }
+  >;
+  onBlurDraft?: (draft: {
+    media: MediaItem;
+    regions: { x: number; y: number; width: number; height: number }[];
+    previewDataUrl: string;
+  }) => void;
 }
 export default function MediaGallery({
   media,
@@ -133,6 +147,9 @@ export default function MediaGallery({
   showTypeFilter = true,
   showSortFilter = true,
   hideControls = false,
+  blurMode = false,
+  blurDrafts = {},
+  onBlurDraft,
 }: MediaGalleryProps) {
   const {
     setLocalMedia,
@@ -594,6 +611,11 @@ export default function MediaGallery({
                       <span>{item.likeCount || 0}</span>
                     </div>
                   )}
+                  {blurMode && blurDrafts[item.id] && (
+                    <div className="absolute right-2 top-2 rounded-full bg-red-600 px-2 py-1 text-xs font-bold text-white shadow-lg">
+                      Selected
+                    </div>
+                  )}
                 </button>
 
                 {selectionMode && (
@@ -628,7 +650,61 @@ export default function MediaGallery({
         </div>
       )}
 
-      {selectedMedia && (
+      {selectedMedia && blurMode && onBlurDraft && (
+        <PhotoDetailModal
+          media={selectedMedia}
+          fullSizeUrl={fullSizeUrl}
+          thumbnailUrl={selectedThumbnailUrl}
+          onRequestFreshUrl={() => refreshFullSizeUrl(selectedMedia)}
+          event={
+            selectedMedia.event ||
+            (selectedMedia.eventId
+              ? eventMap.get(selectedMedia.eventId)
+              : undefined)
+          }
+          currentUserId={currentUserId}
+          downloading={downloading}
+          onClose={() => {
+            setSelectedMedia(null);
+            updateUrl(null);
+          }}
+          onDownload={() => handleDownload(selectedMedia)}
+          blurMode={true}
+          blurDraft={blurDrafts[selectedMedia.id]}
+          onBlurSave={onBlurDraft}
+          onNext={() => {
+            const currentIndex = sortedMedia.findIndex(
+              (m) => m.id === selectedMedia.id,
+            );
+            if (currentIndex < sortedMedia.length - 1) {
+              const nextMedia = sortedMedia[currentIndex + 1];
+              setSelectedMedia(nextMedia);
+              updateUrl(nextMedia.id);
+              prefetchAdjacentMedia(nextMedia);
+            }
+          }}
+          onPrevious={() => {
+            const currentIndex = sortedMedia.findIndex(
+              (m) => m.id === selectedMedia.id,
+            );
+            if (currentIndex > 0) {
+              const prevMedia = sortedMedia[currentIndex - 1];
+              setSelectedMedia(prevMedia);
+              updateUrl(prevMedia.id);
+              prefetchAdjacentMedia(prevMedia);
+            }
+          }}
+          hasNext={
+            sortedMedia.findIndex((m) => m.id === selectedMedia.id) <
+            sortedMedia.length - 1
+          }
+          hasPrevious={
+            sortedMedia.findIndex((m) => m.id === selectedMedia.id) > 0
+          }
+        />
+      )}
+
+      {selectedMedia && !blurMode && (
         <PhotoDetailModal
           media={selectedMedia}
           fullSizeUrl={fullSizeUrl}

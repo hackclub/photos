@@ -16,6 +16,7 @@ import DownloadAllButton from "@/components/events/DownloadAllButton";
 import JoinEventButton from "@/components/events/JoinEventButton";
 import LeaveEventButton from "@/components/events/LeaveEventButton";
 import ParticipantsList from "@/components/events/ParticipantsList";
+import BlurMeButton from "@/components/media/BlurMeButton";
 import BlurMeGallery from "@/components/media/BlurMeGallery";
 import UploadButton from "@/components/media/UploadButton";
 import { getSession } from "@/lib/auth";
@@ -157,11 +158,14 @@ export default async function EventPage({
     },
   });
   participantCount = participants.length;
-  const visibleEventMedia = event.media?.filter((m) => m.blurStatus !== "pending") || [];
+  const visibleEventMedia =
+    event.media?.filter((m) => m.blurStatus !== "pending") || [];
   const photoCount =
-    visibleEventMedia.filter((m) => m.mimeType.startsWith("image/")).length || 0;
+    visibleEventMedia.filter((m) => m.mimeType.startsWith("image/")).length ||
+    0;
   const videoCount =
-    visibleEventMedia.filter((m) => m.mimeType.startsWith("video/")).length || 0;
+    visibleEventMedia.filter((m) => m.mimeType.startsWith("video/")).length ||
+    0;
   const likeCounts =
     visibleEventMedia.length > 0
       ? await db
@@ -185,7 +189,10 @@ export default async function EventPage({
   let mediaWithPermissions = visibleEventMedia;
   if (session?.id && visibleEventMedia.length > 0) {
     const { filterDeletableMedia } = await import("@/lib/policy");
-    const deletableMedia = await filterDeletableMedia(session.id, visibleEventMedia);
+    const deletableMedia = await filterDeletableMedia(
+      session.id,
+      visibleEventMedia,
+    );
     const deletableIds = new Set(deletableMedia.map((m) => m.id));
     mediaWithPermissions = visibleEventMedia.map((m) => ({
       ...m,
@@ -213,7 +220,9 @@ export default async function EventPage({
         <div className="relative">
           <div className="px-4 sm:px-8 pt-6 sm:pt-8 pb-6 sm:pb-8">
             <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <Link prefetch={false} href="/events"
+              <Link
+                prefetch={false}
+                href="/events"
                 className="inline-flex items-center gap-2 text-white/80 hover:text-white transition-colors"
               >
                 <HiArrowLeft className="w-5 h-5" />
@@ -222,7 +231,9 @@ export default async function EventPage({
               </Link>
 
               {event.series && (
-                <Link prefetch={false} href={`/series/${event.series.slug}`}
+                <Link
+                  prefetch={false}
+                  href={`/series/${event.series.slug}`}
                   className="inline-block"
                 >
                   <div className="inline-flex items-center gap-2 px-4 py-2 bg-red-600/20 backdrop-blur-sm border border-red-600/30 rounded-lg text-red-400 hover:bg-red-700/30 transition-all">
@@ -263,7 +274,9 @@ export default async function EventPage({
                 event.locationCountry ||
                 event.location ||
                 (event.latitude && event.longitude)) && (
-                <Link prefetch={false} href="/map"
+                <Link
+                  prefetch={false}
+                  href="/map"
                   className="flex items-center gap-2 text-zinc-300 hover:text-white transition-colors"
                 >
                   <HiMapPin className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -296,13 +309,16 @@ export default async function EventPage({
             {session ? (
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
                 {canEdit && (
-                  <Link prefetch={false} href={`/admin/events/${event.id}/edit`}
+                  <Link
+                    prefetch={false}
+                    href={`/admin/events/${event.id}/edit`}
                     className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold rounded-lg transition-all border border-zinc-700"
                   >
                     <HiPencilSquare className="w-5 h-5" />
                     <span>Edit Event</span>
                   </Link>
                 )}
+                <BlurMeButton />
                 {!isParticipant && (
                   <JoinEventButton
                     eventId={event.id}
@@ -320,7 +336,9 @@ export default async function EventPage({
                 )}
               </div>
             ) : (
-              <Link prefetch={false} href="/auth/signin"
+              <Link
+                prefetch={false}
+                href="/auth/signin"
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all shadow-lg w-full sm:w-auto"
               >
                 <HiUserPlus className="w-5 h-5" />

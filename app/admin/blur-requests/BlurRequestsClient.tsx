@@ -1,6 +1,6 @@
 "use client";
 import { type PointerEvent, useEffect, useRef, useState } from "react";
-import { HiCheck, HiEyeSlash, HiPlus, HiXMark } from "react-icons/hi2";
+import { HiCheck, HiPlus, HiXMark } from "react-icons/hi2";
 import {
   getBlurRequests,
   getBlurRequestUrls,
@@ -127,8 +127,7 @@ function ReviewPanel({
   } | null>(null);
   const [regions, setRegions] = useState<Rect[]>(request.regions || []);
   const [selectedRegion, setSelectedRegion] = useState(0);
-  const [compare, setCompare] = useState(50);
-  const [mode, setMode] = useState<"compare" | "edit">("compare");
+  const [blurIntensity, setBlurIntensity] = useState(12);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -150,8 +149,10 @@ function ReviewPanel({
       if (busy) return;
       if (event.key === "a") void approve();
       if (event.key === "r") void reject();
-      if (event.key === "e")
-        setMode((m) => (m === "edit" ? "compare" : "edit"));
+      if (event.key === "=")
+        setBlurIntensity((value) => Math.min(24, value + 2));
+      if (event.key === "-")
+        setBlurIntensity((value) => Math.max(4, value - 2));
       if (event.key === "Backspace") removeSelected();
       if (event.key === "ArrowRight" && hasNext) onNext();
       if (event.key === "ArrowLeft" && hasPrevious) onPrevious();
@@ -171,7 +172,11 @@ function ReviewPanel({
   const approve = async () => {
     if (!urls || regions.length === 0) return;
     setBusy(true);
-    const preview = await buildBlurPreview(urls.originalUrl, regions);
+    const preview = await buildBlurPreview(
+      urls.originalUrl,
+      regions,
+      blurIntensity,
+    );
     const result = await resolveBlurRequest(
       request.id,
       "approved",
@@ -202,18 +207,11 @@ function ReviewPanel({
           <div>
             <h2 className="text-xl font-bold text-white">Review blur</h2>
             <p className="text-sm text-zinc-400">
-              Approve all, reject all, or edit regions first. Keys: A approve, R
-              reject, E edit, arrows next/prev, 1-9 select, Delete remove.
+              Move boxes, add missing boxes, approve or reject. Keys: A approve,
+              R reject, arrows next/prev, 1-9 select, Delete remove, +/- blur.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setMode(mode === "edit" ? "compare" : "edit")}
-              className="rounded-xl bg-zinc-800 px-4 py-2 text-sm font-bold text-white hover:bg-zinc-700"
-            >
-              {mode === "edit" ? "Compare" : "Edit regions"}
-            </button>
             <button
               type="button"
               onClick={reject}
@@ -230,59 +228,22 @@ function ReviewPanel({
               className="rounded-xl bg-red-600 px-5 py-2 text-sm font-bold text-white disabled:bg-zinc-700"
             >
               <HiCheck className="mr-1 inline h-4 w-4" />
-              Approve edited
+              Approve
             </button>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-4 p-4 xl:grid-cols-[1fr_260px]">
+      <div className="grid gap-4 p-4 xl:grid-cols-[1fr_280px]">
         <div>
           {urls ? (
-            mode === "compare" ? (
-              <div className="relative overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
-                <img
-                  src={urls.originalUrl}
-                  alt="Original"
-                  className="block w-full"
-                />
-                <div
-                  className="absolute inset-0 overflow-hidden"
-                  style={{ width: `${compare}%` }}
-                >
-                  <img
-                    src={urls.blurredUrl}
-                    alt="Submitted blur"
-                    className="h-full w-auto max-w-none"
-                  />
-                </div>
-                <div className="absolute left-0 right-0 top-3 flex justify-between px-3 text-xs font-bold uppercase tracking-wide">
-                  <span className="rounded-full bg-black/70 px-2 py-1 text-white">
-                    Submitted
-                  </span>
-                  <span className="rounded-full bg-black/70 px-2 py-1 text-white">
-                    Original
-                  </span>
-                </div>
-                <input
-                  aria-label="Compare blur"
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={compare}
-                  onChange={(e) => setCompare(Number(e.target.value))}
-                  className="absolute bottom-4 left-4 right-4 w-[calc(100%-2rem)]"
-                />
-              </div>
-            ) : (
-              <RegionEditor
-                imageUrl={urls.originalUrl}
-                regions={regions}
-                selectedRegion={selectedRegion}
-                onSelect={setSelectedRegion}
-                onChange={setRegions}
-              />
-            )
+            <RegionEditor
+              imageUrl={urls.originalUrl}
+              regions={regions}
+              selectedRegion={selectedRegion}
+              onSelect={setSelectedRegion}
+              onChange={setRegions}
+            />
           ) : (
             <div className="flex justify-center py-20">
               <LoadingSpinner />
@@ -290,13 +251,25 @@ function ReviewPanel({
           )}
         </div>
         <aside className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
-          <div className="flex items-center gap-2 text-sm font-bold text-white">
-            <HiEyeSlash className="h-5 w-5 text-red-500" />
-            Regions
-          </div>
+          <div className="text-sm font-bold text-white">Blur boxes</div>
+          <label className="block space-y-2 rounded-lg bg-zinc-950 p-3 text-sm text-zinc-300">
+            <div className="flex items-center justify-between">
+              <span>Blur intensity</span>
+              <span className="font-mono text-zinc-500">{blurIntensity}px</span>
+            </div>
+            <input
+              type="range"
+              min="4"
+              max="24"
+              step="2"
+              value={blurIntensity}
+              onChange={(event) => setBlurIntensity(Number(event.target.value))}
+              className="w-full accent-red-600"
+            />
+          </label>
           {regions.length === 0 ? (
             <p className="text-sm text-zinc-500">
-              No regions selected. Add one in edit mode before approving.
+              No boxes selected. Drag on photo to add one before approving.
             </p>
           ) : (
             regions.map((region, index) => (
@@ -321,9 +294,8 @@ function ReviewPanel({
             ))
           )}
           <div className="rounded-lg bg-zinc-950 p-3 text-xs text-zinc-400">
-            Partial accept = delete unwanted regions, adjust boxes, then approve
-            edited. Add missing blur by switching to edit mode and dragging new
-            boxes.
+            Partial accept = delete unwanted boxes, move boxes around, add
+            missing boxes, then approve.
           </div>
         </aside>
       </div>
@@ -346,8 +318,13 @@ function RegionEditor({
 }) {
   const [start, setStart] = useState<{ x: number; y: number } | null>(null);
   const [draft, setDraft] = useState<Rect | null>(null);
+  const [moving, setMoving] = useState<{
+    index: number;
+    offsetX: number;
+    offsetY: number;
+  } | null>(null);
   const dragRef = useRef(false);
-  const point = (event: PointerEvent<HTMLDivElement>) => {
+  const point = (event: PointerEvent<HTMLElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     return {
       x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
@@ -365,6 +342,27 @@ function RegionEditor({
         setDraft({ ...p, width: 0, height: 0 });
       }}
       onPointerMove={(event) => {
+        if (moving) {
+          event.preventDefault();
+          const p = point(event);
+          onChange(
+            regions.map((region, index) => {
+              if (index !== moving.index) return region;
+              return {
+                ...region,
+                x: Math.max(
+                  0,
+                  Math.min(1 - region.width, p.x - moving.offsetX),
+                ),
+                y: Math.max(
+                  0,
+                  Math.min(1 - region.height, p.y - moving.offsetY),
+                ),
+              };
+            }),
+          );
+          return;
+        }
         if (!start || !dragRef.current) return;
         const p = point(event);
         setDraft({
@@ -375,6 +373,7 @@ function RegionEditor({
         });
       }}
       onPointerUp={() => {
+        setMoving(null);
         dragRef.current = false;
         if (draft && draft.width > 0.01 && draft.height > 0.01) {
           onChange([...regions, draft]);
@@ -396,7 +395,14 @@ function RegionEditor({
           type="button"
           onPointerDown={(event) => {
             event.stopPropagation();
+            event.preventDefault();
+            const p = point(event);
             onSelect(index);
+            setMoving({
+              index,
+              offsetX: p.x - region.x,
+              offsetY: p.y - region.y,
+            });
           }}
           className={`absolute border-2 ${selectedRegion === index ? "border-red-400 bg-red-500/25" : "border-white/80 bg-white/10"}`}
           style={{
@@ -420,7 +426,11 @@ function RegionEditor({
   );
 }
 
-async function buildBlurPreview(src: string, regions: Rect[]) {
+async function buildBlurPreview(
+  src: string,
+  regions: Rect[],
+  intensity: number,
+) {
   const img = await loadImage(src);
   const canvas = document.createElement("canvas");
   canvas.width = img.naturalWidth;
@@ -433,7 +443,7 @@ async function buildBlurPreview(src: string, regions: Rect[]) {
     const w = Math.round(r.width * canvas.width);
     const h = Math.round(r.height * canvas.height);
     ctx.save();
-    ctx.filter = "blur(12px)";
+    ctx.filter = `blur(${intensity}px)`;
     ctx.drawImage(canvas, x, y, w, h, x, y, w, h);
     ctx.restore();
   }
