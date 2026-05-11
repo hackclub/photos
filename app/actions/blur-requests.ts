@@ -51,8 +51,8 @@ async function renderBlurredPhoto(
         const boxWidth = right - left;
         const boxHeight = bottom - top;
         if (left + boxWidth > width || top + boxHeight > height) return null;
-        const pixelWidth = Math.max(1, Math.floor(boxWidth / 32));
-        const pixelHeight = Math.max(1, Math.floor(boxHeight / 32));
+      const pixelWidth = Math.max(1, Math.floor(boxWidth / 64));
+      const pixelHeight = Math.max(1, Math.floor(boxHeight / 64));
         const inputBuffer = await sharp(base)
           .extract({
             left,
@@ -62,7 +62,7 @@ async function renderBlurredPhoto(
           })
           .resize(pixelWidth, pixelHeight, { kernel: "nearest" })
           .resize(boxWidth, boxHeight, { kernel: "nearest" })
-          .blur(Math.max(24, intensity * 3))
+        .blur(Math.max(40, intensity * 6))
           .toBuffer();
         return { input: inputBuffer, left, top };
       }),
