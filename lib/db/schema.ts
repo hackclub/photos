@@ -32,6 +32,11 @@ export const reportStatusEnum = pgEnum("report_status", [
   "resolved",
   "ignored",
 ]);
+export const blurRequestStatusEnum = pgEnum("blur_request_status", [
+  "pending",
+  "approved",
+  "rejected",
+]);
 export const auditActionEnum = pgEnum("audit_action", [
   "create",
   "update",
@@ -123,6 +128,11 @@ export const media = pgTable("media", {
   s3Key: text("s3_key").notNull(),
   s3Url: text("s3_url").notNull(),
   thumbnailS3Key: text("thumbnail_s3_key"),
+  originalS3Key: text("original_s3_key"),
+  originalThumbnailS3Key: text("original_thumbnail_s3_key"),
+  blurredS3Key: text("blurred_s3_key"),
+  blurredThumbnailS3Key: text("blurred_thumbnail_s3_key"),
+  blurStatus: blurRequestStatusEnum("blur_status"),
   filename: text("filename").notNull(),
   mimeType: text("mime_type").notNull(),
   fileSize: integer("file_size").notNull(),
@@ -323,6 +333,24 @@ export const reports = pgTable("reports", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+export const blurRequests = pgTable("blur_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  mediaId: uuid("media_id")
+    .notNull()
+    .references(() => media.id, { onDelete: "cascade" }),
+  requesterId: uuid("requester_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  status: blurRequestStatusEnum("status").notNull().default("pending"),
+  regions: jsonb("regions").notNull(),
+  blurredS3Key: text("blurred_s3_key").notNull(),
+  blurredThumbnailS3Key: text("blurred_thumbnail_s3_key"),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedById: uuid("resolved_by_id").references(() => users.id),
+  resolutionNotes: text("resolution_notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
 export const auditLogs = pgTable("audit_logs", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id")
@@ -374,6 +402,7 @@ export const mediaRelations = relations(media, ({ one, many }) => ({
   shareLinks: many(shareLinks),
   mentions: many(mediaMentions),
   reports: many(reports),
+  blurRequests: many(blurRequests),
   apiKey: one(apiKeys, {
     fields: [media.apiKeyId],
     references: [apiKeys.id],
@@ -553,6 +582,22 @@ export const reportsRelations = relations(reports, ({ one }) => ({
     relationName: "resolver",
   }),
 }));
+export const blurRequestsRelations = relations(blurRequests, ({ one }) => ({
+  media: one(media, {
+    fields: [blurRequests.mediaId],
+    references: [media.id],
+  }),
+  requester: one(users, {
+    fields: [blurRequests.requesterId],
+    references: [users.id],
+    relationName: "blur_requester",
+  }),
+  resolvedBy: one(users, {
+    fields: [blurRequests.resolvedById],
+    references: [users.id],
+    relationName: "blur_resolver",
+  }),
+}));
 export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
   user: one(users, {
     fields: [auditLogs.userId],
@@ -587,4 +632,6 @@ export const usersRelations = relations(users, ({ many }) => ({
   dataExports: many(dataExports),
   reports: many(reports, { relationName: "reporter" }),
   resolvedReports: many(reports, { relationName: "resolver" }),
+  blurRequests: many(blurRequests, { relationName: "blur_requester" }),
+  resolvedBlurRequests: many(blurRequests, { relationName: "blur_resolver" }),
 }));

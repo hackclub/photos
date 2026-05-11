@@ -1,6 +1,7 @@
 export interface MediaItem {
   id: string;
   s3Url: string;
+  s3Key?: string;
   thumbnailS3Key: string | null;
   filename: string;
   mimeType: string;

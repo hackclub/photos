@@ -16,7 +16,7 @@ import DownloadAllButton from "@/components/events/DownloadAllButton";
 import JoinEventButton from "@/components/events/JoinEventButton";
 import LeaveEventButton from "@/components/events/LeaveEventButton";
 import ParticipantsList from "@/components/events/ParticipantsList";
-import MediaGallery from "@/components/media/MediaGallery";
+import BlurMeGallery from "@/components/media/BlurMeGallery";
 import UploadButton from "@/components/media/UploadButton";
 import { getSession } from "@/lib/auth";
 import { APP_URL } from "@/lib/constants";
@@ -157,19 +157,20 @@ export default async function EventPage({
     },
   });
   participantCount = participants.length;
+  const visibleEventMedia = event.media?.filter((m) => m.blurStatus !== "pending") || [];
   const photoCount =
-    event.media?.filter((m) => m.mimeType.startsWith("image/")).length || 0;
+    visibleEventMedia.filter((m) => m.mimeType.startsWith("image/")).length || 0;
   const videoCount =
-    event.media?.filter((m) => m.mimeType.startsWith("video/")).length || 0;
+    visibleEventMedia.filter((m) => m.mimeType.startsWith("video/")).length || 0;
   const likeCounts =
-    event.media && event.media.length > 0
+    visibleEventMedia.length > 0
       ? await db
           .select({ mediaId: mediaLikes.mediaId, count: count() })
           .from(mediaLikes)
           .where(
             inArray(
               mediaLikes.mediaId,
-              event.media.map((m) => m.id),
+              visibleEventMedia.map((m) => m.id),
             ),
           )
           .groupBy(mediaLikes.mediaId)
@@ -181,12 +182,12 @@ export default async function EventPage({
   if (event.bannerS3Key) {
     bannerUrl = getAssetProxyUrl("event-banner", event.id);
   }
-  let mediaWithPermissions = event.media || [];
-  if (session?.id && event.media && event.media.length > 0) {
+  let mediaWithPermissions = visibleEventMedia;
+  if (session?.id && visibleEventMedia.length > 0) {
     const { filterDeletableMedia } = await import("@/lib/policy");
-    const deletableMedia = await filterDeletableMedia(session.id, event.media);
+    const deletableMedia = await filterDeletableMedia(session.id, visibleEventMedia);
     const deletableIds = new Set(deletableMedia.map((m) => m.id));
-    mediaWithPermissions = event.media.map((m) => ({
+    mediaWithPermissions = visibleEventMedia.map((m) => ({
       ...m,
       canDelete: deletableIds.has(m.id),
     }));
@@ -361,7 +362,7 @@ export default async function EventPage({
       </div>
 
       <div className="px-4 sm:px-8 py-8 sm:py-12">
-        {event.media && event.media.length > 0 ? (
+        {visibleEventMedia.length > 0 ? (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0">
               <h2 className="text-xl sm:text-2xl font-bold text-white">
@@ -370,11 +371,11 @@ export default async function EventPage({
               <DownloadAllButton
                 eventId={event.id}
                 eventName={event.name}
-                mediaCount={event.media.length}
+                mediaCount={visibleEventMedia.length}
                 isAdmin={canEdit}
               />
             </div>
-            <MediaGallery
+            <BlurMeGallery
               media={mediaWithPermissions.map((m) => ({
                 id: m.id,
                 filename: m.filename,
@@ -397,7 +398,6 @@ export default async function EventPage({
               eventId={event.id}
               isAdmin={canEdit}
               initialPhotoId={photoId}
-              showEventFilter={false}
             />
           </div>
         ) : (

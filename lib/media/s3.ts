@@ -6,6 +6,7 @@ import {
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
+  GetObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -161,6 +162,17 @@ export async function getSignedUploadUrl(
     Bucket: s3BucketName,
     Key: key,
     ContentType: contentType,
+  });
+  return await getSignedUrl(s3Client, command, { expiresIn });
+}
+
+export async function getSignedDownloadUrl(
+  key: string,
+  expiresIn = 3600,
+): Promise<string> {
+  const command = new GetObjectCommand({
+    Bucket: s3BucketName,
+    Key: key,
   });
   return await getSignedUrl(s3Client, command, { expiresIn });
 }

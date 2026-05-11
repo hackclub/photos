@@ -35,6 +35,7 @@ const publicNavigation = [
 const adminNavigation = [
   { name: "Admin Dashboard", href: "/admin", icon: HiCog6Tooth },
   { name: "Reports", href: "/admin/reports", icon: HiExclamationTriangle },
+  { name: "Blur Requests", href: "/admin/blur-requests", icon: HiExclamationTriangle },
   { name: "Manage Events", href: "/admin/events", icon: HiCalendar },
   { name: "Manage Series", href: "/admin/series", icon: HiFolder },
   { name: "Manage Tags", href: "/admin/tags", icon: HiTag },

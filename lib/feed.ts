@@ -1,4 +1,4 @@
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   events,
@@ -80,7 +80,7 @@ export async function fetchFeedItems(
         ),
     })
     .from(media)
-    .where(inArray(media.eventId, accessibleEventIds))
+    .where(and(inArray(media.eventId, accessibleEventIds), isNull(media.blurStatus)))
     .orderBy(desc(media.uploadedAt))
     .limit(limit + offset);
   const recentComments = await db
@@ -93,7 +93,7 @@ export async function fetchFeedItems(
     })
     .from(mediaComments)
     .innerJoin(media, eq(mediaComments.mediaId, media.id))
-    .where(inArray(media.eventId, accessibleEventIds))
+    .where(and(inArray(media.eventId, accessibleEventIds), isNull(media.blurStatus)))
     .orderBy(desc(mediaComments.createdAt))
     .limit(limit + offset);
   const recentLikes = await db
@@ -105,7 +105,7 @@ export async function fetchFeedItems(
     })
     .from(mediaLikes)
     .innerJoin(media, eq(mediaLikes.mediaId, media.id))
-    .where(inArray(media.eventId, accessibleEventIds))
+    .where(and(inArray(media.eventId, accessibleEventIds), isNull(media.blurStatus)))
     .orderBy(desc(mediaLikes.createdAt))
     .limit(limit + offset);
   const allActivities = [
@@ -172,7 +172,7 @@ export async function fetchFeedItems(
           .from(media)
           .innerJoin(users, eq(media.uploadedById, users.id))
           .leftJoin(events, eq(media.eventId, events.id))
-          .where(inArray(media.id, mediaIds))
+          .where(and(inArray(media.id, mediaIds), isNull(media.blurStatus)))
       : Promise.resolve([]),
   ]);
   const usersMap = new Map(usersData.map((u) => [u.id, u]));

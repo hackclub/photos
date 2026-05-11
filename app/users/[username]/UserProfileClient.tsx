@@ -7,6 +7,7 @@ import {
   HiCalendar,
   HiCloud,
   HiExclamationTriangle,
+  HiEyeSlash,
   HiFaceSmile,
   HiGlobeAlt,
   HiHeart,
@@ -37,6 +38,7 @@ import UserAvatar from "@/components/ui/UserAvatar";
 import DeleteAccountModal from "@/components/users/DeleteAccountModal";
 import EditProfileModal from "@/components/users/EditProfileModal";
 import UserReports from "@/components/users/UserReports";
+import UserBlurRequests from "@/components/users/UserBlurRequests";
 import { useAuth } from "@/hooks/useAuth";
 import { SOCIAL_URLS } from "@/lib/constants";
 
@@ -127,6 +129,7 @@ export default function UserProfileClient({
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showReports, setShowReports] = useState(false);
+  const [showBlurRequests, setShowBlurRequests] = useState(false);
   useEffect(() => {
     setUser(initialUser);
   }, [initialUser]);
@@ -270,6 +273,17 @@ export default function UserProfileClient({
                     title="My Reports"
                   >
                     <HiExclamationTriangle className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setShowBlurRequests(!showBlurRequests)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      showBlurRequests
+                        ? "bg-red-600 text-white"
+                        : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+                    }`}
+                    title="My Blur Requests"
+                  >
+                    <HiEyeSlash className="w-5 h-5" />
                   </button>
                   <button
                     onClick={() => setShowDeleteModal(true)}
@@ -504,7 +518,23 @@ export default function UserProfileClient({
         </div>
       </div>
 
-      {showReports && isOwnProfile ? (
+      {showBlurRequests && isOwnProfile ? (
+        <div className="mb-12">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <HiEyeSlash className="w-6 h-6 text-red-600" />
+              My Blur Requests
+            </h2>
+            <button
+              onClick={() => setShowBlurRequests(false)}
+              className="text-sm text-zinc-400 hover:text-white"
+            >
+              Close
+            </button>
+          </div>
+          <UserBlurRequests />
+        </div>
+      ) : showReports && isOwnProfile ? (
         <div className="mb-12">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">

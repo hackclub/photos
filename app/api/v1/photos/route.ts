@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
     const conditions = [
       eq(events.visibility, "public"),
       not(like(media.mimeType, "video/%")),
+      not(eq(media.blurStatus, "pending")),
     ];
     if (eventSlug) {
       conditions.push(eq(events.slug, eventSlug));

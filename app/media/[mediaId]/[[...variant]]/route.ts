@@ -44,6 +44,12 @@ export async function GET(
   if (!mediaItem) {
     return new NextResponse("Media not found", { status: 404 });
   }
+  if (mediaItem.blurStatus === "pending") {
+    return new NextResponse(
+      "This photo is currently under review. Come back later.",
+      { status: 423 },
+    );
+  }
   let isAllowed = false;
   if (mediaItem.event.visibility === "public") {
     isAllowed = true;
