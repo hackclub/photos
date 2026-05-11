@@ -3,7 +3,7 @@ set -eu
 
 if [ -n "${DATABASE_URL:-}" ]; then
   echo "Running database migrations..."
-  bunx drizzle-kit migrate
+  bun scripts/run-migrations.js
   printf '\n'
 fi
 
