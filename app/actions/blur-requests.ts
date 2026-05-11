@@ -14,8 +14,58 @@ type BlurRegion = { x: number; y: number; width: number; height: number };
 type BlurSubmission = {
   mediaId: string;
   regions: BlurRegion[];
-  previewDataUrl: string;
+  previewDataUrl?: string;
 };
+
+async function renderBlurredPhoto(
+  sourceKey: string,
+  regions: BlurRegion[],
+  intensity = 12,
+  mimeType = "image/jpeg",
+) {
+  const sourceUrl = await getSignedDownloadUrl(sourceKey);
+  const response = await fetch(sourceUrl);
+  if (!response.ok) throw new Error("Failed to fetch source photo");
+  const input = Buffer.from(await response.arrayBuffer());
+  const image = sharp(input).rotate();
+  const metadata = await image.metadata();
+  const width = metadata.width ?? 0;
+  const height = metadata.height ?? 0;
+  if (!width || !height) throw new Error("Invalid source photo");
+  const base = await image.keepMetadata().toBuffer();
+  const overlays = await Promise.all(
+    regions.map(async (region) => {
+      const left = Math.max(0, Math.round(region.x * width));
+      const top = Math.max(0, Math.round(region.y * height));
+      const boxWidth = Math.max(1, Math.round(region.width * width));
+      const boxHeight = Math.max(1, Math.round(region.height * height));
+      const inputBuffer = await sharp(base)
+        .extract({
+          left: Math.min(left, width - 1),
+          top: Math.min(top, height - 1),
+          width: Math.min(boxWidth, width - left),
+          height: Math.min(boxHeight, height - top),
+        })
+        .blur(intensity)
+        .toBuffer();
+      return { input: inputBuffer, left, top };
+    }),
+  );
+  const output = sharp(base).composite(overlays).keepMetadata();
+  if (mimeType === "image/png") {
+    return { buffer: await output.png().toBuffer(), mimeType: "image/png" };
+  }
+  if (mimeType === "image/webp") {
+    return {
+      buffer: await output.webp({ quality: 90 }).toBuffer(),
+      mimeType: "image/webp",
+    };
+  }
+  return {
+    buffer: await output.jpeg({ quality: 95, mozjpeg: true }).toBuffer(),
+    mimeType: "image/jpeg",
+  };
+}
 
 function decodeDataUrl(dataUrl: string) {
   const match = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
@@ -50,7 +100,17 @@ export async function submitBlurRequests(submissions: BlurSubmission[]) {
 
     for (const submission of submissions) {
       const item = mediaById.get(submission.mediaId)!;
-      const { mimeType, buffer } = decodeDataUrl(submission.previewDataUrl);
+      const rendered = submission.previewDataUrl
+        ? decodeDataUrl(submission.previewDataUrl)
+        : {
+            ...(await renderBlurredPhoto(
+              item.s3Key,
+              submission.regions,
+              12,
+              item.mimeType,
+            )),
+          };
+      const { mimeType, buffer } = rendered;
       const requestId = randomUUID();
       const ext =
         mimeType === "image/png"
@@ -160,6 +220,7 @@ export async function resolveBlurRequest(
   status: "approved" | "rejected",
   replacementDataUrl?: string,
   regions?: BlurRegion[],
+  intensity = 12,
 ) {
   const session = await getSession();
   const user = await getUserContext(session?.id);
@@ -174,6 +235,7 @@ export async function resolveBlurRequest(
   if (!request) return { success: false, error: "Request not found" };
   let blurredS3Key = request.blurredS3Key;
   let thumbnailS3Key = request.blurredThumbnailS3Key;
+  const finalRegions = regions ?? (request.regions as BlurRegion[]);
   if (status === "approved" && replacementDataUrl) {
     const { mimeType, buffer } = decodeDataUrl(replacementDataUrl);
     const ext =
@@ -197,10 +259,22 @@ export async function resolveBlurRequest(
       mediaId: request.mediaId,
     });
   } else if (status === "approved") {
-    const sourceUrl = await getSignedDownloadUrl(request.blurredS3Key);
-    const response = await fetch(sourceUrl);
-    if (!response.ok) throw new Error("Failed to fetch blurred photo");
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const sourceKey = request.media.originalS3Key ?? request.media.s3Key;
+    const rendered = await renderBlurredPhoto(
+      sourceKey,
+      finalRegions,
+      intensity,
+      request.media.mimeType,
+    );
+    const buffer = rendered.buffer;
+    const finalMimeType = rendered.mimeType;
+    const ext =
+      finalMimeType === "image/png"
+        ? "png"
+        : finalMimeType === "image/webp"
+          ? "webp"
+          : "jpg";
+    blurredS3Key = `media/${request.mediaId}/blur-requests/${request.id}-server.${ext}`;
     thumbnailS3Key = `media/${request.mediaId}/blur-requests/${request.id}-approved-thumb.jpg`;
     const thumbnail = await sharp(buffer)
       .resize(400, 400, { fit: "cover", position: "center" })
@@ -210,12 +284,16 @@ export async function resolveBlurRequest(
       uploadedBy: user.id,
       mediaId: request.mediaId,
     });
+    await uploadToS3(buffer, blurredS3Key, finalMimeType, undefined, {
+      uploadedBy: user.id,
+      mediaId: request.mediaId,
+    });
   }
   await db
     .update(blurRequests)
     .set({
       status,
-      regions: regions ?? request.regions,
+      regions: finalRegions,
       blurredS3Key,
       blurredThumbnailS3Key: thumbnailS3Key,
       resolvedAt: new Date(),

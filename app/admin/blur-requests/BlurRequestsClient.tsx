@@ -171,23 +171,20 @@ function ReviewPanel({
   };
   const approve = async () => {
     if (!urls || regions.length === 0) return;
+    onResolved("approved");
     setBusy(true);
-    const preview = await buildBlurPreview(
-      urls.originalUrl,
-      regions,
-      blurIntensity,
-    );
     const result = await resolveBlurRequest(
       request.id,
       "approved",
-      preview,
+      undefined,
       regions,
+      blurIntensity,
     );
     setBusy(false);
-    if (result.success) onResolved("approved");
-    else alert(result.error || "Failed to approve request");
+    if (!result.success) alert(result.error || "Failed to approve request");
   };
   const reject = async () => {
+    onResolved("rejected");
     setBusy(true);
     const result = await resolveBlurRequest(
       request.id,
@@ -196,8 +193,7 @@ function ReviewPanel({
       regions,
     );
     setBusy(false);
-    if (result.success) onResolved("rejected");
-    else alert(result.error || "Failed to reject request");
+    if (!result.success) alert(result.error || "Failed to reject request");
   };
 
   return (
@@ -424,40 +420,6 @@ function RegionEditor({
       </div>
     </div>
   );
-}
-
-async function buildBlurPreview(
-  src: string,
-  regions: Rect[],
-  intensity: number,
-) {
-  const img = await loadImage(src);
-  const canvas = document.createElement("canvas");
-  canvas.width = img.naturalWidth;
-  canvas.height = img.naturalHeight;
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(img, 0, 0);
-  for (const r of regions) {
-    const x = Math.round(r.x * canvas.width);
-    const y = Math.round(r.y * canvas.height);
-    const w = Math.round(r.width * canvas.width);
-    const h = Math.round(r.height * canvas.height);
-    ctx.save();
-    ctx.filter = `blur(${intensity}px)`;
-    ctx.drawImage(canvas, x, y, w, h, x, y, w, h);
-    ctx.restore();
-  }
-  return canvas.toDataURL("image/jpeg", 0.9);
-}
-
-function loadImage(src: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
 }
 
 function StatusBadge({ status }: { status: string }) {

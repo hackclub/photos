@@ -63,11 +63,11 @@ export default function BlurMeGallery({
 
   return (
     <div className="space-y-4">
-        <div className="sticky top-4 z-30 rounded-2xl border border-red-500/30 bg-red-950/70 p-4 shadow-2xl backdrop-blur">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-bold text-white">Blur Me mode</p>
-            </div>
+      <div className="sticky top-4 z-30 rounded-2xl border border-red-500/30 bg-red-950/70 p-4 shadow-2xl backdrop-blur">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-bold text-white">Blur Me mode</p>
+          </div>
           <div className="flex gap-2">
             <button
               type="button"
@@ -144,7 +144,6 @@ function BlurReviewModal({
       drafts.map((d) => ({
         mediaId: d.media.id,
         regions: d.regions as BlurRect[],
-        previewDataUrl: d.previewDataUrl,
       })),
     );
     setSubmitting(false);
