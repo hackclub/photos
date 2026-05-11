@@ -24,6 +24,7 @@ import { getUsersBySlackIds } from "@/app/actions/users";
 import LocationSearch from "@/components/map/LocationSearch";
 import UserAvatar from "@/components/ui/UserAvatar";
 import UserSearch from "@/components/ui/UserSearch";
+import { parseSlackIds } from "@/lib/slack-id";
 
 interface CsvRow {
   "Event Name": string;
@@ -55,6 +56,7 @@ interface BulkEventRow {
     slackId?: string | null;
     avatarUrl?: string | null;
   }[];
+  pendingAdminSlackIds: string[];
   slug: string;
   slugManuallyEdited?: boolean;
   visibility: "public" | "auth_required" | "unlisted";
@@ -117,6 +119,7 @@ export default function BulkCreateClient({
       longitude: null,
       eventDate: "",
       admins: [],
+      pendingAdminSlackIds: [],
       slug: "",
       slugManuallyEdited: false,
       visibility: "auth_required",
@@ -211,6 +214,28 @@ export default function BulkCreateClient({
       admins: row.admins.filter((a) => a.id !== userId),
     });
   };
+  const handleAddPendingAdmins = (rowId: string, input: string) => {
+    const row = rows.find((r) => r.id === rowId);
+    if (!row) return;
+    const slackIds = parseSlackIds(input);
+    if (slackIds.length === 0) return;
+    const existing = new Set(row.pendingAdminSlackIds);
+    updateRow(rowId, {
+      pendingAdminSlackIds: [
+        ...row.pendingAdminSlackIds,
+        ...slackIds.filter((slackId) => !existing.has(slackId)),
+      ],
+    });
+  };
+  const handleRemovePendingAdmin = (rowId: string, slackId: string) => {
+    const row = rows.find((r) => r.id === rowId);
+    if (!row) return;
+    updateRow(rowId, {
+      pendingAdminSlackIds: row.pendingAdminSlackIds.filter(
+        (id) => id !== slackId,
+      ),
+    });
+  };
   const toggleRowSelection = (id: string) => {
     const newSelected = new Set(selectedRows);
     if (newSelected.has(id)) {
@@ -275,6 +300,7 @@ export default function BulkCreateClient({
           latitude: sourceRow.latitude,
           longitude: sourceRow.longitude,
           admins: [...sourceRow.admins],
+          pendingAdminSlackIds: [...sourceRow.pendingAdminSlackIds],
           visibility: sourceRow.visibility,
           allowPublicSharing: sourceRow.allowPublicSharing,
         };
@@ -302,7 +328,9 @@ export default function BulkCreateClient({
           .map((id: string) => id.trim())
           .filter(Boolean)
           .forEach((id: string) => {
-            allSlackIds.add(id);
+            for (const slackId of parseSlackIds(id)) {
+              allSlackIds.add(slackId);
+            }
           });
       }
     });
@@ -320,14 +348,15 @@ export default function BulkCreateClient({
     const newRows: BulkEventRow[] = [];
     for (const row of parsedRows) {
       const adminSlackIds = row["Admins (Slack IDs comma separated)"]
-        ? row["Admins (Slack IDs comma separated)"]
-            .split(",")
-            .map((id: string) => id.trim())
-            .filter(Boolean)
+        ? parseSlackIds(row["Admins (Slack IDs comma separated)"])
         : [];
       const admins = adminSlackIds
         .map((id: string) => slackUsers[id])
         .filter(Boolean);
+      const resolvedSlackIds = new Set(admins.map((admin) => admin.slackId));
+      const pendingAdminSlackIds = adminSlackIds.filter(
+        (slackId) => !resolvedSlackIds.has(slackId),
+      );
       let locationData = {
         location: row.Location || "",
         locationCity: "",
@@ -359,6 +388,7 @@ export default function BulkCreateClient({
         ...locationData,
         eventDate: row["Date (YYYY-MM-DD)"] || "",
         admins: admins,
+        pendingAdminSlackIds,
         slug: slugify(row["Event Name"] || ""),
         slugManuallyEdited: false,
         visibility: "auth_required",
@@ -464,6 +494,7 @@ export default function BulkCreateClient({
         longitude: row.longitude,
         eventDate: row.eventDate ? new Date(row.eventDate) : null,
         adminUserIds: row.admins.map((a) => a.id),
+        pendingAdminSlackIds: row.pendingAdminSlackIds,
         visibility: row.visibility,
         allowPublicSharing: row.allowPublicSharing,
         requiresInvite: false,
@@ -491,7 +522,9 @@ export default function BulkCreateClient({
         <div className="max-w-[1600px] mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Link prefetch={false} href={`/series/${seriesSlug}`}
+              <Link
+                prefetch={false}
+                href={`/series/${seriesSlug}`}
                 className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
               >
                 <HiArrowLeft className="w-5 h-5" />
@@ -837,7 +870,50 @@ export default function BulkCreateClient({
                             </button>
                           </span>
                         ))}
+                        {row.pendingAdminSlackIds.map((slackId) => (
+                          <span
+                            key={slackId}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 pr-3 font-mono text-xs text-amber-300"
+                            title="Pending admin grant by Slack ID"
+                          >
+                            {slackId}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleRemovePendingAdmin(row.id, slackId)
+                              }
+                              className="ml-0.5 hover:text-red-400"
+                            >
+                              <HiXMark className="h-4 w-4" />
+                            </button>
+                          </span>
+                        ))}
                       </div>
+                      <form
+                        className="flex gap-1.5"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const form = e.currentTarget;
+                          const input = form.elements.namedItem(
+                            "pendingSlackIds",
+                          ) as HTMLInputElement;
+                          handleAddPendingAdmins(row.id, input.value);
+                          input.value = "";
+                        }}
+                      >
+                        <input
+                          name="pendingSlackIds"
+                          type="text"
+                          placeholder="Upsert Slack IDs"
+                          className="min-h-9 min-w-0 flex-1 rounded-lg border border-zinc-700 bg-black px-2 py-1.5 font-mono text-xs text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-red-600"
+                        />
+                        <button
+                          type="submit"
+                          className="min-h-9 rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-white"
+                        >
+                          Upsert
+                        </button>
+                      </form>
                     </div>
                   </td>
                   <td className="px-4 py-3 align-top pt-5">
@@ -1036,7 +1112,8 @@ export default function BulkCreateClient({
                           {row.location || "No location set"}
                         </span>
                       </div>
-                      {row.admins.length > 0 && (
+                      {(row.admins.length > 0 ||
+                        row.pendingAdminSlackIds.length > 0) && (
                         <div className="col-span-2">
                           <span className="text-zinc-500 block text-xs uppercase tracking-wider mb-1">
                             Admins
@@ -1049,6 +1126,14 @@ export default function BulkCreateClient({
                               >
                                 <UserAvatar user={a} size="xs" />
                                 {a.name}
+                              </span>
+                            ))}
+                            {row.pendingAdminSlackIds.map((slackId) => (
+                              <span
+                                key={slackId}
+                                className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 font-mono text-xs text-amber-300"
+                              >
+                                {slackId}
                               </span>
                             ))}
                           </div>

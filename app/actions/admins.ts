@@ -14,6 +14,7 @@ import {
   users,
 } from "@/lib/db/schema";
 import { can, getUserContext } from "@/lib/policy";
+import { isValidSlackId, normalizeSlackId } from "@/lib/slack-id";
 import { toPublicUser } from "@/lib/user-display";
 export async function getEventAdmins(eventId: string) {
   try {
@@ -246,14 +247,6 @@ export const addSeriesAdmin = async (id: string, hackclubId: string) =>
   addAdmin("series", id, hackclubId);
 export const removeSeriesAdmin = async (id: string, userId: string) =>
   removeAdmin("series", id, userId);
-
-function normalizeSlackId(slackId: string) {
-  return slackId.trim().toUpperCase();
-}
-
-function isValidSlackId(slackId: string) {
-  return /^U[A-Z0-9]{8,}$/.test(slackId);
-}
 
 export async function addPendingAdminBySlackId(
   entityType: "event" | "series",

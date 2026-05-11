@@ -4,10 +4,17 @@ import { broadcastPhotoDeleted } from "@/app/api/feed/stream/route";
 import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { events, media, series } from "@/lib/db/schema";
+import {
+  eventAdmins,
+  events,
+  media,
+  pendingEventAdmins,
+  series,
+} from "@/lib/db/schema";
 import { getMediaProxyUrl } from "@/lib/media/s3";
 import { deleteBatchMedia } from "@/lib/media/thumbnail";
 import { can, getUserContext } from "@/lib/policy";
+import { parseSlackIds } from "@/lib/slack-id";
 export async function getBulkMediaUrls(s3Keys?: string[], mediaIds?: string[]) {
   try {
     const urls: Record<string, string> = {};
@@ -136,6 +143,7 @@ export interface BulkEventData {
   longitude: number | null;
   eventDate: Date | null;
   adminUserIds: string[];
+  pendingAdminSlackIds?: string[];
   visibility: "public" | "auth_required" | "unlisted";
   requiresInvite: boolean;
   allowPublicSharing: boolean;
@@ -203,12 +211,23 @@ export async function bulkCreateEvents(
           seriesId,
         });
         const adminIds = new Set([user.id, ...eventData.adminUserIds]);
-        const { eventAdmins } = await import("@/lib/db/schema");
+        const pendingAdminSlackIds = parseSlackIds(
+          eventData.pendingAdminSlackIds || [],
+        );
         if (adminIds.size > 0) {
           await db.insert(eventAdmins).values(
             Array.from(adminIds).map((userId) => ({
               eventId: newEvent.id,
               userId: userId,
+            })),
+          );
+        }
+        if (user.isGlobalAdmin && pendingAdminSlackIds.length > 0) {
+          await db.insert(pendingEventAdmins).values(
+            pendingAdminSlackIds.map((slackId) => ({
+              eventId: newEvent.id,
+              slackId,
+              grantedById: user.id,
             })),
           );
         }
