@@ -669,7 +669,7 @@ export default function MediaGallery({
             updateUrl(null);
           }}
           onDownload={() => handleDownload(selectedMedia)}
-          blurMode={true}
+          blurMode={selectedMedia.mimeType.startsWith("image/")}
           blurDraft={blurDrafts[selectedMedia.id]}
           onBlurSave={onBlurDraft}
           onNext={() => {

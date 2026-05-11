@@ -1275,7 +1275,7 @@ export default function PhotoDetailModal({
                     </div>
                   </div>
                 )}
-                {blurMode &&
+                {blurMode && imageLoaded &&
                   activeBlurRegions.map((region, index) => (
                     <div
                       key={`${region.x}-${region.y}-${index}`}
@@ -1288,17 +1288,29 @@ export default function PhotoDetailModal({
                       }}
                     />
                   ))}
-                {blurMode && (
-                  <div className="absolute bottom-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-zinc-950/85 p-3 backdrop-blur-md">
+                {blurMode && imageLoaded && (
+                  <div
+                    className="absolute bottom-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-zinc-950/85 p-3 backdrop-blur-md"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onPointerMove={(e) => e.stopPropagation()}
+                    onPointerUp={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div>
                       <p className="text-sm font-bold text-white">Blur Me</p>
                       <p className="text-xs text-zinc-400">
                         Drag boxes over yourself. Use arrows to keep reviewing.
                       </p>
+                      {blurSaveState === "saved" && (
+                        <p className="mt-1 text-xs font-medium text-green-400">
+                          Draft saved. Click Blur Me again to review all photos.
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-2">
                       <button
                         type="button"
+                        onPointerDown={(e) => e.stopPropagation()}
                         onClick={() => {
                           setBlurRegions([]);
                           setCurrentBlurRegion(null);
@@ -1312,6 +1324,7 @@ export default function PhotoDetailModal({
                       </button>
                       <button
                         type="button"
+                        onPointerDown={(e) => e.stopPropagation()}
                         onClick={saveBlurDraft}
                         disabled={
                           activeBlurRegions.length === 0 ||
