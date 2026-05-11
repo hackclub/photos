@@ -233,6 +233,9 @@ export default function PhotoDetailModal({
   const [currentBlurRegion, setCurrentBlurRegion] = useState<BlurRect | null>(
     null,
   );
+  const [blurSaveState, setBlurSaveState] = useState<
+    "idle" | "saving" | "saved"
+  >("idle");
 
   const MAX_IMAGE_AUTO_RETRIES = 2;
   const { displayUrl } = useHeicUrl(fullSizeUrl ?? "", media.filename);
@@ -240,6 +243,7 @@ export default function PhotoDetailModal({
     setBlurRegions(blurDraft?.regions ?? []);
     setBlurStart(null);
     setCurrentBlurRegion(null);
+    setBlurSaveState(blurDraft ? "saved" : "idle");
   }, [blurDraft]);
   const effectiveUrl = useMemo(() => {
     if (!displayUrl) return null;
@@ -872,11 +876,13 @@ export default function PhotoDetailModal({
     ) {
       return;
     }
+    setBlurSaveState("saving");
     const previewDataUrl = await buildBlurPreview(
       effectiveUrl,
       activeBlurRegions,
     );
     onBlurSave({ media, regions: activeBlurRegions, previewDataUrl });
+    setBlurSaveState("saved");
   };
   const copyToClipboard = async (text: string, type: "view" | "raw") => {
     try {
@@ -1184,6 +1190,7 @@ export default function PhotoDetailModal({
                   const p = getBlurPoint(e.currentTarget, e.clientX, e.clientY);
                   setBlurStart(p);
                   setCurrentBlurRegion({ ...p, width: 0, height: 0 });
+                  setBlurSaveState("idle");
                 }}
                 onPointerMove={(e) => {
                   if (!blurMode || !blurStart) return;
@@ -1205,6 +1212,7 @@ export default function PhotoDetailModal({
                     currentBlurRegion.height > 0.01
                   ) {
                     setBlurRegions((prev) => [...prev, currentBlurRegion]);
+                    setBlurSaveState("idle");
                   }
                   setBlurStart(null);
                   setCurrentBlurRegion(null);
@@ -1291,7 +1299,13 @@ export default function PhotoDetailModal({
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => setBlurRegions([])}
+                        onClick={() => {
+                          setBlurRegions([]);
+                          setCurrentBlurRegion(null);
+                          setBlurStart(null);
+                          setBlurSaveState("idle");
+                        }}
+                        disabled={activeBlurRegions.length === 0}
                         className="rounded-xl bg-zinc-800 px-3 py-2 text-sm font-bold text-white hover:bg-zinc-700"
                       >
                         Clear
@@ -1299,10 +1313,17 @@ export default function PhotoDetailModal({
                       <button
                         type="button"
                         onClick={saveBlurDraft}
-                        disabled={activeBlurRegions.length === 0}
+                        disabled={
+                          activeBlurRegions.length === 0 ||
+                          blurSaveState === "saving"
+                        }
                         className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:bg-zinc-700 disabled:text-zinc-400"
                       >
-                        Save blur
+                        {blurSaveState === "saving"
+                          ? "Saving..."
+                          : blurSaveState === "saved"
+                            ? "Saved"
+                            : "Save blur"}
                       </button>
                     </div>
                   </div>
