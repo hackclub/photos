@@ -10,6 +10,19 @@ import { getSession } from "@/lib/auth";
 import { createOgMetadata } from "@/lib/metadata";
 import ClientLayout from "./ClientLayout";
 
+async function getHackClubLogoUrl() {
+  try {
+    const response = await fetch(
+      "https://shrimp-shuffler.a.hackclub.dev/api/current",
+      { cache: "no-store" },
+    );
+    const url = (await response.text()).trim();
+    return url || "/hackclub-icon.png";
+  } catch {
+    return "/hackclub-icon.png";
+  }
+}
+
 export const metadata: Metadata = {
   ...createOgMetadata({
     title: "Hack Club Photos",
@@ -28,6 +41,7 @@ export default async function RootLayout({
   const isMaintenanceMode = await maintenanceMode();
   const isComingSoon = await comingSoon();
   const session = await getSession();
+  const hackClubLogoUrl = await getHackClubLogoUrl();
   if (isComingSoon) {
     return <ComingSoon />;
   }
@@ -65,7 +79,9 @@ export default async function RootLayout({
     <html lang="en" className="dark">
       <body className="min-h-screen bg-zinc-950 text-zinc-100">
         <Suspense fallback={null}>
-          <ClientLayout initialSession={session}>{children}</ClientLayout>
+          <ClientLayout initialSession={session} logoUrl={hackClubLogoUrl}>
+            {children}
+          </ClientLayout>
         </Suspense>
         <RybbitScript />
       </body>

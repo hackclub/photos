@@ -11,9 +11,11 @@ import type { SessionUser } from "@/lib/auth";
 export default function ClientLayout({
   children,
   initialSession,
+  logoUrl,
 }: {
   children: React.ReactNode;
   initialSession?: SessionUser | null;
+  logoUrl: string;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const handleCloseSidebar = useCallback(() => setSidebarOpen(false), []);
@@ -24,7 +26,11 @@ export default function ClientLayout({
       <UploadProvider>
         <div className="flex min-h-dvh overflow-x-clip">
           {!isSignMode && (
-            <Sidebar isOpen={sidebarOpen} onClose={handleCloseSidebar} />
+            <Sidebar
+              isOpen={sidebarOpen}
+              onClose={handleCloseSidebar}
+              logoUrl={logoUrl}
+            />
           )}
 
           <div className="flex min-w-0 flex-1 flex-col">

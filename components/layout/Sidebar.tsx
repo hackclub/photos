@@ -47,8 +47,9 @@ const adminNavigation = [
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  logoUrl: string;
 }
-export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
   const pathname = usePathname();
   const { user, loading, signOut } = useAuth();
   const handleClose = useCallback(() => {
@@ -135,7 +136,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           <Link prefetch={false} href="/" className="flex items-center gap-3 mb-4">
             <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
               <Image
-                src="/hackclub-icon.png"
+                src={logoUrl}
                 alt="Hack Club Logo"
                 fill
                 className="object-cover"
