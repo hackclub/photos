@@ -92,6 +92,13 @@ export default async function EventsPage() {
       });
     }
   }
+  events = [...events].sort((a, b) => {
+    const aPhotos = eventCounts.get(a.id)?.media ?? 0;
+    const bPhotos = eventCounts.get(b.id)?.media ?? 0;
+    if (aPhotos === 0 && bPhotos > 0) return 1;
+    if (bPhotos === 0 && aPhotos > 0) return -1;
+    return b.createdAt.getTime() - a.createdAt.getTime();
+  });
   const randomMedia =
     eventIds.length > 0
       ? await db.query.media.findMany({
