@@ -1,11 +1,12 @@
 "use client";
 
 import Script from "next/script";
+import { RYBBIT_SITE_ID } from "@/lib/constants";
 
-const RYBBIT_SITE_ID = "319a457e5e76";
 const RYBBIT_SCRIPT_SRC = "/api/script.js";
 
 export default function RybbitScript() {
+  if (!RYBBIT_SITE_ID) return null;
   return (
     <Script
       src={RYBBIT_SCRIPT_SRC}

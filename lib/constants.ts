@@ -1,5 +1,6 @@
 export const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL || "https://photos.hackclub.com";
+export const RYBBIT_SITE_ID = process.env.NEXT_PUBLIC_RYBBIT_SITE_ID || "";
 export const CACHET_API_URL = "https://cachet.dunkirk.sh";
 export const HACK_CLUB_AUTH_URL = "https://auth.hackclub.com";
 export const AVATAR_COLORS = [
