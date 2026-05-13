@@ -25,8 +25,8 @@ const normalizeS3Endpoint = (endpoint: string): string => {
 
 const resolveS3Region = (): string => {
   const configured = process.env.S3_REGION?.trim();
-  if (!configured || configured.toLowerCase() === "auto") {
-    return "eu-central-1";
+  if (!configured) {
+    return "auto";
   }
   return configured;
 };
@@ -68,20 +68,8 @@ if (forcePathStyleFromEnv) {
   s3Config.forcePathStyle = forcePathStyleFromEnv === "true";
 }
 
-if (hasCustomEndpoint && endpoint) {
-  const endpointUrl = new URL(endpoint);
-  const endpointHost = endpointUrl.hostname.toLowerCase();
-  const normalizedBucket = s3BucketName.toLowerCase();
-  const endpointIsBucketScoped = Boolean(
-    normalizedBucket &&
-      (endpointHost === normalizedBucket ||
-        endpointHost.startsWith(`${normalizedBucket}.`)),
-  );
-
-  if (!endpointIsBucketScoped) {
-    // Custom endpoints without bucket-scoped hostnames need path-style addressing.
-    s3Config.forcePathStyle = true;
-  }
+if (!forcePathStyleFromEnv && endpoint?.includes(".r2.cloudflarestorage.com")) {
+  s3Config.forcePathStyle = true;
 }
 const s3Client = new S3Client(s3Config);
 
