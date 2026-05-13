@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   HiArrowLeftOnRectangle,
   HiCalendar,
@@ -57,13 +56,12 @@ export default async function SignInPage({
             </div>
           </div>
 
-          <Link
+          <a
             href={`/api/auth/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`}
-            className="w-full block text-center py-3 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors shadow-lg "
-            prefetch={false}
+            className="w-full block text-center py-3 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors shadow-lg"
           >
             Sign in with Hack Club
-          </Link>
+          </a>
         </div>
       </div>
     </div>
