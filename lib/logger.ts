@@ -28,6 +28,12 @@ const pinoLogger = pino({
   },
 });
 
+const service = process.env.OTEL_SERVICE_NAME ?? "hackclub-photos";
+const version = process.env.APP_VERSION;
+const environment =
+  process.env.DEPLOYMENT_ENVIRONMENT ?? process.env.NODE_ENV ?? "development";
+const instanceId = process.env.HOSTNAME;
+
 type LogLevel = "error" | "warn" | "info";
 
 function write(level: LogLevel, args: unknown[]) {
@@ -39,6 +45,11 @@ export const logger = {
   warn: (...args: unknown[]) => write("warn", args),
   info: (...args: unknown[]) => write("info", args),
 };
+
+logger.info(
+  { service, version, environment, instanceId },
+  "application started",
+);
 
 export function serializeError(error: unknown) {
   if (error instanceof Error) {

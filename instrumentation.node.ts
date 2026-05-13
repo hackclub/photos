@@ -15,7 +15,6 @@ import {
   ATTR_SERVICE_NAMESPACE,
   ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
-import { logger } from "@/lib/logger";
 
 const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 const serviceName = process.env.OTEL_SERVICE_NAME ?? "hackclub-photos";
@@ -54,6 +53,9 @@ function parseHeaders() {
 
 if (safeEndpoint) {
   const headers = parseHeaders();
+  const tracesUrl = signalUrl("traces");
+  const metricsUrl = signalUrl("metrics");
+  const logsUrl = signalUrl("logs");
   const resource = resourceFromAttributes({
     [ATTR_SERVICE_NAME]: serviceName,
     [ATTR_SERVICE_NAMESPACE]: "photos",
@@ -64,12 +66,12 @@ if (safeEndpoint) {
   const sdk = new NodeSDK({
     resource,
     traceExporter: new OTLPTraceExporter({
-      url: signalUrl("traces"),
+      url: tracesUrl,
       headers,
     }),
     metricReader: new PeriodicExportingMetricReader({
       exporter: new OTLPMetricExporter({
-        url: signalUrl("metrics"),
+        url: metricsUrl,
         headers,
       }),
       exportIntervalMillis: Number(
@@ -79,7 +81,7 @@ if (safeEndpoint) {
     logRecordProcessors: [
       new BatchLogRecordProcessor(
         new OTLPLogExporter({
-          url: signalUrl("logs"),
+          url: logsUrl,
           headers,
         }),
       ),
@@ -105,32 +107,19 @@ if (safeEndpoint) {
 
   new HostMetrics({ name: "hackclub-photos-host-metrics" }).start();
 
-  logger.info(
-    {
+  const shutdown = (signal: NodeJS.Signals) => {
+    console.log("application shutting down", {
       service: serviceName,
       version: serviceVersion,
       environment,
       instanceId,
-    },
-    "application telemetry started",
-  );
-
-  const shutdown = (signal: NodeJS.Signals) => {
-    logger.info(
-      {
-        service: serviceName,
-        version: serviceVersion,
-        environment,
-        instanceId,
-        signal,
-      },
-      "application shutting down",
-    );
+      signal,
+    });
 
     sdk
       .shutdown()
       .catch((error) => {
-        logger.error({ error }, "OpenTelemetry shutdown failed");
+        console.error("OpenTelemetry shutdown failed", error);
       })
       .finally(() => process.exit(0));
   };
@@ -138,8 +127,8 @@ if (safeEndpoint) {
   process.once("SIGTERM", shutdown);
   process.once("SIGINT", shutdown);
 } else if (endpoint) {
-  logger.warn(
-    { endpoint },
+  console.warn(
     "OpenTelemetry disabled because OTEL_EXPORTER_OTLP_ENDPOINT is not the SigNoz ingest endpoint",
+    { endpoint },
   );
 }
