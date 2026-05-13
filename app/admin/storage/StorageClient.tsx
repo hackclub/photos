@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -63,9 +63,6 @@ interface StorageStats {
     isGlobalAdmin: boolean;
   }[];
 }
-interface StorageClientProps {
-  stats: StorageStats;
-}
 const COLORS = [
   "#ef4444",
   "#f97316",
@@ -78,7 +75,32 @@ const COLORS = [
 function formatChartBytes(value: unknown): [string, string] {
   return [formatBytes(typeof value === "number" ? value : 0), "Size"];
 }
-export default function StorageClient({ stats }: StorageClientProps) {
+export default function StorageClient() {
+  const [stats, setStats] = useState<StorageStats | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  useEffect(() => {
+    void import("@/app/actions/storage").then(({ getStorageStats }) =>
+      getStorageStats().then((result) => {
+        if (result.success && result.stats)
+          setStats(result.stats as StorageStats);
+        else setStatsError(result.error || "Failed to load storage stats");
+      }),
+    );
+  }, []);
+
+  if (!stats) {
+    return (
+      <div className="space-y-8">
+        <div className="flex flex-wrap gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+          <CleanupButton />
+          <RepairThumbnailsButton />
+        </div>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-12 text-center text-zinc-400">
+          {statsError || "Loading storage stats..."}
+        </div>
+      </div>
+    );
+  }
   const sizeData = [
     { name: "Events", value: stats.breakdown.events.size },
     { name: "Thumbnails", value: stats.breakdown.thumbnails.size },
@@ -106,6 +128,7 @@ export default function StorageClient({ stats }: StorageClientProps) {
           <div className="flex items-center gap-4">
             <h3 className="text-lg font-semibold text-white">Storage Usage</h3>
             <CleanupButton />
+            <RepairThumbnailsButton />
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-white">
@@ -725,6 +748,80 @@ function CleanupButton() {
         </>
       ) : (
         "Cleanup Ghost Files"
+      )}
+    </button>
+  );
+}
+
+function RepairThumbnailsButton() {
+  const [isRepairing, setIsRepairing] = useState(false);
+  const [progress, setProgress] = useState<{
+    checked: number;
+    repaired: number;
+    failed: number;
+  } | null>(null);
+
+  const handleRepair = async () => {
+    if (
+      !confirm(
+        "Find and repair missing or broken thumbnails? This scans DB and S3 and may take a while.",
+      )
+    )
+      return;
+    setIsRepairing(true);
+    setProgress({ checked: 0, repaired: 0, failed: 0 });
+    try {
+      const { repairThumbnails } = await import("@/app/actions/storage");
+      let cursor: string | undefined;
+      let totalChecked = 0;
+      let totalRepaired = 0;
+      let totalFailed = 0;
+      let completed = false;
+      while (!completed) {
+        const result = await repairThumbnails(cursor);
+        if (!result.success) throw new Error(result.error);
+        totalChecked += result.checked;
+        totalRepaired += result.repaired;
+        totalFailed += result.failed;
+        setProgress({
+          checked: totalChecked,
+          repaired: totalRepaired,
+          failed: totalFailed,
+        });
+        completed = result.completed;
+        cursor = result.nextCursor;
+      }
+      alert(
+        `Thumbnail repair complete!\nChecked: ${totalChecked}\nSucceeded: ${totalRepaired}\nFailed: ${totalFailed}`,
+      );
+      window.location.reload();
+    } catch (error) {
+      console.error("Thumbnail repair error:", error);
+      alert(
+        `Thumbnail repair failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    } finally {
+      setIsRepairing(false);
+      setProgress(null);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleRepair}
+      disabled={isRepairing}
+      className="px-3 py-1.5 text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+    >
+      {isRepairing ? (
+        <>
+          <span className="w-3 h-3 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+          {progress
+            ? `Repairing (${progress.checked} checked, ${progress.repaired} fixed, ${progress.failed} failed)...`
+            : "Repairing..."}
+        </>
+      ) : (
+        "Find and repair thumbnails"
       )}
     </button>
   );
