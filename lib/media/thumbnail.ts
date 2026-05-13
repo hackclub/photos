@@ -7,8 +7,50 @@ import ffmpeg from "fluent-ffmpeg";
 import decode from "heic-decode";
 import sharp from "sharp";
 import { logger } from "@/lib/logger";
+import {
+  durationMs,
+  imageProcessingDuration,
+  thumbnailGenerationDuration,
+  traceAsync,
+} from "@/lib/telemetry";
 import { deleteFromS3, deleteFromS3Batch, uploadToS3 } from "./s3";
 export async function processImageUpload(
+  input: Readable | Buffer,
+  mediaId: string,
+  uploadedBy: string,
+  eventId: string,
+  mimeType?: string,
+) {
+  return await traceAsync(
+    "media.image.process",
+    { "media.mime_type": mimeType },
+    async () => {
+      const startedAt = Date.now();
+      try {
+        const result = await processImageUploadInternal(
+          input,
+          mediaId,
+          uploadedBy,
+          eventId,
+          mimeType,
+        );
+        imageProcessingDuration.record(durationMs(startedAt), {
+          status: "success",
+          source: mimeType?.startsWith("image/") ? "image" : "unknown",
+        });
+        return result;
+      } catch (error) {
+        imageProcessingDuration.record(durationMs(startedAt), {
+          status: "error",
+          source: mimeType?.startsWith("image/") ? "image" : "unknown",
+        });
+        throw error;
+      }
+    },
+  );
+}
+
+async function processImageUploadInternal(
   input: Readable | Buffer,
   mediaId: string,
   uploadedBy: string,
@@ -117,65 +159,90 @@ export async function generateAndUploadThumbnail(
   tags?: Record<string, string>,
   duration?: number,
 ): Promise<string | null> {
+  const startedAt = Date.now();
   const isVideo = mimeType.startsWith("video/");
-  if (signal?.aborted) {
-    return null;
-  }
-  if (isVideo) {
-    return await generateVideoThumbnail(input, mediaId, signal, tags, duration);
-  }
-  if (typeof input === "string") {
-    logger.error("Image thumbnail generation requires a Buffer input");
-    return null;
-  }
   try {
-    let thumbnailBuffer: Buffer;
-    const isHeic =
-      mimeType.toLowerCase() === "image/heic" ||
-      mimeType.toLowerCase() === "image/heif";
-    if (isHeic) {
-      let decoder: any = decode;
-      if (
-        typeof decoder !== "function" &&
-        typeof decoder?.default === "function"
-      ) {
-        decoder = decoder.default;
-      }
-      const { width, height, data } = await decoder({
-        buffer: new Uint8Array(input).buffer,
-      });
-      thumbnailBuffer = await sharp(Buffer.from(data), {
-        raw: { width, height, channels: 4 },
-      })
-        .resize(400, 400, {
-          fit: "cover",
-          position: "center",
-        })
-        .toFormat("jpeg", { quality: 80, mozjpeg: true })
-        .toBuffer();
-    } else {
-      thumbnailBuffer = await sharp(input)
-        .rotate()
-        .resize(400, 400, {
-          fit: "cover",
-          position: "center",
-        })
-        .toFormat("jpeg", { quality: 80, mozjpeg: true })
-        .toBuffer();
-    }
-    if (signal?.aborted) {
-      return null;
-    }
-    const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
-    await uploadToS3(
-      thumbnailBuffer,
-      thumbnailS3Key,
-      "image/jpeg",
-      signal,
-      tags,
+    const result = await traceAsync(
+      "media.thumbnail.generate",
+      {
+        "media.source": isVideo ? "video" : "image",
+        "media.mime_type": mimeType,
+      },
+      async () => {
+        if (signal?.aborted) {
+          return null;
+        }
+        if (isVideo) {
+          return await generateVideoThumbnail(
+            input,
+            mediaId,
+            signal,
+            tags,
+            duration,
+          );
+        }
+        if (typeof input === "string") {
+          logger.error("Image thumbnail generation requires a Buffer input");
+          return null;
+        }
+        let thumbnailBuffer: Buffer;
+        const isHeic =
+          mimeType.toLowerCase() === "image/heic" ||
+          mimeType.toLowerCase() === "image/heif";
+        if (isHeic) {
+          let decoder: any = decode;
+          if (
+            typeof decoder !== "function" &&
+            typeof decoder?.default === "function"
+          ) {
+            decoder = decoder.default;
+          }
+          const { width, height, data } = await decoder({
+            buffer: new Uint8Array(input).buffer,
+          });
+          thumbnailBuffer = await sharp(Buffer.from(data), {
+            raw: { width, height, channels: 4 },
+          })
+            .resize(400, 400, {
+              fit: "cover",
+              position: "center",
+            })
+            .toFormat("jpeg", { quality: 80, mozjpeg: true })
+            .toBuffer();
+        } else {
+          thumbnailBuffer = await sharp(input)
+            .rotate()
+            .resize(400, 400, {
+              fit: "cover",
+              position: "center",
+            })
+            .toFormat("jpeg", { quality: 80, mozjpeg: true })
+            .toBuffer();
+        }
+        if (signal?.aborted) {
+          return null;
+        }
+        const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
+        await uploadToS3(
+          thumbnailBuffer,
+          thumbnailS3Key,
+          "image/jpeg",
+          signal,
+          tags,
+        );
+        return thumbnailS3Key;
+      },
     );
-    return thumbnailS3Key;
+    thumbnailGenerationDuration.record(durationMs(startedAt), {
+      status: result ? "success" : "skipped",
+      source: isVideo ? "video" : "image",
+    });
+    return result;
   } catch (error) {
+    thumbnailGenerationDuration.record(durationMs(startedAt), {
+      status: "error",
+      source: isVideo ? "video" : "image",
+    });
     logger.error("Image thumbnail generation error:", error);
     return null;
   }

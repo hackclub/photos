@@ -16,6 +16,11 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { logger } from "@/lib/logger";
+import {
+  durationMs,
+  storageOperationDuration,
+  traceAsync,
+} from "@/lib/telemetry";
 
 const normalizeS3Endpoint = (endpoint: string): string => {
   if (/^https?:\/\//i.test(endpoint)) {
@@ -82,6 +87,7 @@ export async function uploadToS3(
   signal?: AbortSignal,
   tags?: Record<string, string>,
 ): Promise<void> {
+  const startedAt = Date.now();
   const params = {
     Bucket: s3BucketName,
     Key: key,
@@ -91,11 +97,21 @@ export async function uploadToS3(
     Tagging: tags ? new URLSearchParams(tags).toString() : undefined,
   };
   try {
-    const command = new PutObjectCommand(params);
-    if (signal?.aborted) {
-      throw new Error("Upload aborted");
-    }
-    await s3Client.send(command, { abortSignal: signal });
+    await traceAsync(
+      "storage.s3.put_object",
+      { "storage.operation": "put_object" },
+      async () => {
+        const command = new PutObjectCommand(params);
+        if (signal?.aborted) {
+          throw new Error("Upload aborted");
+        }
+        await s3Client.send(command, { abortSignal: signal });
+      },
+    );
+    storageOperationDuration.record(durationMs(startedAt), {
+      operation: "put_object",
+      status: "success",
+    });
   } catch (error: unknown) {
     const isNotImplemented =
       error instanceof Error &&
@@ -115,32 +131,87 @@ export async function uploadToS3(
       if (signal?.aborted) {
         throw new Error("Upload aborted");
       }
-      await s3Client.send(retryCommand, { abortSignal: signal });
+      await traceAsync(
+        "storage.s3.put_object_retry_without_tags",
+        { "storage.operation": "put_object" },
+        async () => {
+          await s3Client.send(retryCommand, { abortSignal: signal });
+        },
+      );
+      storageOperationDuration.record(durationMs(startedAt), {
+        operation: "put_object",
+        status: "success",
+      });
       return;
     }
+    storageOperationDuration.record(durationMs(startedAt), {
+      operation: "put_object",
+      status: "error",
+    });
     throw error;
   }
 }
 export async function deleteFromS3(key: string): Promise<void> {
-  const command = new DeleteObjectCommand({
-    Bucket: s3BucketName,
-    Key: key,
-  });
-  await s3Client.send(command);
+  const startedAt = Date.now();
+  try {
+    await traceAsync(
+      "storage.s3.delete_object",
+      { "storage.operation": "delete_object" },
+      async () => {
+        const command = new DeleteObjectCommand({
+          Bucket: s3BucketName,
+          Key: key,
+        });
+        await s3Client.send(command);
+      },
+    );
+    storageOperationDuration.record(durationMs(startedAt), {
+      operation: "delete_object",
+      status: "success",
+    });
+  } catch (error) {
+    storageOperationDuration.record(durationMs(startedAt), {
+      operation: "delete_object",
+      status: "error",
+    });
+    throw error;
+  }
 }
 export async function deleteFromS3Batch(keys: string[]): Promise<void> {
   if (keys.length === 0) return;
+  const startedAt = Date.now();
   const batchSize = 1000;
-  for (let i = 0; i < keys.length; i += batchSize) {
-    const batch = keys.slice(i, i + batchSize);
-    const command = new DeleteObjectsCommand({
-      Bucket: s3BucketName,
-      Delete: {
-        Objects: batch.map((Key) => ({ Key })),
-        Quiet: true,
+  try {
+    await traceAsync(
+      "storage.s3.delete_objects",
+      {
+        "storage.operation": "delete_objects",
+        "storage.batch_count": keys.length,
       },
+      async () => {
+        for (let i = 0; i < keys.length; i += batchSize) {
+          const batch = keys.slice(i, i + batchSize);
+          const command = new DeleteObjectsCommand({
+            Bucket: s3BucketName,
+            Delete: {
+              Objects: batch.map((Key) => ({ Key })),
+              Quiet: true,
+            },
+          });
+          await s3Client.send(command);
+        }
+      },
+    );
+    storageOperationDuration.record(durationMs(startedAt), {
+      operation: "delete_objects",
+      status: "success",
     });
-    await s3Client.send(command);
+  } catch (error) {
+    storageOperationDuration.record(durationMs(startedAt), {
+      operation: "delete_objects",
+      status: "error",
+    });
+    throw error;
   }
 }
 export async function getSignedUploadUrl(

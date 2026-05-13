@@ -24,6 +24,11 @@ import { validateMediaFile } from "@/lib/media/validation";
 import { extractVideoMetadata } from "@/lib/media/video-metadata";
 import { can, getUserContext } from "@/lib/policy";
 import { checkStorageLimit } from "@/lib/storage";
+import {
+  failedUploadsTotal,
+  photoUploadsTotal,
+  traceAsync,
+} from "@/lib/telemetry";
 export async function getPresignedUrl(
   eventId: string,
   filename: string,
@@ -187,173 +192,185 @@ export async function finalizeUpload(
   },
   skipRevalidation = false,
 ) {
-  try {
-    const session = await getSession();
-    const user = await getUserContext(session?.id);
-    if (!user) {
-      return { success: false, error: "Unauthorized" };
-    }
-    if (!(await can(user, "upload", "event", eventId))) {
-      return { success: false, error: "Forbidden" };
-    }
-    let realFileSize = data.fileSize;
-    let serverExifData = null;
-    let thumbnailS3Key = data.thumbnailS3Key;
-    try {
-      const headCommand = new HeadObjectCommand({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: data.s3Key,
-      });
-      const s3Metadata = await s3Client.send(headCommand);
-      if (s3Metadata.ContentLength) {
-        realFileSize = s3Metadata.ContentLength;
-      }
-      if (data.mimeType.startsWith("image/")) {
-        try {
-          const getCommand = new GetObjectCommand({
-            Bucket: process.env.S3_BUCKET_NAME,
-            Key: data.s3Key,
-          });
-          const s3Object = await s3Client.send(getCommand);
-          if (s3Object.Body) {
-            const {
-              thumbnailS3Key: generatedKey,
-              width,
-              height,
-              exifBuffer,
-            } = await processImageUpload(
-              s3Object.Body as Readable,
-              mediaId,
-              user.id,
-              eventId,
-              data.mimeType,
-            );
-            if (generatedKey) {
-              thumbnailS3Key = generatedKey;
-            }
-            let exifResult = null;
-            if (exifBuffer) {
-              exifResult = await extractExifData(exifBuffer, data.mimeType);
-            }
-            serverExifData = {
-              ...(exifResult || {}),
-              width: width || exifResult?.width,
-              height: height || exifResult?.height,
-            };
-          }
-        } catch (e) {
-          logger.error("Failed to process image server-side:", e);
+  return await traceAsync(
+    "media.upload.finalize",
+    {
+      "media.id": mediaId,
+      "event.id": eventId,
+      "media.mime_type": data.mimeType,
+    },
+    async () => {
+      try {
+        const session = await getSession();
+        const user = await getUserContext(session?.id);
+        if (!user) {
+          return { success: false, error: "Unauthorized" };
         }
-      } else if (data.mimeType.startsWith("video/")) {
+        if (!(await can(user, "upload", "event", eventId))) {
+          return { success: false, error: "Forbidden" };
+        }
+        let realFileSize = data.fileSize;
+        let serverExifData = null;
+        let thumbnailS3Key = data.thumbnailS3Key;
         try {
-          const getCommand = new GetObjectCommand({
+          const headCommand = new HeadObjectCommand({
             Bucket: process.env.S3_BUCKET_NAME,
             Key: data.s3Key,
           });
-          const s3Object = await s3Client.send(getCommand);
-          if (s3Object.Body) {
-            const { writeFile, unlink } = await import("node:fs/promises");
-            const { join } = await import("node:path");
-            const { tmpdir } = await import("node:os");
-            const { Readable: _Readable } = await import("node:stream");
-            const tempFilePath = join(tmpdir(), `video-${mediaId}.tmp`);
-            const stream = s3Object.Body as NodeJS.ReadableStream;
-            await writeFile(tempFilePath, stream);
+          const s3Metadata = await s3Client.send(headCommand);
+          if (s3Metadata.ContentLength) {
+            realFileSize = s3Metadata.ContentLength;
+          }
+          if (data.mimeType.startsWith("image/")) {
             try {
-              const metadataPromise = extractVideoMetadata(tempFilePath);
-              const thumbnailPromise = generateAndUploadThumbnail(
-                tempFilePath,
-                data.mimeType,
-                mediaId,
-                undefined,
-                { uploadedBy: user.id, eventId },
-                undefined,
-              );
-              const [videoMetadata, generatedThumbnailKey] = await Promise.all([
-                metadataPromise,
-                thumbnailPromise,
-              ]);
-              if (videoMetadata) {
+              const getCommand = new GetObjectCommand({
+                Bucket: process.env.S3_BUCKET_NAME,
+                Key: data.s3Key,
+              });
+              const s3Object = await s3Client.send(getCommand);
+              if (s3Object.Body) {
+                const {
+                  thumbnailS3Key: generatedKey,
+                  width,
+                  height,
+                  exifBuffer,
+                } = await processImageUpload(
+                  s3Object.Body as Readable,
+                  mediaId,
+                  user.id,
+                  eventId,
+                  data.mimeType,
+                );
+                if (generatedKey) {
+                  thumbnailS3Key = generatedKey;
+                }
+                let exifResult = null;
+                if (exifBuffer) {
+                  exifResult = await extractExifData(exifBuffer, data.mimeType);
+                }
                 serverExifData = {
-                  width: videoMetadata.width,
-                  height: videoMetadata.height,
-                  dateTimeOriginal: videoMetadata.creationTime,
-                  duration: videoMetadata.duration,
-                  make: videoMetadata.make,
-                  model: videoMetadata.model,
-                  gpsLatitude: videoMetadata.latitude,
-                  gpsLongitude: videoMetadata.longitude,
+                  ...(exifResult || {}),
+                  width: width || exifResult?.width,
+                  height: height || exifResult?.height,
                 };
               }
-              if (generatedThumbnailKey) {
-                thumbnailS3Key = generatedThumbnailKey;
+            } catch (e) {
+              logger.error("Failed to process image server-side:", e);
+            }
+          } else if (data.mimeType.startsWith("video/")) {
+            try {
+              const getCommand = new GetObjectCommand({
+                Bucket: process.env.S3_BUCKET_NAME,
+                Key: data.s3Key,
+              });
+              const s3Object = await s3Client.send(getCommand);
+              if (s3Object.Body) {
+                const { writeFile, unlink } = await import("node:fs/promises");
+                const { join } = await import("node:path");
+                const { tmpdir } = await import("node:os");
+                const tempFilePath = join(tmpdir(), `video-${mediaId}.tmp`);
+                const stream = s3Object.Body as NodeJS.ReadableStream;
+                await writeFile(tempFilePath, stream);
+                try {
+                  const metadataPromise = extractVideoMetadata(tempFilePath);
+                  const thumbnailPromise = generateAndUploadThumbnail(
+                    tempFilePath,
+                    data.mimeType,
+                    mediaId,
+                    undefined,
+                    { uploadedBy: user.id, eventId },
+                    undefined,
+                  );
+                  const [videoMetadata, generatedThumbnailKey] =
+                    await Promise.all([metadataPromise, thumbnailPromise]);
+                  if (videoMetadata) {
+                    serverExifData = {
+                      width: videoMetadata.width,
+                      height: videoMetadata.height,
+                      dateTimeOriginal: videoMetadata.creationTime,
+                      duration: videoMetadata.duration,
+                      make: videoMetadata.make,
+                      model: videoMetadata.model,
+                      gpsLatitude: videoMetadata.latitude,
+                      gpsLongitude: videoMetadata.longitude,
+                    };
+                  }
+                  if (generatedThumbnailKey) {
+                    thumbnailS3Key = generatedThumbnailKey;
+                  }
+                } finally {
+                  await unlink(tempFilePath).catch(() => {});
+                }
               }
-            } finally {
-              await unlink(tempFilePath).catch(() => {});
+            } catch (e) {
+              logger.error("Failed to process video server-side:", e);
             }
           }
-        } catch (e) {
-          logger.error("Failed to process video server-side:", e);
+        } catch (error) {
+          logger.error("Failed to verify S3 object:", error);
+          failedUploadsTotal.add(1, { status: "error", source: "web" });
+          return {
+            success: false,
+            error: "Upload verification failed: File not found in storage",
+          };
         }
+        const finalExifData = serverExifData || data.exifData;
+        const takenAt = serverExifData?.dateTimeOriginal
+          ? new Date(serverExifData.dateTimeOriginal)
+          : data.takenAt
+            ? new Date(data.takenAt)
+            : null;
+        const latitude = finalExifData?.gpsLatitude ?? null;
+        const longitude = finalExifData?.gpsLongitude ?? null;
+        const [insertedMedia] = await db
+          .insert(media)
+          .values({
+            id: mediaId,
+            eventId,
+            uploadedById: user.id,
+            s3Key: data.s3Key,
+            s3Url: data.s3Key,
+            thumbnailS3Key: thumbnailS3Key,
+            filename: data.filename,
+            mimeType: data.mimeType,
+            fileSize: realFileSize,
+            exifData: finalExifData ? JSON.stringify(finalExifData) : null,
+            width: serverExifData?.width || data.width,
+            height: serverExifData?.height || data.height,
+            latitude,
+            longitude,
+            takenAt: takenAt,
+          })
+          .returning();
+        await auditLog(user.id, "upload", "media", insertedMedia.id, {
+          eventId,
+          filename: data.filename,
+        });
+        try {
+          const { broadcastNewPhoto } = await import(
+            "@/app/api/feed/stream/route"
+          );
+          broadcastNewPhoto(insertedMedia.id).catch((error) => {
+            logger.error("Failed to broadcast new photo:", error);
+          });
+        } catch (error) {
+          logger.error("Failed to broadcast new photo:", error);
+        }
+        if (!skipRevalidation) {
+          try {
+            const { revalidatePath } = await import("next/cache");
+            revalidatePath(`/events/${eventId}`);
+          } catch (e) {
+            logger.error("Revalidation failed", e);
+          }
+        }
+        photoUploadsTotal.add(1, { status: "success", source: "web" });
+        return { success: true, media: insertedMedia };
+      } catch (error) {
+        failedUploadsTotal.add(1, { status: "error", source: "web" });
+        logger.error("Error finalizing upload:", error);
+        return { success: false, error: "Failed to finalize upload" };
       }
-    } catch (error) {
-      logger.error("Failed to verify S3 object:", error);
-      return {
-        success: false,
-        error: "Upload verification failed: File not found in storage",
-      };
-    }
-    const finalExifData = serverExifData || data.exifData;
-    const takenAt = serverExifData?.dateTimeOriginal
-      ? new Date(serverExifData.dateTimeOriginal)
-      : data.takenAt
-        ? new Date(data.takenAt)
-        : null;
-    const latitude = finalExifData?.gpsLatitude ?? null;
-    const longitude = finalExifData?.gpsLongitude ?? null;
-    const [insertedMedia] = await db
-      .insert(media)
-      .values({
-        id: mediaId,
-        eventId,
-        uploadedById: user.id,
-        s3Key: data.s3Key,
-        s3Url: data.s3Key,
-        thumbnailS3Key: thumbnailS3Key,
-        filename: data.filename,
-        mimeType: data.mimeType,
-        fileSize: realFileSize,
-        exifData: finalExifData ? JSON.stringify(finalExifData) : null,
-        width: serverExifData?.width || data.width,
-        height: serverExifData?.height || data.height,
-        latitude,
-        longitude,
-        takenAt: takenAt,
-      })
-      .returning();
-    await auditLog(user.id, "upload", "media", insertedMedia.id, {
-      eventId,
-      filename: data.filename,
-    });
-    try {
-      const { broadcastNewPhoto } = await import("@/app/api/feed/stream/route");
-      broadcastNewPhoto(insertedMedia.id).catch((error) => {
-        logger.error("Failed to broadcast new photo:", error);
-      });
-    } catch (error) {
-      logger.error("Failed to broadcast new photo:", error);
-    }
-    if (!skipRevalidation) {
-      try {
-        const { revalidatePath } = await import("next/cache");
-        revalidatePath(`/events/${eventId}`);
-      } catch (e) {
-        logger.error("Revalidation failed", e);
-      }
-    }
-    return { success: true, media: insertedMedia };
-  } catch (error) {
-    logger.error("Error finalizing upload:", error);
-    return { success: false, error: "Failed to finalize upload" };
-  }
+    },
+  );
 }
