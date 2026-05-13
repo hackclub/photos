@@ -58,20 +58,8 @@ export async function GET(
             seriesAdmins: dbUser.seriesAdminRoles,
             eventAdmins: dbUser.eventAdminRoles,
           };
-        } else {
-          console.log(
-            "Asset Route: User found in token but not in DB or banned",
-            { userId: sessionUser.id },
-          );
         }
-      } else {
-        console.log("Asset Route: Invalid session token");
       }
-    } else {
-      console.log("Asset Route: No session cookie found in request", {
-        cookies: req.cookies.getAll().map((c) => c.name),
-        headers: Object.fromEntries(req.headers.entries()),
-      });
     }
   }
 
