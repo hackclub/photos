@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { events, series } from "@/lib/db/schema";
 import { fetchFeedItems } from "@/lib/feed";
+import { logger } from "@/lib/logger";
 import { can, getAccessibleEventIds, getUserContext } from "@/lib/policy";
 export async function getGlobalFeed(limit = 50, offset = 0) {
   try {
@@ -29,7 +30,7 @@ export async function getGlobalFeed(limit = 50, offset = 0) {
     );
     return { success: true, ...result };
   } catch (error) {
-    console.error("Feed error:", error);
+    logger.error("Feed error:", error);
     return { success: false, error: "Failed to fetch feed" };
   }
 }
@@ -61,7 +62,7 @@ export async function getEventFeed(eventId: string, limit = 50, offset = 0) {
       },
     };
   } catch (error) {
-    console.error("Event feed error:", error);
+    logger.error("Event feed error:", error);
     return { success: false, error: "Failed to fetch event feed" };
   }
 }
@@ -103,7 +104,7 @@ export async function getSeriesFeed(seriesId: string, limit = 50, offset = 0) {
       },
     };
   } catch (error) {
-    console.error("Series feed error:", error);
+    logger.error("Series feed error:", error);
     return { success: false, error: "Failed to fetch series feed" };
   }
 }

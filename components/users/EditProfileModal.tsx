@@ -17,6 +17,7 @@ import {
 import { useDebouncedCallback } from "use-debounce";
 import { checkHandleAvailability } from "@/app/actions/onboarding";
 import { updateUserProfile } from "@/app/actions/users";
+import { logger } from "@/lib/client-logger";
 
 interface EditProfileModalProps {
   user: {
@@ -115,7 +116,7 @@ export default function EditProfileModal({
         setError(result.error || "Failed to update profile");
       }
     } catch (err) {
-      console.error("Error updating profile:", err);
+      logger.error("Error updating profile:", err);
       setError("An unexpected error occurred");
     } finally {
       setSaving(false);

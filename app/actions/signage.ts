@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { events, media, series } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { getMediaProxyUrl } from "@/lib/media/s3";
 import { getAccessibleEventIdsForUser, getUserContext } from "@/lib/policy";
 import { toPublicUser } from "@/lib/user-display";
@@ -73,7 +74,7 @@ export async function getRandomMedia(filter: SignageFilter = {}, limit = 50) {
     );
     return { success: true, media: mediaWithUrls };
   } catch (error) {
-    console.error("Error fetching random media:", error);
+    logger.error("Error fetching random media:", error);
     return { success: false, error: "Failed to fetch media" };
   }
 }
@@ -124,7 +125,7 @@ export async function getLatestMedia(limit = 1) {
     );
     return { success: true, media: mediaWithUrls };
   } catch (error) {
-    console.error("Error fetching latest media:", error);
+    logger.error("Error fetching latest media:", error);
     return { success: false, error: "Failed to fetch latest media" };
   }
 }
@@ -148,7 +149,7 @@ export async function getSeriesAndEvents() {
     );
     return { success: true, series: allSeries, events: accessibleEvents };
   } catch (error) {
-    console.error("Error fetching series and events:", error);
+    logger.error("Error fetching series and events:", error);
     return { success: false, error: "Failed to fetch data" };
   }
 }

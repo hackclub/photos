@@ -5,6 +5,7 @@ import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { reports } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { can, getUserContext } from "@/lib/policy";
 export async function createReport(mediaId: string, reason: string) {
   const session = await getSession();
@@ -30,7 +31,7 @@ export async function createReport(mediaId: string, reason: string) {
     });
     return { success: true };
   } catch (error) {
-    console.error("Error creating report:", error);
+    logger.error("Error creating report:", error);
     return { success: false, error: "Failed to submit report" };
   }
 }
@@ -58,7 +59,7 @@ export async function getReports() {
     });
     return { success: true, reports: allReports };
   } catch (error) {
-    console.error("Error fetching reports:", error);
+    logger.error("Error fetching reports:", error);
     return { success: false, error: "Failed to fetch reports" };
   }
 }
@@ -90,7 +91,7 @@ export async function resolveReport(
     revalidatePath("/users/[username]", "page");
     return { success: true };
   } catch (error) {
-    console.error("Error resolving report:", error);
+    logger.error("Error resolving report:", error);
     return { success: false, error: "Failed to resolve report" };
   }
 }
@@ -110,7 +111,7 @@ export async function getUserReports() {
     });
     return { success: true, reports: userReports };
   } catch (error) {
-    console.error("Error fetching user reports:", error);
+    logger.error("Error fetching user reports:", error);
     return { success: false, error: "Failed to fetch reports" };
   }
 }

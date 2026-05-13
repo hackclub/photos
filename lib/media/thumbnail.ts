@@ -6,6 +6,7 @@ import type { Readable } from "node:stream";
 import ffmpeg from "fluent-ffmpeg";
 import decode from "heic-decode";
 import sharp from "sharp";
+import { logger } from "@/lib/logger";
 import { deleteFromS3, deleteFromS3Batch, uploadToS3 } from "./s3";
 export async function processImageUpload(
   input: Readable | Buffer,
@@ -54,7 +55,7 @@ export async function processImageUpload(
     try {
       return await processHeic();
     } catch (error) {
-      console.error("Error processing HEIC image:", error);
+      logger.error("Error processing HEIC image:", error);
     }
   }
   try {
@@ -95,13 +96,13 @@ export async function processImageUpload(
           "Input buffer contains unsupported image format",
         ))
     ) {
-      console.log(
+      logger.info(
         "Sharp failed with unsupported format, attempting HEIC fallback...",
       );
       try {
         return await processHeic();
       } catch (heicError) {
-        console.error("HEIC fallback failed:", heicError);
+        logger.error("HEIC fallback failed:", heicError);
         throw error;
       }
     }
@@ -124,7 +125,7 @@ export async function generateAndUploadThumbnail(
     return await generateVideoThumbnail(input, mediaId, signal, tags, duration);
   }
   if (typeof input === "string") {
-    console.error("Image thumbnail generation requires a Buffer input");
+    logger.error("Image thumbnail generation requires a Buffer input");
     return null;
   }
   try {
@@ -175,7 +176,7 @@ export async function generateAndUploadThumbnail(
     );
     return thumbnailS3Key;
   } catch (error) {
-    console.error("Image thumbnail generation error:", error);
+    logger.error("Image thumbnail generation error:", error);
     return null;
   }
 }
@@ -262,7 +263,7 @@ async function generateVideoThumbnail(
     );
     return thumbnailS3Key;
   } catch (error) {
-    console.error("Video thumbnail generation error:", error);
+    logger.error("Video thumbnail generation error:", error);
     return null;
   } finally {
     try {
@@ -273,7 +274,7 @@ async function generateVideoThumbnail(
         await unlink(tempThumbnailPath);
       }
     } catch (cleanupError) {
-      console.error("Error cleaning up temp files:", cleanupError);
+      logger.error("Error cleaning up temp files:", cleanupError);
     }
   }
 }
@@ -323,7 +324,7 @@ export async function deleteBatchMedia(
     await deleteFromS3Batch(keysToDelete);
     return { successfulIds: ids, hasErrors: false };
   } catch (error) {
-    console.error("Batch delete failed:", error);
+    logger.error("Batch delete failed:", error);
     return { successfulIds: [], hasErrors: true };
   }
 }

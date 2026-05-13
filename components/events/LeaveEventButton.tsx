@@ -8,6 +8,7 @@ import {
 } from "react-icons/hi2";
 import { leaveEvent } from "@/app/actions/events";
 import { trackRybbitEvent } from "@/components/analytics/RybbitUserIdentifier";
+import { logger } from "@/lib/client-logger";
 
 interface LeaveEventButtonProps {
   eventId: string;
@@ -45,7 +46,7 @@ export default function LeaveEventButton({
         setIsLeaving(false);
       }
     } catch (error) {
-      console.error("Error leaving event:", error);
+      logger.error("Error leaving event:", error);
       trackRybbitEvent("event_leave_failed", {
         event_id: eventId,
         photo_count: photoCount,

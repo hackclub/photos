@@ -1,6 +1,7 @@
 "use server";
 import { getSession } from "@/lib/auth";
 import { NOMINATIM_API_URL } from "@/lib/constants";
+import { logger } from "@/lib/logger";
 import { getUserContext } from "@/lib/policy";
 export async function searchLocation(query: string) {
   if (!query.trim()) return { success: true, locations: [] };
@@ -46,7 +47,7 @@ export async function searchLocation(query: string) {
     }));
     return { success: true, locations };
   } catch (error) {
-    console.error("Error searching location:", error);
+    logger.error("Error searching location:", error);
     return { success: false, error: "Failed to search location" };
   }
 }

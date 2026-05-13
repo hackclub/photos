@@ -6,6 +6,7 @@ import { auditLog } from "@/lib/audit";
 import { unauthorizedResponse, validateApiKey } from "@/lib/auth-api";
 import { db } from "@/lib/db";
 import { eventParticipants, events, media } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { extractExifData } from "@/lib/media/exif";
 import { uploadToS3 } from "@/lib/media/s3";
 import {
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
     }
     const { user, apiKeyId, apiKeyName } = auth;
     if (!user) {
-      console.error("API Key validated but no user found", { apiKeyId });
+      logger.error("API Key validated but no user found", { apiKeyId });
       return NextResponse.json(
         { error: "User not found for API key" },
         { status: 401 },
@@ -131,7 +132,7 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch (e) {
-        console.error("Image processing error:", e);
+        logger.error("Image processing error:", e);
       }
     } else if (file.type.startsWith("video/")) {
       try {
@@ -152,7 +153,7 @@ export async function POST(req: NextRequest) {
           tags,
         );
       } catch (e) {
-        console.error("Video processing error:", e);
+        logger.error("Video processing error:", e);
       }
     }
     let inserted: typeof media.$inferSelect;
@@ -184,9 +185,11 @@ export async function POST(req: NextRequest) {
     }
     try {
       const { broadcastNewPhoto } = await import("@/app/api/feed/stream/route");
-      broadcastNewPhoto(inserted.id).catch(console.error);
+      broadcastNewPhoto(inserted.id).catch((error) => {
+        logger.error("Failed to broadcast new photo:", error);
+      });
     } catch (error) {
-      console.error("Failed to broadcast new photo:", error);
+      logger.error("Failed to broadcast new photo:", error);
     }
     await auditLog(user.id, "upload", "media", inserted.id, {
       eventId,
@@ -198,7 +201,7 @@ export async function POST(req: NextRequest) {
     revalidatePath(`/events/${eventId}`);
     return NextResponse.json({ success: true, media: inserted });
   } catch (error) {
-    console.error("API upload error:", error);
+    logger.error("API upload error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

@@ -5,6 +5,7 @@ import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { media, shareLinks } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { can, getUserContext } from "@/lib/policy";
 import { toPublicUser } from "@/lib/user-display";
 export async function createShareLink(
@@ -53,7 +54,7 @@ export async function createShareLink(
     });
     return { success: true, token };
   } catch (error) {
-    console.error("Failed to create share link:", error);
+    logger.error("Failed to create share link:", error);
     return { success: false, error: "Failed to create share link" };
   }
 }
@@ -82,7 +83,7 @@ export async function revokeShareLink(token: string) {
     });
     return { success: true };
   } catch (error) {
-    console.error("Failed to revoke share link:", error);
+    logger.error("Failed to revoke share link:", error);
     return { success: false, error: "Failed to revoke share link" };
   }
 }
@@ -126,7 +127,9 @@ export async function getSharedMedia(token: string) {
     db.update(shareLinks)
       .set({ views: link.views + 1 })
       .where(eq(shareLinks.token, token))
-      .catch(console.error);
+      .catch((error) => {
+        logger.error("Failed to update share link view count:", error);
+      });
     return {
       success: true,
       link: {
@@ -139,7 +142,7 @@ export async function getSharedMedia(token: string) {
       },
     };
   } catch (error) {
-    console.error("Failed to get shared media:", error);
+    logger.error("Failed to get shared media:", error);
     return { success: false, error: "Failed to retrieve media" };
   }
 }

@@ -13,6 +13,7 @@ import {
 } from "react-icons/hi2";
 import { db } from "@/lib/db";
 import { events, series, tags, users } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 import { getSlackAvatarUrl, getUserDisplayName } from "@/lib/user-display";
 
@@ -334,7 +335,7 @@ export async function GET(request: Request) {
     }
     return baseCard("Hack Club Photos", "Invalid type");
   } catch (e) {
-    console.error(e);
+    logger.error(e);
     return baseCard("Hack Club Photos", "Failed to generate image");
   }
 }

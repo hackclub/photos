@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import { HiArrowDownTray } from "react-icons/hi2";
 import ServerActionModal from "@/components/ui/ServerActionModal";
+import { logger } from "@/lib/client-logger";
 
 interface Props {
   eventId: string;
@@ -76,7 +77,7 @@ export default function DownloadAllButton({
       if (err instanceof Error && err.name === "AbortError") {
         return;
       }
-      console.error("Download error:", err);
+      logger.error("Download error:", err);
       setError("Failed to download files. Please try again.");
       setPreparing(false);
       setDownloading(false);

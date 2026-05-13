@@ -6,6 +6,7 @@ import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { type ExifData, extractExifData } from "@/lib/media/exif";
 import {
   abortMultipartUpload,
@@ -76,7 +77,7 @@ export async function getPresignedUrl(
       thumbnailS3Key,
     };
   } catch (error) {
-    console.error("Error generating presigned URL:", error);
+    logger.error("Error generating presigned URL:", error);
     return { success: false, error: "Failed to generate upload URL" };
   }
 }
@@ -115,7 +116,7 @@ export async function initiateMultipartUpload(
       thumbnailUploadUrl,
     };
   } catch (error) {
-    console.error("Error initiating multipart upload:", error);
+    logger.error("Error initiating multipart upload:", error);
     return { success: false, error: "Failed to initiate upload" };
   }
 }
@@ -135,7 +136,7 @@ export async function getMultipartPresignedUrls(
     );
     return { success: true, urls };
   } catch (error) {
-    console.error("Error generating part URLs:", error);
+    logger.error("Error generating part URLs:", error);
     return { success: false, error: "Failed to generate part URLs" };
   }
 }
@@ -154,7 +155,7 @@ export async function completeMultipart(
     await completeMultipartUpload(s3Key, uploadId, parts);
     return { success: true };
   } catch (error) {
-    console.error("Error completing multipart upload:", error);
+    logger.error("Error completing multipart upload:", error);
     return { success: false, error: "Failed to complete upload" };
   }
 }
@@ -166,7 +167,7 @@ export async function abortMultipart(s3Key: string, uploadId: string) {
     await abortMultipartUpload(s3Key, uploadId);
     return { success: true };
   } catch (error) {
-    console.error("Error aborting multipart upload:", error);
+    logger.error("Error aborting multipart upload:", error);
     return { success: false, error: "Failed to abort upload" };
   }
 }
@@ -241,7 +242,7 @@ export async function finalizeUpload(
             };
           }
         } catch (e) {
-          console.error("Failed to process image server-side:", e);
+          logger.error("Failed to process image server-side:", e);
         }
       } else if (data.mimeType.startsWith("video/")) {
         try {
@@ -292,11 +293,11 @@ export async function finalizeUpload(
             }
           }
         } catch (e) {
-          console.error("Failed to process video server-side:", e);
+          logger.error("Failed to process video server-side:", e);
         }
       }
     } catch (error) {
-      console.error("Failed to verify S3 object:", error);
+      logger.error("Failed to verify S3 object:", error);
       return {
         success: false,
         error: "Upload verification failed: File not found in storage",
@@ -336,21 +337,23 @@ export async function finalizeUpload(
     });
     try {
       const { broadcastNewPhoto } = await import("@/app/api/feed/stream/route");
-      broadcastNewPhoto(insertedMedia.id).catch(console.error);
+      broadcastNewPhoto(insertedMedia.id).catch((error) => {
+        logger.error("Failed to broadcast new photo:", error);
+      });
     } catch (error) {
-      console.error("Failed to broadcast new photo:", error);
+      logger.error("Failed to broadcast new photo:", error);
     }
     if (!skipRevalidation) {
       try {
         const { revalidatePath } = await import("next/cache");
         revalidatePath(`/events/${eventId}`);
       } catch (e) {
-        console.error("Revalidation failed", e);
+        logger.error("Revalidation failed", e);
       }
     }
     return { success: true, media: insertedMedia };
   } catch (error) {
-    console.error("Error finalizing upload:", error);
+    logger.error("Error finalizing upload:", error);
     return { success: false, error: "Failed to finalize upload" };
   }
 }

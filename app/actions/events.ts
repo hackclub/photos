@@ -5,6 +5,7 @@ import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { eventParticipants, events, media } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import {
   deleteBatchMedia,
   deleteMediaAndThumbnail,
@@ -114,7 +115,7 @@ export async function deleteEvent(eventId: string) {
     try {
       await deleteMediaAndThumbnail(event.bannerS3Key, null);
     } catch (error) {
-      console.error("Error deleting banner from S3:", error);
+      logger.error("Error deleting banner from S3:", error);
       bannerDeletionError = true;
     }
   }
@@ -213,10 +214,16 @@ export async function updateEvent(eventId: string, data: EventInput) {
     revalidatePath("/admin/events");
     return { success: true, event: updatedEvent };
   } catch (error: any) {
-    console.error("Update event error:", error);
+    logger.error("Update event error:", error);
     if (error?.code === "23505") {
-      if (error?.constraint_name === "events_slug_unique" || error?.constraint === "events_slug_unique") {
-        return { success: false, error: "An event with this slug already exists." };
+      if (
+        error?.constraint_name === "events_slug_unique" ||
+        error?.constraint === "events_slug_unique"
+      ) {
+        return {
+          success: false,
+          error: "An event with this slug already exists.",
+        };
       }
     }
     const errorMessage =
@@ -255,7 +262,7 @@ export async function regenerateInviteCode(eventId: string) {
     revalidatePath(`/events/${event.slug}`);
     return { success: true, inviteCode };
   } catch (error: unknown) {
-    console.error("Regenerate invite code error:", error);
+    logger.error("Regenerate invite code error:", error);
     const errorMessage =
       error instanceof Error
         ? error.message
@@ -344,10 +351,16 @@ export async function createEvent(data: EventInput) {
     revalidatePath("/admin/events");
     return { success: true, event: newEvent };
   } catch (error: any) {
-    console.error("Create event error:", error);
+    logger.error("Create event error:", error);
     if (error?.code === "23505") {
-      if (error?.constraint_name === "events_slug_unique" || error?.constraint === "events_slug_unique") {
-        return { success: false, error: "An event with this slug already exists." };
+      if (
+        error?.constraint_name === "events_slug_unique" ||
+        error?.constraint === "events_slug_unique"
+      ) {
+        return {
+          success: false,
+          error: "An event with this slug already exists.",
+        };
       }
     }
     const errorMessage =

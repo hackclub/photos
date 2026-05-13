@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { HiCheck, HiPencil, HiXMark } from "react-icons/hi2";
 import { updateSeries } from "@/app/actions/series";
+import { logger } from "@/lib/client-logger";
 
 interface EditSeriesButtonProps {
   series: {
@@ -43,7 +44,7 @@ export default function EditSeriesButton({ series }: EditSeriesButtonProps) {
         alert(result.error || "Failed to update series");
       }
     } catch (error) {
-      console.error("Update error:", error);
+      logger.error("Update error:", error);
       alert("Failed to update series");
     } finally {
       setIsSaving(false);

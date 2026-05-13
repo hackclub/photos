@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/Table";
+import { logger } from "@/lib/client-logger";
 
 interface Tag {
   id: string;
@@ -89,7 +90,7 @@ export default function TagsClient() {
         }
       }
     } catch (error) {
-      console.error("Failed to fetch tags:", error);
+      logger.error("Failed to fetch tags:", error);
     } finally {
       setLoading(false);
     }
@@ -123,7 +124,7 @@ export default function TagsClient() {
         alert("Failed to update tag");
       }
     } catch (error) {
-      console.error("Error updating tag:", error);
+      logger.error("Error updating tag:", error);
       alert("Error updating tag");
     } finally {
       setProcessing(false);
@@ -141,7 +142,7 @@ export default function TagsClient() {
         alert("Failed to delete tag");
       }
     } catch (error) {
-      console.error("Error deleting tag:", error);
+      logger.error("Error deleting tag:", error);
       alert("Error deleting tag");
     } finally {
       setProcessing(false);

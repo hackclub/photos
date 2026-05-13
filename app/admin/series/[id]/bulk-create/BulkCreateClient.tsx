@@ -24,6 +24,7 @@ import { getUsersBySlackIds } from "@/app/actions/users";
 import LocationSearch from "@/components/map/LocationSearch";
 import UserAvatar from "@/components/ui/UserAvatar";
 import UserSearch from "@/components/ui/UserSearch";
+import { logger } from "@/lib/client-logger";
 import { parseSlackIds } from "@/lib/slack-id";
 
 interface CsvRow {
@@ -79,15 +80,41 @@ export default function BulkCreateClient({
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [isLoaded, setIsLoaded] = useState(false);
   useEffect(() => {
+    const normalizeSavedRow = (row: Partial<BulkEventRow>): BulkEventRow => {
+      const emptyRow: BulkEventRow = {
+        id: Math.random().toString(36).substring(7),
+        name: "",
+        description: "",
+        location: "",
+        locationCity: "",
+        locationCountry: "",
+        latitude: null,
+        longitude: null,
+        eventDate: "",
+        admins: [],
+        pendingAdminSlackIds: [],
+        slug: "",
+        slugManuallyEdited: false,
+        visibility: "auth_required",
+        allowPublicSharing: true,
+      };
+
+      return {
+        ...emptyRow,
+        ...row,
+        admins: row.admins || [],
+        pendingAdminSlackIds: row.pendingAdminSlackIds || [],
+      };
+    };
     const saved = localStorage.getItem(`bulk-create-draft-${seriesId}`);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setRows(parsed.map(normalizeRow));
+          setRows(parsed.map(normalizeSavedRow));
         }
       } catch (e) {
-        console.error("Failed to load draft", e);
+        logger.error("Failed to load draft", e);
       }
     }
     setIsLoaded(true);
@@ -124,14 +151,6 @@ export default function BulkCreateClient({
       slugManuallyEdited: false,
       visibility: "auth_required",
       allowPublicSharing: true,
-    };
-  }
-  function normalizeRow(row: Partial<BulkEventRow>): BulkEventRow {
-    return {
-      ...createEmptyRow(),
-      ...row,
-      admins: row.admins || [],
-      pendingAdminSlackIds: row.pendingAdminSlackIds || [],
     };
   }
   const handleAddRow = () => {
@@ -516,7 +535,7 @@ export default function BulkCreateClient({
       }
       localStorage.removeItem(`bulk-create-draft-${seriesId}`);
     } catch (error: unknown) {
-      console.error("Bulk create error:", error);
+      logger.error("Bulk create error:", error);
       const message =
         error instanceof Error ? error.message : "Failed to create events";
       alert(message);

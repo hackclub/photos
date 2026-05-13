@@ -54,6 +54,7 @@ import { searchUsers } from "@/app/actions/users";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { useHeicUrl } from "@/hooks/useHeicUrl";
+import { logger } from "@/lib/client-logger";
 import {
   formatAperture,
   formatExposureTime,
@@ -371,9 +372,7 @@ export default function PhotoDetailModal({
 
     const timeoutId = window.setTimeout(() => {
       if (!imageLoaded && !imageError) {
-        console.warn(
-          `Image loading timed out after 60 seconds for ${media.id}`,
-        );
+        logger.warn(`Image loading timed out after 60 seconds for ${media.id}`);
         setImageError(true);
       }
     }, 60000);
@@ -487,7 +486,7 @@ export default function PhotoDetailModal({
         }
       } catch (error) {
         if (shouldIgnore()) return;
-        console.error("Error fetching data:", error);
+        logger.error("Error fetching data:", error);
       } finally {
         if (!shouldIgnore()) {
           setLoadingComments(false);
@@ -533,7 +532,7 @@ export default function PhotoDetailModal({
         throw new Error(data.error);
       }
     } catch (error) {
-      console.error("Error toggling like:", error);
+      logger.error("Error toggling like:", error);
       setHasLiked(previousHasLiked);
       setLikeCount(previousLikeCount);
       onMediaUpdate?.({
@@ -561,7 +560,7 @@ export default function PhotoDetailModal({
         setNewComment("");
       }
     } catch (error) {
-      console.error("Error posting comment:", error);
+      logger.error("Error posting comment:", error);
     } finally {
       setSubmittingComment(false);
     }
@@ -586,7 +585,7 @@ export default function PhotoDetailModal({
           .filter((c): c is Comment => c !== null),
       );
     } catch (error) {
-      console.error("Error deleting comment:", error);
+      logger.error("Error deleting comment:", error);
     }
   };
   const handleCommentLike = async (
@@ -661,7 +660,7 @@ export default function PhotoDetailModal({
         }),
       );
     } catch (error) {
-      console.error("Error toggling comment like:", error);
+      logger.error("Error toggling comment like:", error);
 
       setComments((prev) =>
         prev.map((c) => {
@@ -725,7 +724,7 @@ export default function PhotoDetailModal({
         setReplyingTo(null);
       }
     } catch (error) {
-      console.error("Error posting reply:", error);
+      logger.error("Error posting reply:", error);
     } finally {
       setSubmittingReply(false);
     }
@@ -743,7 +742,7 @@ export default function PhotoDetailModal({
         });
       }
     } catch (error) {
-      console.error("Error saving caption:", error);
+      logger.error("Error saving caption:", error);
     } finally {
       setSavingCaption(false);
     }
@@ -772,7 +771,7 @@ export default function PhotoDetailModal({
         setShowSuggestions(false);
       }
     } catch (error) {
-      console.error("Error adding tag:", error);
+      logger.error("Error adding tag:", error);
     } finally {
       setAddingTag(false);
     }
@@ -789,7 +788,7 @@ export default function PhotoDetailModal({
         setTags((prev) => prev.filter((t) => t.id !== tagId));
       }
     } catch (error) {
-      console.error("Error removing tag:", error);
+      logger.error("Error removing tag:", error);
     }
   };
   const handleAddMention = async (user: MentionedUser) => {
@@ -813,7 +812,7 @@ export default function PhotoDetailModal({
         setShowMentionSuggestions(false);
       }
     } catch (error) {
-      console.error("Error adding mention:", error);
+      logger.error("Error adding mention:", error);
     } finally {
       setAddingMention(false);
     }
@@ -831,7 +830,7 @@ export default function PhotoDetailModal({
         setMentions((prev) => prev.filter((m) => m.id !== userId));
       }
     } catch (error) {
-      console.error("Error removing mention:", error);
+      logger.error("Error removing mention:", error);
     }
   };
   const handleShareClick = async () => {
@@ -848,7 +847,7 @@ export default function PhotoDetailModal({
         });
       }
     } catch (error) {
-      console.error("Error creating share link:", error);
+      logger.error("Error creating share link:", error);
     } finally {
       setGeneratingLink(false);
     }
@@ -890,7 +889,7 @@ export default function PhotoDetailModal({
       setCopiedLink(type);
       setTimeout(() => setCopiedLink(null), 2000);
     } catch (err) {
-      console.error("Failed to copy:", err);
+      logger.error("Failed to copy:", err);
     }
   };
   const navigationBusyRef = useRef(false);
@@ -1275,7 +1274,8 @@ export default function PhotoDetailModal({
                     </div>
                   </div>
                 )}
-                {blurMode && imageLoaded &&
+                {blurMode &&
+                  imageLoaded &&
                   activeBlurRegions.map((region, index) => (
                     <div
                       key={`${region.x}-${region.y}-${index}`}

@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { HiCheck, HiPencil, HiXMark } from "react-icons/hi2";
 import { updateEvent } from "@/app/actions/events";
+import { logger } from "@/lib/client-logger";
 
 interface EditEventButtonProps {
   event: {
@@ -60,7 +61,7 @@ export default function EditEventButton({
         alert(result.error || "Failed to update event");
       }
     } catch (error) {
-      console.error("Update error:", error);
+      logger.error("Update error:", error);
       alert("Failed to update event");
     } finally {
       setIsSaving(false);

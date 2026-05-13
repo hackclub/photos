@@ -25,6 +25,7 @@ import FormInput from "@/components/ui/FormInput";
 import FormTextarea from "@/components/ui/FormTextarea";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import UserSearch from "@/components/ui/UserSearch";
+import { logger } from "@/lib/client-logger";
 import type { series, seriesAdmins } from "@/lib/db/schema";
 import type { PublicUser } from "@/lib/user-display";
 
@@ -99,7 +100,7 @@ export default function EditSeriesClient({
         throw new Error(result.error || "Failed to update series");
       }
     } catch (error: unknown) {
-      console.error("Error updating series:", error);
+      logger.error("Error updating series:", error);
       const message =
         error instanceof Error ? error.message : "Failed to update series";
       alert(message);
@@ -114,7 +115,7 @@ export default function EditSeriesClient({
         setBannerS3Key(result.series.bannerS3Key || null);
       }
     } catch (error) {
-      console.error("Error refetching series:", error);
+      logger.error("Error refetching series:", error);
     }
   };
   const handleChange = (
@@ -205,7 +206,7 @@ export default function EditSeriesClient({
         throw new Error(result.error || "Failed to remove admin");
       setAdmins(admins.filter((a) => a.userId !== adminToRemove));
     } catch (error) {
-      console.error("Error removing admin:", error);
+      logger.error("Error removing admin:", error);
       alert("Failed to remove admin");
     } finally {
       setAdminToRemove(null);
@@ -224,7 +225,9 @@ export default function EditSeriesClient({
                 Update series details and settings
               </p>
             </div>
-            <Link prefetch={false} href="/admin/series"
+            <Link
+              prefetch={false}
+              href="/admin/series"
               className="flex items-center gap-2 px-4 py-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
             >
               <HiXMark className="w-5 h-5" />
@@ -466,13 +469,17 @@ export default function EditSeriesClient({
           </div>
 
           <div className="flex items-center justify-between">
-            <Link prefetch={false} href={`/admin/series/${series.id}/bulk-create`}
+            <Link
+              prefetch={false}
+              href={`/admin/series/${series.id}/bulk-create`}
               className="px-6 py-3 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors font-medium border border-zinc-700 hover:border-zinc-600"
             >
               Bulk Create Events
             </Link>
             <div className="flex items-center gap-3">
-              <Link prefetch={false} href="/admin/series"
+              <Link
+                prefetch={false}
+                href="/admin/series"
                 className="px-6 py-3 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors font-medium"
               >
                 Cancel

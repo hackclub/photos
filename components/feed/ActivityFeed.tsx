@@ -3,6 +3,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { HiArrowUp } from "react-icons/hi2";
 import { deleteMedia } from "@/app/actions/media";
+import { logger } from "@/lib/client-logger";
 import ConfirmModal from "../ui/ConfirmModal";
 import LoadingSpinner from "../ui/LoadingSpinner";
 import FeedEmptyState from "./FeedEmptyState";
@@ -94,11 +95,11 @@ export default function ActivityFeed({
               });
             }
           } catch (err) {
-            console.error("Failed to fetch image URLs:", err);
+            logger.error("Failed to fetch image URLs:", err);
           }
         }
       } catch (err) {
-        console.error("Feed error:", err);
+        logger.error("Feed error:", err);
         setError(err instanceof Error ? err.message : "Failed to load feed");
       } finally {
         isFetchingRef.current = false;
@@ -119,7 +120,7 @@ export default function ActivityFeed({
           setCurrentUserId(data.user?.id || null);
         }
       } catch (error) {
-        console.error("Error fetching user session:", error);
+        logger.error("Error fetching user session:", error);
       }
     };
     fetchUser();
@@ -179,7 +180,12 @@ export default function ActivityFeed({
                       });
                     }
                   })
-                  .catch(console.error);
+                  .catch((error) => {
+                    logger.error(
+                      "Failed to fetch activity feed media URL:",
+                      error,
+                    );
+                  });
               });
             }
           } else if (data.type === "photo_deleted" && data.mediaId) {
@@ -193,11 +199,11 @@ export default function ActivityFeed({
             });
           }
         } catch (err) {
-          console.error("SSE message parse error:", err);
+          logger.error("SSE message parse error:", err);
         }
       };
       eventSource.onerror = (err) => {
-        console.error("[ActivityFeed] SSE error:", err);
+        logger.error("[ActivityFeed] SSE error:", err);
         setIsLive(false);
         if (eventSource.readyState === EventSource.CLOSED) {
           reconnectAttempt++;
@@ -262,7 +268,7 @@ export default function ActivityFeed({
           }
         }
       } catch (err) {
-        console.error("Poll error:", err);
+        logger.error("Poll error:", err);
       }
     };
     pollIntervalRef.current = setInterval(
@@ -306,7 +312,7 @@ export default function ActivityFeed({
           setFullSizeUrl(url);
         }
       } catch (error) {
-        console.error("Failed to load full-size image:", error);
+        logger.error("Failed to load full-size image:", error);
       }
     };
     loadFullSize();
@@ -432,7 +438,7 @@ export default function ActivityFeed({
               window.URL.revokeObjectURL(url);
               document.body.removeChild(a);
             } catch (error) {
-              console.error("Download failed:", error);
+              logger.error("Download failed:", error);
             }
           }}
           onDelete={
@@ -463,7 +469,7 @@ export default function ActivityFeed({
             );
             setSelectedMedia(null);
           } catch (error) {
-            console.error("Failed to delete media:", error);
+            logger.error("Failed to delete media:", error);
             alert("Failed to delete media");
           } finally {
             setShowDeleteModal(false);

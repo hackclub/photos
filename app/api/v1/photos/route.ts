@@ -4,6 +4,7 @@ import { unauthorizedResponse, validateApiKey } from "@/lib/auth-api";
 import { APP_URL } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/db/schema";
+import { logger, recordException, serializeError } from "@/lib/logger";
 export async function GET(req: NextRequest) {
   const auth = await validateApiKey();
   if (!auth) {
@@ -82,7 +83,17 @@ export async function GET(req: NextRequest) {
       });
     }
   } catch (error) {
-    console.error("Error fetching photos:", error);
+    await recordException(error);
+    logger.error(
+      {
+        eventSlug,
+        isRandom,
+        page,
+        limit,
+        error: serializeError(error),
+      },
+      "public photos api failed",
+    );
     return Response.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

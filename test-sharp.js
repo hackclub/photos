@@ -1,4 +1,7 @@
+const pino = require("pino");
 const sharp = require("sharp");
+
+const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
 
 async function testSharp() {
   try {
@@ -13,14 +16,14 @@ async function testSharp() {
       .png()
       .toBuffer();
 
-    console.log("Sharp generated a buffer of length:", image.length);
+    logger.info({ length: image.length }, "Sharp generated a buffer of length");
 
     const resized = await sharp(image).resize(50, 50).toBuffer();
 
-    console.log("Sharp resized buffer to length:", resized.length);
-    console.log("Sharp is working correctly.");
+    logger.info({ length: resized.length }, "Sharp resized buffer to length");
+    logger.info("Sharp is working correctly.");
   } catch (err) {
-    console.error("Sharp failed:", err);
+    logger.error({ err }, "Sharp failed");
   }
 }
 

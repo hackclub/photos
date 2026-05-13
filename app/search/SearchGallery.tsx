@@ -27,6 +27,7 @@ import { deleteMedia } from "@/app/actions/media";
 import VideoIndicator from "@/components/media/VideoIndicator";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import ServerActionModal from "@/components/ui/ServerActionModal";
+import { logger } from "@/lib/client-logger";
 
 const PhotoDetailModal = dynamic(
   () => import("@/components/media/PhotoDetailModal"),
@@ -283,7 +284,7 @@ export default function SearchGallery({
         setPresignedUrls((prev) => ({ ...prev, ...newUrls }));
       }
     } catch (error) {
-      console.error("Failed to load thumbnails:", error);
+      logger.error("Failed to load thumbnails:", error);
     }
   }, []);
 
@@ -344,7 +345,7 @@ export default function SearchGallery({
         setFullSizeUrl(url);
       } catch (error) {
         if (requestSeq !== fullSizeRequestSeqRef.current) return;
-        console.error("Failed to load full-size image:", error);
+        logger.error("Failed to load full-size image:", error);
       }
     };
     loadFullSize();
@@ -361,7 +362,7 @@ export default function SearchGallery({
         fullSizeUrlCacheRef.current[id] = url;
       });
     } catch (error) {
-      console.error("Failed to prefetch full-size images:", error);
+      logger.error("Failed to prefetch full-size images:", error);
     }
   }, []);
 
@@ -410,7 +411,7 @@ export default function SearchGallery({
       window.URL.revokeObjectURL(downloadUrl);
       document.body.removeChild(a);
     } catch (error) {
-      console.error("Download failed:", error);
+      logger.error("Download failed:", error);
       alert("Failed to download file");
     } finally {
       setDownloading(false);
@@ -449,7 +450,7 @@ export default function SearchGallery({
       setDownloading(false);
       clearSelection();
     } catch (error) {
-      console.error("Bulk download failed:", error);
+      logger.error("Bulk download failed:", error);
       alert("Failed to download files");
       setDownloading(false);
     }
@@ -487,7 +488,7 @@ export default function SearchGallery({
         setDeleting(false);
       }, 2000);
     } catch (error) {
-      console.error("Bulk delete failed:", error);
+      logger.error("Bulk delete failed:", error);
       alert("Failed to delete items");
       setDeleting(false);
     }

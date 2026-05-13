@@ -1,4 +1,5 @@
 import exifr from "exifr";
+import { logger } from "@/lib/logger";
 export interface ExifData {
   make?: string;
   model?: string;
@@ -102,11 +103,11 @@ export async function extractExifData(
       error instanceof Error &&
       error.message.includes("Unknown file format")
     ) {
-      console.warn(
+      logger.warn(
         `EXIF extraction skipped (Unknown Format)${contextInfo ? ` for ${contextInfo}` : ""}`,
       );
     } else {
-      console.error(
+      logger.error(
         `Error extracting EXIF data${contextInfo ? ` for ${contextInfo}` : ""}:`,
         error,
       );

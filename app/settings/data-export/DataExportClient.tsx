@@ -15,6 +15,7 @@ import {
   deleteExport,
   requestDataExport,
 } from "@/app/actions/data-export";
+import { logger } from "@/lib/client-logger";
 
 interface Export {
   id: string;
@@ -43,7 +44,7 @@ export default function DataExportClient({
       }
     } catch (err) {
       setError("An unexpected error occurred");
-      console.error(err);
+      logger.error(err);
     } finally {
       setLoading(false);
     }
@@ -60,7 +61,7 @@ export default function DataExportClient({
       }
     } catch (err) {
       setError("An unexpected error occurred");
-      console.error(err);
+      logger.error(err);
     } finally {
       setLoading(false);
     }
@@ -77,7 +78,7 @@ export default function DataExportClient({
       }
     } catch (err) {
       setError("An unexpected error occurred");
-      console.error(err);
+      logger.error(err);
     } finally {
       setLoading(false);
     }

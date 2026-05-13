@@ -13,6 +13,7 @@ import {
   mediaComments,
   mediaLikes,
 } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { can, getUserContext } from "@/lib/policy";
 import { toPublicUser } from "@/lib/user-display";
 export async function toggleMediaLike(mediaId: string) {
@@ -55,9 +56,11 @@ export async function toggleMediaLike(mediaId: string) {
     });
     if (!existingLike) {
       try {
-        broadcastNewLike(mediaId, user.id).catch(console.error);
+        broadcastNewLike(mediaId, user.id).catch((error) => {
+          logger.error("Failed to broadcast new like:", error);
+        });
       } catch (error) {
-        console.error("Failed to broadcast new like:", error);
+        logger.error("Failed to broadcast new like:", error);
       }
     }
     return {
@@ -66,7 +69,7 @@ export async function toggleMediaLike(mediaId: string) {
       hasLiked: !existingLike,
     };
   } catch (error) {
-    console.error("Error toggling media like:", error);
+    logger.error("Error toggling media like:", error);
     return { success: false, error: "Failed to toggle like" };
   }
 }
@@ -97,7 +100,7 @@ export async function getMediaLikes(mediaId: string) {
       hasLiked,
     };
   } catch (error) {
-    console.error("Error getting media likes:", error);
+    logger.error("Error getting media likes:", error);
     return { success: false, error: "Failed to get likes" };
   }
 }
@@ -190,7 +193,7 @@ export async function getMediaComments(mediaId: string) {
       }));
     return { success: true, comments: commentsWithLikes };
   } catch (error) {
-    console.error("Error fetching comments:", error);
+    logger.error("Error fetching comments:", error);
     return { success: false, error: "Failed to fetch comments" };
   }
 }
@@ -275,13 +278,15 @@ export async function createComment(
       replies: [],
     };
     try {
-      broadcastNewComment(comment.id).catch(console.error);
+      broadcastNewComment(comment.id).catch((error) => {
+        logger.error("Failed to broadcast new comment:", error);
+      });
     } catch (error) {
-      console.error("Failed to broadcast new comment:", error);
+      logger.error("Failed to broadcast new comment:", error);
     }
     return { success: true, comment: commentWithLikes };
   } catch (error) {
-    console.error("Error creating comment:", error);
+    logger.error("Error creating comment:", error);
     return { success: false, error: "Failed to create comment" };
   }
 }
@@ -319,7 +324,7 @@ export async function deleteComment(commentId: string) {
     });
     return { success: true };
   } catch (error) {
-    console.error("Error deleting comment:", error);
+    logger.error("Error deleting comment:", error);
     return { success: false, error: "Failed to delete comment" };
   }
 }
@@ -381,7 +386,7 @@ export async function toggleCommentLike(commentId: string) {
       hasLiked: existing.length === 0,
     };
   } catch (error) {
-    console.error("Error toggling comment like:", error);
+    logger.error("Error toggling comment like:", error);
     return { success: false, error: "Failed to toggle comment like" };
   }
 }

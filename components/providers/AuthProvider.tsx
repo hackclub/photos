@@ -11,6 +11,7 @@ import RybbitUserIdentifier, {
   trackRybbitEvent,
 } from "@/components/analytics/RybbitUserIdentifier";
 import type { SessionUser } from "@/lib/auth";
+import { logger } from "@/lib/client-logger";
 
 interface AuthContextType {
   user: SessionUser | null;
@@ -50,7 +51,7 @@ export function AuthProvider({
       }
       setUser(data.user || null);
     } catch (error) {
-      console.error("Failed to fetch user session:", error);
+      logger.error("Failed to fetch user session:", error);
       setUser(null);
     } finally {
       setLoading(false);

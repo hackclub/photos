@@ -6,6 +6,7 @@ import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { dataExports, media, users } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { deleteFromS3 } from "@/lib/media/s3";
 import { deleteBatchMedia } from "@/lib/media/thumbnail";
 import { getUserContext } from "@/lib/policy";
@@ -34,7 +35,7 @@ export async function searchUsers(query: string) {
       users: searchResults.map(toPublicUser),
     };
   } catch (error) {
-    console.error("Error searching users:", error);
+    logger.error("Error searching users:", error);
     return { success: false, error: "Failed to search users" };
   }
 }
@@ -65,7 +66,7 @@ export async function getUsersBySlackIds(slackIds: string[]) {
       })),
     };
   } catch (error) {
-    console.error("Error fetching users by Slack IDs:", error);
+    logger.error("Error fetching users by Slack IDs:", error);
     return { success: false, error: "Failed to fetch users" };
   }
 }
@@ -80,7 +81,7 @@ export async function getCurrentUser() {
       user: { ...session, name: getUserDisplayName(session) },
     };
   } catch (error) {
-    console.error("Error getting current user:", error);
+    logger.error("Error getting current user:", error);
     return { success: false, error: "Failed to get user" };
   }
 }
@@ -117,7 +118,7 @@ export async function banUser(
             await deleteFromS3(exportItem.s3Key);
             successfulExportIds.push(exportItem.id);
           } catch (error) {
-            console.error(
+            logger.error(
               `Failed to delete S3 file ${exportItem.s3Key}:`,
               error,
             );
@@ -164,7 +165,7 @@ export async function banUser(
           and(eq(reports.reporterId, userId), eq(reports.status, "pending")),
         );
     } catch (e) {
-      console.error("Failed to auto-resolve reports for banned user:", e);
+      logger.error("Failed to auto-resolve reports for banned user:", e);
     }
     revalidatePath("/admin/users");
     revalidatePath(`/users/${userId}`);
@@ -173,7 +174,7 @@ export async function banUser(
     }
     return { success: true };
   } catch (error) {
-    console.error("Error banning user:", error);
+    logger.error("Error banning user:", error);
     return { success: false, error: "Failed to ban user" };
   }
 }
@@ -209,7 +210,7 @@ export async function unbanUser(userId: string) {
     }
     return { success: true };
   } catch (error) {
-    console.error("Error unbanning user:", error);
+    logger.error("Error unbanning user:", error);
     return { success: false, error: "Failed to unban user" };
   }
 }
@@ -282,7 +283,7 @@ export async function updateUserProfile(
     }
     return { success: true };
   } catch (error) {
-    console.error("Error updating user profile:", error);
+    logger.error("Error updating user profile:", error);
     return { success: false, error: "Failed to update profile" };
   }
 }
@@ -317,7 +318,7 @@ export async function deleteAccount() {
     });
     return { success: true };
   } catch (error) {
-    console.error("Error deleting account:", error);
+    logger.error("Error deleting account:", error);
     return { success: false, error: "Failed to delete account" };
   }
 }
@@ -327,7 +328,7 @@ export async function checkSlackAvatar(slackId: string) {
     const user = await getCachetUser(slackId);
     return { success: !!user, user };
   } catch (error) {
-    console.error("Error checking Slack avatar:", error);
+    logger.error("Error checking Slack avatar:", error);
     return { success: false };
   }
 }
@@ -343,7 +344,7 @@ export async function getUserStorageUsage(userId: string) {
     const { getUserStorageUsage: getUsage } = await import("@/lib/storage");
     return await getUsage(userId);
   } catch (error) {
-    console.error("Error getting user storage usage:", error);
+    logger.error("Error getting user storage usage:", error);
     return 0;
   }
 }
@@ -357,7 +358,7 @@ export async function getStorageStatus(projectedBytes: number = 0) {
     const status = await checkStorageLimit(session.id, projectedBytes);
     return { success: true, ...status };
   } catch (error) {
-    console.error("Error getting storage status:", error);
+    logger.error("Error getting storage status:", error);
     return { success: false, error: "Failed to get storage status" };
   }
 }

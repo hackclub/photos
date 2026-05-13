@@ -1,5 +1,6 @@
 import { Readable } from "node:stream";
 import ffmpeg from "fluent-ffmpeg";
+import { logger } from "@/lib/logger";
 export interface VideoMetadata {
   duration?: number;
   width?: number;
@@ -23,7 +24,7 @@ export async function extractVideoMetadata(
       }
       ffmpeg(stream).ffprobe((err, metadata) => {
         if (err) {
-          console.error("FFprobe error:", err);
+          logger.error("FFprobe error:", err);
           resolve(null);
           return;
         }
@@ -76,7 +77,7 @@ export async function extractVideoMetadata(
         });
       });
     } catch (error) {
-      console.error("Video metadata extraction error:", error);
+      logger.error("Video metadata extraction error:", error);
       resolve(null);
     }
   });

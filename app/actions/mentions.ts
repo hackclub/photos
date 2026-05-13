@@ -4,6 +4,7 @@ import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { media, mediaMentions, users } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { can, getUserContext } from "@/lib/policy";
 export async function addMention(mediaId: string, userId: string) {
   const session = await getSession();
@@ -58,7 +59,7 @@ export async function addMention(mediaId: string, userId: string) {
     );
     return { success: true, user };
   } catch (error) {
-    console.error("Failed to add mention:", error);
+    logger.error("Failed to add mention:", error);
     return { success: false, error: "Failed to add mention" };
   }
 }
@@ -104,7 +105,7 @@ export async function removeMention(mediaId: string, userId: string) {
     );
     return { success: true };
   } catch (error) {
-    console.error("Failed to remove mention:", error);
+    logger.error("Failed to remove mention:", error);
     return { success: false, error: "Failed to remove mention" };
   }
 }
@@ -131,7 +132,7 @@ export async function getMediaMentions(mediaId: string) {
     });
     return { success: true, mentions: results.map((r) => r.user) };
   } catch (error) {
-    console.error("Failed to get media mentions:", error);
+    logger.error("Failed to get media mentions:", error);
     return { success: false, error: "Failed to get media mentions" };
   }
 }

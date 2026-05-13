@@ -14,6 +14,7 @@ import { getRandomMedia, getSeriesAndEvents } from "@/app/actions/signage";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { useHeicUrl } from "@/hooks/useHeicUrl";
+import { logger } from "@/lib/client-logger";
 
 type MediaItem = {
   id: string;
@@ -114,7 +115,7 @@ export default function RandomSignagePage() {
         setError("Failed to load media");
       }
     } catch (e) {
-      console.error(e);
+      logger.error(e);
       setError("Error loading media");
     } finally {
       setLoading(false);
@@ -165,7 +166,7 @@ export default function RandomSignagePage() {
               fill
               className={`${config.fitToScreen ? "object-cover" : "object-contain"}`}
               onError={() => {
-                console.warn("Image failed to load, skipping...");
+                logger.warn("Image failed to load, skipping...");
                 advanceSlide();
               }}
               unoptimized
@@ -231,7 +232,9 @@ export default function RandomSignagePage() {
     <div className="min-h-screen bg-black text-white p-8 flex flex-col items-center justify-center">
       <div className="max-w-md w-full space-y-8">
         <div className="flex items-center justify-between">
-          <Link prefetch={false} href="/sign"
+          <Link
+            prefetch={false}
+            href="/sign"
             className="text-zinc-400 hover:text-white transition-colors"
           >
             <HiArrowLeft className="w-6 h-6" />

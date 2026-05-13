@@ -3,6 +3,7 @@ import L from "leaflet";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import useSupercluster from "use-supercluster";
+import { logger } from "@/lib/client-logger";
 import "leaflet/dist/leaflet.css";
 import "leaflet-defaulticon-compatibility";
 import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css";
@@ -137,17 +138,26 @@ export default function PhotoMap() {
   const urlLatParsed = searchParams.get("lat")
     ? parseFloat(searchParams.get("lat")!)
     : undefined;
-  const urlLat = urlLatParsed !== undefined && !isNaN(urlLatParsed) ? urlLatParsed : undefined;
+  const urlLat =
+    urlLatParsed !== undefined && !Number.isNaN(urlLatParsed)
+      ? urlLatParsed
+      : undefined;
 
   const urlLngParsed = searchParams.get("lng")
     ? parseFloat(searchParams.get("lng")!)
     : undefined;
-  const urlLng = urlLngParsed !== undefined && !isNaN(urlLngParsed) ? urlLngParsed : undefined;
+  const urlLng =
+    urlLngParsed !== undefined && !Number.isNaN(urlLngParsed)
+      ? urlLngParsed
+      : undefined;
 
   const urlZoomParsed = searchParams.get("zoom")
     ? parseInt(searchParams.get("zoom")!, 10)
     : undefined;
-  const urlZoom = urlZoomParsed !== undefined && !isNaN(urlZoomParsed) ? urlZoomParsed : undefined;
+  const urlZoom =
+    urlZoomParsed !== undefined && !Number.isNaN(urlZoomParsed)
+      ? urlZoomParsed
+      : undefined;
   const handleBoundsChange = useCallback(
     (newBounds: [number, number, number, number], newZoom: number) => {
       setBounds((prev) => {
@@ -178,7 +188,7 @@ export default function PhotoMap() {
           });
         }
       } catch (error) {
-        console.error("Error fetching map data:", error);
+        logger.error("Error fetching map data:", error);
       } finally {
         setLoading(false);
       }
@@ -192,29 +202,29 @@ export default function PhotoMap() {
             (photo) =>
               photo.lat != null &&
               photo.lng != null &&
-              !isNaN(Number(photo.lat)) &&
-              !isNaN(Number(photo.lng)),
+              !Number.isNaN(Number(photo.lat)) &&
+              !Number.isNaN(Number(photo.lng)),
           )
           .map((photo) => ({
-          type: "Feature" as const,
-          properties: {
-            cluster: false,
-            photoId: photo.id,
-            photo,
-            type: "photo",
-          },
-          geometry: {
-            type: "Point" as const,
-            coordinates: [Number(photo.lng), Number(photo.lat)],
-          },
-        }))
+            type: "Feature" as const,
+            properties: {
+              cluster: false,
+              photoId: photo.id,
+              photo,
+              type: "photo",
+            },
+            geometry: {
+              type: "Point" as const,
+              coordinates: [Number(photo.lng), Number(photo.lat)],
+            },
+          }))
       : mapData.events
           .filter(
             (event) =>
               event.lat != null &&
               event.lng != null &&
-              !isNaN(Number(event.lat)) &&
-              !isNaN(Number(event.lng)) &&
+              !Number.isNaN(Number(event.lat)) &&
+              !Number.isNaN(Number(event.lng)) &&
               event.photos &&
               event.photos.length > 0,
           )
@@ -285,7 +295,7 @@ export default function PhotoMap() {
           setPhotoUrls((prev) => ({ ...prev, ...result.urls }));
         }
       } catch (error) {
-        console.error("Error fetching presigned URLs:", error);
+        logger.error("Error fetching presigned URLs:", error);
       }
     }
     fetchUrls();
@@ -637,7 +647,9 @@ export default function PhotoMap() {
                         </>
                       )}
                     </p>
-                    <Link prefetch={false} href={`/events/${photo.event.slug}?photo=${photo.id}`}
+                    <Link
+                      prefetch={false}
+                      href={`/events/${photo.event.slug}?photo=${photo.id}`}
                       className="text-[10px] sm:text-xs font-medium inline-block"
                     >
                       View in {photo.event.name} →
@@ -706,7 +718,9 @@ export default function PhotoMap() {
                       {eventPhotos.length === 1 ? "photo" : "photos"}
                     </div>
 
-                    <Link prefetch={false} href={`/events/${event.slug}`}
+                    <Link
+                      prefetch={false}
+                      href={`/events/${event.slug}`}
                       className="text-[10px] sm:text-xs font-medium inline-block"
                     >
                       View Event →

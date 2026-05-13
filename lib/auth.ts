@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { jwtVerify, SignJWT } from "jose";
 import { cookies, headers } from "next/headers";
 import { HACK_CLUB_AUTH_URL } from "@/lib/constants";
+import { logger, serializeError } from "@/lib/logger";
 import { claimPendingAdminGrantsForUser } from "@/lib/pending-admins";
 import { getUserDisplayName, toPublicUser } from "@/lib/user-display";
 import { db } from "./db";
@@ -13,7 +14,7 @@ if (!nextAuthSecret) {
   if (process.env.NODE_ENV === "production") {
     throw new Error("NEXTAUTH_SECRET is required in production");
   }
-  console.warn(
+  logger.warn(
     "[auth] NEXTAUTH_SECRET is not set; sessions are insecure. Set NEXTAUTH_SECRET in your environment.",
   );
 }
@@ -143,7 +144,7 @@ export async function exchangeCodeForToken(code: string, redirectUri: string) {
 
   const responseText = await response.text();
   if (!response.ok) {
-    console.error("Token exchange failed with status:", response.status);
+    logger.error({ status: response.status }, "token exchange failed");
     throw new Error(
       `Failed to exchange code for token: ${response.status} - ${responseText}`,
     );
@@ -179,7 +180,7 @@ async function refreshAccessToken(refreshToken: string) {
 
   const responseText = await response.text();
   if (!response.ok) {
-    console.error("Token refresh failed with status:", response.status);
+    logger.error({ status: response.status }, "token refresh failed");
     throw new Error(
       `Failed to refresh access token: ${response.status} - ${responseText}`,
     );
@@ -206,7 +207,10 @@ export async function fetchHackClubUser(accessToken: string) {
       throw new Error("Unauthorized: Token expired or invalid");
     }
     const error = await response.text();
-    console.error("User fetch failed:", error);
+    logger.error(
+      { status: response.status, response: error },
+      "Hack Club user fetch failed",
+    );
     throw new Error(`Failed to fetch user: ${response.status}`);
   }
   const userData = await response.json();
@@ -324,9 +328,9 @@ export async function refreshUser(userId: string) {
         error.message === "Unauthorized: Token expired or invalid"
       ) {
         if (!dbUser.hcaRefreshToken) {
-          console.log(
-            "Token expired and no refresh token; logging out:",
-            userId,
+          logger.info(
+            { userId },
+            "token expired and no refresh token; logging out",
           );
           await deleteSession();
           return null;
@@ -356,7 +360,10 @@ export async function refreshUser(userId: string) {
       throw error;
     }
   } catch (error: unknown) {
-    console.error("Error refreshing user data:", error);
+    logger.error(
+      { userId, error: serializeError(error) },
+      "error refreshing user data",
+    );
     return null;
   }
 }

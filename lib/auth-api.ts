@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { apiKeys, users } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import type { UserContext } from "@/lib/policy";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -69,10 +70,10 @@ export async function validateApiKey(requireUpload: boolean = false) {
         lastUsedAt: new Date(),
       })
       .where(eq(apiKeys.id, apiKey.id))
-      .catch((err) => console.error("Failed to update API key stats:", err));
+      .catch((err) => logger.error("Failed to update API key stats:", err));
     return { user: apiKey.user, apiKeyId: apiKey.id, apiKeyName: apiKey.name };
   } catch (error) {
-    console.error("Error validating API key:", error);
+    logger.error("Error validating API key:", error);
     return null;
   }
 }

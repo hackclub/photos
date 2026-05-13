@@ -8,6 +8,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getUserContext } from "@/lib/auth-api";
 import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { convertHeicToJpeg } from "@/lib/media/heic";
 import { s3Client } from "@/lib/media/s3";
 import { can } from "@/lib/policy";
@@ -83,7 +84,7 @@ export async function GET(
         headers,
       });
     } catch (error) {
-      console.error("HEIC conversion failed:", error);
+      logger.error("HEIC conversion failed:", error);
     }
   }
   let s3Key = mediaItem.s3Key;
@@ -106,7 +107,7 @@ export async function GET(
   try {
     s3Response = await s3Client.send(command);
   } catch (error) {
-    console.error(`Failed to fetch from S3:`, error);
+    logger.error(`Failed to fetch from S3:`, error);
     return new NextResponse("Failed to fetch media", { status: 502 });
   }
   const headers = new Headers();

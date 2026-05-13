@@ -4,6 +4,7 @@ import {
   getMultipartPresignedUrls,
   initiateMultipartUpload,
 } from "@/app/actions/upload";
+import { logger } from "@/lib/logger";
 import type { ExifData } from "./exif";
 export interface UploadFile {
   id: string;
@@ -155,7 +156,7 @@ export async function uploadMultipartToS3(
     try {
       await abortMultipart(s3Key, uploadId);
     } catch (e) {
-      console.error("Failed to abort multipart upload:", e);
+      logger.error("Failed to abort multipart upload:", e);
     }
     throw error;
   }

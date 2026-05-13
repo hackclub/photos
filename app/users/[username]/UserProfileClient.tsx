@@ -37,9 +37,10 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import UserAvatar from "@/components/ui/UserAvatar";
 import DeleteAccountModal from "@/components/users/DeleteAccountModal";
 import EditProfileModal from "@/components/users/EditProfileModal";
-import UserReports from "@/components/users/UserReports";
 import UserBlurRequests from "@/components/users/UserBlurRequests";
+import UserReports from "@/components/users/UserReports";
 import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/client-logger";
 import { SOCIAL_URLS } from "@/lib/constants";
 
 interface User {
@@ -152,7 +153,7 @@ export default function UserProfileClient({
           }
         }
       } catch (error) {
-        console.error("Error fetching user data:", error);
+        logger.error("Error fetching user data:", error);
       } finally {
         setLoading(false);
       }
@@ -168,11 +169,11 @@ export default function UserProfileClient({
           window.location.href = "/account-deleted";
         }, 100);
       } else {
-        console.error("Failed to delete account:", result.error);
+        logger.error("Failed to delete account:", result.error);
         alert("Failed to delete account. Please try again.");
       }
     } catch (error) {
-      console.error("Error deleting account:", error);
+      logger.error("Error deleting account:", error);
       alert("An error occurred while deleting your account.");
     }
   };

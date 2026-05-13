@@ -9,6 +9,7 @@ import {
   mediaMentions,
   users,
 } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { getAssetProxyUrl } from "@/lib/media/s3";
 import {
   augmentMediaWithPermissions,
@@ -205,7 +206,7 @@ export async function getUserProfileData(userId: string) {
       },
     };
   } catch (error) {
-    console.error("Error fetching user profile data:", error);
+    logger.error("Error fetching user profile data:", error);
     return { success: false, error: "Failed to fetch user data" };
   }
 }

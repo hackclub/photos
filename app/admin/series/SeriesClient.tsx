@@ -12,6 +12,7 @@ import {
 import { deleteSeries } from "@/app/actions/series";
 import SeriesCard from "@/components/series/SeriesCard";
 import { AdminSearch, AdminToolbar } from "@/components/ui/AdminPageLayout";
+import { logger } from "@/lib/client-logger";
 
 interface Series {
   id: string;
@@ -78,7 +79,7 @@ export default function SeriesClient({ series }: SeriesClientProps) {
       setSelectedSeries(new Set());
       router.refresh();
     } catch (error) {
-      console.error("Error deleting series:", error);
+      logger.error("Error deleting series:", error);
       alert("Failed to delete some series. Please try again.");
     } finally {
       setIsDeleting(false);
@@ -197,7 +198,9 @@ export default function SeriesClient({ series }: SeriesClientProps) {
               : "Create your first series to organize related events together"}
           </p>
           {!(searchQuery || visibilityFilter !== "all") && (
-            <Link prefetch={false} href="/admin/series/new"
+            <Link
+              prefetch={false}
+              href="/admin/series/new"
               className="inline-flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all"
             >
               <HiPlus className="text-xl" />

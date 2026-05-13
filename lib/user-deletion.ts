@@ -9,6 +9,7 @@ import {
   series,
   users,
 } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { deleteFromS3 } from "@/lib/media/s3";
 import {
   deleteBatchMedia,
@@ -30,7 +31,7 @@ export async function deleteUserContent(userId: string) {
       try {
         await deleteMediaAndThumbnail(event.bannerS3Key, null);
       } catch (e) {
-        console.error(`Failed to delete event banner ${event.id}:`, e);
+        logger.error(`Failed to delete event banner ${event.id}:`, e);
         eventDeletionFailed = true;
       }
     }
@@ -56,7 +57,7 @@ export async function deleteUserContent(userId: string) {
       try {
         await deleteMediaAndThumbnail(s.bannerS3Key, null);
       } catch (e) {
-        console.error(`Failed to delete series banner ${s.id}:`, e);
+        logger.error(`Failed to delete series banner ${s.id}:`, e);
         seriesDeletionFailed = true;
       }
     }
@@ -73,7 +74,7 @@ export async function deleteUserContent(userId: string) {
       try {
         await deleteFromS3(e.s3Key);
       } catch (err) {
-        console.error(`Failed to delete export ${e.id}:`, err);
+        logger.error(`Failed to delete export ${e.id}:`, err);
       }
     }
   }
@@ -112,7 +113,7 @@ export async function deleteUserContent(userId: string) {
         })
         .where(eq(users.id, userId));
     } else {
-      console.warn(
+      logger.warn(
         `Partial deletion for user ${userId}. User record preserved.`,
       );
     }

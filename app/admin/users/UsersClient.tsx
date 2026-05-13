@@ -33,6 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/Table";
 import UserAvatar from "@/components/ui/UserAvatar";
+import { logger } from "@/lib/client-logger";
 import { formatBytes } from "@/lib/format";
 
 interface User {
@@ -145,7 +146,7 @@ export default function UsersClient({
       if (!result.success) throw new Error(result.error);
       window.location.href = "/";
     } catch (error) {
-      console.error("Error impersonating user:", error);
+      logger.error("Error impersonating user:", error);
       alert("Failed to impersonate user");
       setProcessing(false);
     }
@@ -175,7 +176,7 @@ export default function UsersClient({
         throw new Error(result.error);
       }
     } catch (error) {
-      console.error("Error toggling admin status:", error);
+      logger.error("Error toggling admin status:", error);
       alert("Failed to update admin status");
     } finally {
       setProcessing(false);
@@ -212,7 +213,7 @@ export default function UsersClient({
       setSelectedUser(null);
       setBanReason("");
     } catch (error) {
-      console.error("Error banning user:", error);
+      logger.error("Error banning user:", error);
       alert("Failed to ban user");
     } finally {
       setProcessing(false);
@@ -228,7 +229,7 @@ export default function UsersClient({
       setDeleteModalOpen(false);
       setSelectedUser(null);
     } catch (error) {
-      console.error("Error deleting user:", error);
+      logger.error("Error deleting user:", error);
       alert("Failed to delete user");
     } finally {
       setProcessing(false);
@@ -259,7 +260,7 @@ export default function UsersClient({
       setUnbanModalOpen(false);
       setSelectedUser(null);
     } catch (error) {
-      console.error("Error unbanning user:", error);
+      logger.error("Error unbanning user:", error);
       alert("Failed to unban user");
     } finally {
       setProcessing(false);
@@ -358,7 +359,9 @@ export default function UsersClient({
                 ({ user, photoCount, storageUsed, bannedByName }) => (
                   <TableRow key={user.id}>
                     <TableCell>
-                      <Link prefetch={false} href={`/users/${user.handle || user.id}`}
+                      <Link
+                        prefetch={false}
+                        href={`/users/${user.handle || user.id}`}
                         className="flex items-center gap-2 hover:opacity-80 transition-opacity"
                       >
                         <UserAvatar

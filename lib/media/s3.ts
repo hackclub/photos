@@ -15,6 +15,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
+import { logger } from "@/lib/logger";
 
 const normalizeS3Endpoint = (endpoint: string): string => {
   if (/^https?:\/\//i.test(endpoint)) {
@@ -105,8 +106,9 @@ export async function uploadToS3(
           }
         ).Code === "NotImplemented");
     if (tags && isNotImplemented) {
-      console.warn(
-        `S3 Provider does not support tagging. Retrying upload for ${key} without tags.`,
+      logger.warn(
+        { key },
+        "S3 provider does not support tagging; retrying upload without tags",
       );
       const { Tagging: _Tagging, ...paramsWithoutTags } = params;
       const retryCommand = new PutObjectCommand(paramsWithoutTags);

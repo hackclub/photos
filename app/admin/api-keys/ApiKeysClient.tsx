@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/Table";
 import UserAvatar from "@/components/ui/UserAvatar";
+import { logger } from "@/lib/client-logger";
 
 interface ApiKey {
   id: string;
@@ -71,7 +72,7 @@ export default function ApiKeyList({ initialKeys }: { initialKeys: ApiKey[] }) {
         alert("Failed to revoke API key");
       }
     } catch (error) {
-      console.error("Error revoking key:", error);
+      logger.error("Error revoking key:", error);
       alert("An error occurred");
     } finally {
       setIsRevoking(false);

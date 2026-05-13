@@ -3,6 +3,7 @@ import { count, desc, ilike, or, sql } from "drizzle-orm";
 import { getUserContext } from "@/lib/auth-api";
 import { db } from "@/lib/db";
 import { auditLogs } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 export async function searchAuditLogs(query: string, offset = 0, limit = 50) {
   try {
     const { user } = await getUserContext();
@@ -34,7 +35,7 @@ export async function searchAuditLogs(query: string, offset = 0, limit = 50) {
     });
     return { success: true, logs, totalCount: totalResult.count };
   } catch (error) {
-    console.error("Error searching audit logs:", error);
+    logger.error("Error searching audit logs:", error);
     return { success: false, error: "Failed to search logs" };
   }
 }

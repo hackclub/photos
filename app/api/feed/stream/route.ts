@@ -9,6 +9,7 @@ import {
   mediaLikes,
   users,
 } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { can, getUserContext } from "@/lib/policy";
 import { toPublicUser } from "@/lib/user-display";
 
@@ -22,7 +23,7 @@ export async function notifyFeedUpdate(activityData: Record<string, unknown>) {
         controller.enqueue(`data: ${data}\n\n`);
         _sent++;
       } catch (err) {
-        console.error("[SSE] Error sending to client (removing):", err);
+        logger.error("[SSE] Error sending to client (removing):", err);
         clients.delete(controller);
       }
     }
@@ -50,7 +51,7 @@ export async function notifyFeedUpdate(activityData: Record<string, unknown>) {
         _skipCount++;
       }
     } catch (err) {
-      console.error("[SSE] Error sending to client (removing):", err);
+      logger.error("[SSE] Error sending to client (removing):", err);
       clients.delete(controller);
     }
   }
@@ -160,7 +161,7 @@ export async function broadcastNewPhoto(mediaId: string) {
       await notifyFeedUpdate(activityData);
     }
   } catch (error) {
-    console.error("[SSE] Error broadcasting new photo:", error);
+    logger.error("[SSE] Error broadcasting new photo:", error);
   }
 }
 export async function broadcastPhotoDeleted(mediaId: string) {
@@ -170,7 +171,7 @@ export async function broadcastPhotoDeleted(mediaId: string) {
       mediaId: mediaId,
     });
   } catch (error) {
-    console.error("Error broadcasting photo deletion:", error);
+    logger.error("Error broadcasting photo deletion:", error);
   }
 }
 export async function broadcastNewComment(commentId: string) {
@@ -227,7 +228,7 @@ export async function broadcastNewComment(commentId: string) {
       await notifyFeedUpdate(activityData);
     }
   } catch (error) {
-    console.error("[SSE] Error broadcasting new comment:", error);
+    logger.error("[SSE] Error broadcasting new comment:", error);
   }
 }
 export async function broadcastNewLike(mediaId: string, userId: string) {
@@ -280,7 +281,7 @@ export async function broadcastNewLike(mediaId: string, userId: string) {
       await notifyFeedUpdate(activityData);
     }
   } catch (error) {
-    console.error("[SSE] Error broadcasting new like:", error);
+    logger.error("[SSE] Error broadcasting new like:", error);
   }
 }
 export async function broadcastBulkUpload(
@@ -319,6 +320,6 @@ export async function broadcastBulkUpload(
       },
     });
   } catch (error) {
-    console.error("Error broadcasting bulk upload:", error);
+    logger.error("Error broadcasting bulk upload:", error);
   }
 }

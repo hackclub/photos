@@ -6,6 +6,7 @@ import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { apiKeys } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { can, getUserContext } from "@/lib/policy";
 export async function createApiKey(
   name: string,
@@ -39,7 +40,7 @@ export async function createApiKey(
     revalidatePath("/developer");
     return { success: true, key };
   } catch (error) {
-    console.error("Error creating API key:", error);
+    logger.error("Error creating API key:", error);
     return { success: false, error: "Failed to create API key" };
   }
 }
@@ -67,7 +68,7 @@ export async function listApiKeys() {
     });
     return { success: true, keys };
   } catch (error) {
-    console.error("Error listing API keys:", error);
+    logger.error("Error listing API keys:", error);
     return { success: false, error: "Failed to list API keys" };
   }
 }
@@ -92,7 +93,7 @@ export async function revokeApiKey(id: string) {
     revalidatePath("/developer");
     return { success: true };
   } catch (error) {
-    console.error("Error revoking API key:", error);
+    logger.error("Error revoking API key:", error);
     return { success: false, error: "Failed to revoke API key" };
   }
 }

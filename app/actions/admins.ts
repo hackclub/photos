@@ -13,6 +13,7 @@ import {
   seriesAdmins,
   users,
 } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { can, getUserContext } from "@/lib/policy";
 import { isValidSlackId, normalizeSlackId } from "@/lib/slack-id";
 import { toPublicUser } from "@/lib/user-display";
@@ -65,7 +66,7 @@ export async function getEventAdmins(eventId: string) {
       pendingAdmins,
     };
   } catch (error) {
-    console.error("Error fetching event admins:", error);
+    logger.error("Error fetching event admins:", error);
     return { error: "Failed to fetch admins" };
   }
 }
@@ -118,7 +119,7 @@ export async function getSeriesAdmins(seriesId: string) {
       pendingAdmins,
     };
   } catch (error) {
-    console.error("Error fetching series admins:", error);
+    logger.error("Error fetching series admins:", error);
     return { error: "Failed to fetch admins" };
   }
 }
@@ -182,7 +183,7 @@ export async function addAdmin(
     );
     return { success: true };
   } catch (error) {
-    console.error(`Error adding ${entityType} admin:`, error);
+    logger.error(`Error adding ${entityType} admin:`, error);
     return { error: "Failed to add admin" };
   }
 }
@@ -235,7 +236,7 @@ export async function removeAdmin(
     );
     return { success: true };
   } catch (error) {
-    console.error(`Error removing ${entityType} admin:`, error);
+    logger.error(`Error removing ${entityType} admin:`, error);
     return { error: "Failed to remove admin" };
   }
 }
@@ -323,7 +324,7 @@ export async function addPendingAdminBySlackId(
     );
     return { success: true };
   } catch (error) {
-    console.error(`Error adding pending ${entityType} admin:`, error);
+    logger.error(`Error adding pending ${entityType} admin:`, error);
     return { success: false, error: "Failed to add pending admin" };
   }
 }
@@ -373,7 +374,7 @@ export async function removePendingAdminBySlackId(
     );
     return { success: true };
   } catch (error) {
-    console.error(`Error removing pending ${entityType} admin:`, error);
+    logger.error(`Error removing pending ${entityType} admin:`, error);
     return { success: false, error: "Failed to remove pending admin" };
   }
 }
@@ -459,7 +460,7 @@ export async function adminUpdateUser(
     }
     return { success: true };
   } catch (error) {
-    console.error("Error updating user:", error);
+    logger.error("Error updating user:", error);
     return { success: false, error: "Failed to update user" };
   }
 }
@@ -499,7 +500,7 @@ export async function adminDeleteUser(
     revalidatePath("/admin/users");
     return { success: true };
   } catch (error) {
-    console.error("Error deleting user:", error);
+    logger.error("Error deleting user:", error);
     return { success: false, error: "Failed to delete user" };
   }
 }
@@ -545,7 +546,7 @@ export async function toggleGlobalAdmin(userId: string) {
     revalidatePath("/admin/users");
     return { success: true, isGlobalAdmin: newStatus };
   } catch (error) {
-    console.error("Error toggling admin status:", error);
+    logger.error("Error toggling admin status:", error);
     return { success: false, error: "Failed to update admin status" };
   }
 }
@@ -578,7 +579,7 @@ export async function impersonateUser(userId: string) {
     await auditLog(currentUser.id, "impersonate", "user", userId);
     return { success: true };
   } catch (error) {
-    console.error("Error impersonating user:", error);
+    logger.error("Error impersonating user:", error);
     return { success: false, error: "Failed to impersonate user" };
   }
 }

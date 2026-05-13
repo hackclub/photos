@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { HiArrowPath, HiMagnifyingGlass, HiMapPin } from "react-icons/hi2";
+import { logger } from "@/lib/client-logger";
 import { NOMINATIM_API_URL } from "@/lib/constants";
 
 interface Location {
@@ -109,7 +110,7 @@ export default function LocationSearch({
       setResults(locations);
       setShowResults(true);
     } catch (error) {
-      console.error("Error searching location:", error);
+      logger.error("Error searching location:", error);
       setResults([]);
     } finally {
       setLoading(false);

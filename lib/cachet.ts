@@ -1,4 +1,5 @@
 import { CACHET_API_URL } from "@/lib/constants";
+import { logger } from "@/lib/logger";
 export interface CachetUser {
   id: string;
   userId: string;
@@ -17,7 +18,7 @@ export async function getCachetUser(
       if (response.status === 404) {
         return null;
       }
-      console.error(
+      logger.error(
         `Cachet API error: ${response.status} ${response.statusText}`,
       );
       return null;
@@ -25,7 +26,7 @@ export async function getCachetUser(
     const data = await response.json();
     return data as CachetUser;
   } catch (error) {
-    console.error("Error fetching Cachet user:", error);
+    logger.error("Error fetching Cachet user:", error);
     return null;
   }
 }

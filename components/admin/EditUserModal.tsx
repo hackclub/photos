@@ -15,6 +15,7 @@ import {
   SiX,
 } from "react-icons/si";
 import { adminUpdateUser } from "@/app/actions/admins";
+import { logger } from "@/lib/client-logger";
 
 interface User {
   id: string;
@@ -117,7 +118,7 @@ export default function EditUserModal({
         setError(result.error || "Failed to update user");
       }
     } catch (err) {
-      console.error("Error updating user:", err);
+      logger.error("Error updating user:", err);
       setError("An unexpected error occurred");
     } finally {
       setSaving(false);

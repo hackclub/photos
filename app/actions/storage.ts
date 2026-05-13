@@ -2,6 +2,7 @@
 import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { APP_URL } from "@/lib/constants";
+import { logger, recordException, serializeError } from "@/lib/logger";
 import { getDetailedStorageStats } from "@/lib/media/s3";
 import { can, getUserContext } from "@/lib/policy";
 import { getDatabaseStorageStats } from "@/lib/storage";
@@ -72,7 +73,11 @@ export async function cleanupGhostFiles(cursor?: string) {
     });
     return { success: true, ...result };
   } catch (error) {
-    console.error("Manual ghost file cleanup failed:", error);
+    await recordException(error);
+    logger.error(
+      { userId: user.id, cursor, error: serializeError(error) },
+      "manual ghost file cleanup failed",
+    );
     return {
       success: false,
       error: error instanceof Error ? error.message : "Cleanup failed",
@@ -105,7 +110,11 @@ export async function repairThumbnails(cursor?: string) {
     await auditLog(user.id, "update", "storage", "thumbnails", { result });
     return { success: true, ...result };
   } catch (error) {
-    console.error("Manual thumbnail repair failed:", error);
+    await recordException(error);
+    logger.error(
+      { userId: user.id, cursor, error: serializeError(error) },
+      "manual thumbnail repair failed",
+    );
     return {
       success: false,
       error: error instanceof Error ? error.message : "Thumbnail repair failed",

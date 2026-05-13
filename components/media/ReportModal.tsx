@@ -3,6 +3,7 @@ import { useState } from "react";
 import { HiExclamationTriangle, HiXMark } from "react-icons/hi2";
 import { createReport } from "@/app/actions/reports";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { logger } from "@/lib/client-logger";
 
 interface ReportModalProps {
   mediaId: string;
@@ -38,7 +39,7 @@ export default function ReportModal({
       }
     } catch (err) {
       setError("An unexpected error occurred");
-      console.error(err);
+      logger.error(err);
     } finally {
       setSubmitting(false);
     }

@@ -9,6 +9,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
+import { logger, recordException, serializeError } from "@/lib/logger";
 import { s3Client, uploadToS3 } from "@/lib/media/s3";
 import { generateAndUploadThumbnail } from "@/lib/media/thumbnail";
 
@@ -173,6 +174,7 @@ async function fallbackVideoThumbnail(
 }
 
 export async function GET(request: NextRequest) {
+  const startedAt = Date.now();
   const authHeader = request.headers.get("authorization");
   if (
     !process.env.CRON_SECRET ||
@@ -181,6 +183,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const cursor = request.nextUrl.searchParams.get("cursor") || undefined;
+  logger.info({ cursor }, "thumbnail repair started");
   const rows = await db.query.media.findMany({
     where: cursor ? gt(media.id, cursor) : undefined,
     orderBy: (m, { asc }) => [asc(m.id)],
@@ -220,7 +223,11 @@ export async function GET(request: NextRequest) {
         .where(eq(media.id, item.id));
       return { repaired: 1, failed: 0 };
     } catch (error) {
-      console.error("Thumbnail repair failed:", { mediaId: item.id, error });
+      await recordException(error);
+      logger.error(
+        { mediaId: item.id, error: serializeError(error) },
+        "thumbnail repair failed",
+      );
       return { repaired: 0, failed: 1 };
     }
   });
@@ -228,6 +235,17 @@ export async function GET(request: NextRequest) {
   const failed = results.reduce((sum, result) => sum + result.failed, 0);
   const nextCursor =
     rows.length === BATCH_SIZE ? rows[rows.length - 1]?.id : undefined;
+  logger.info(
+    {
+      checked: rows.length,
+      repaired,
+      failed,
+      nextCursor,
+      completed: !nextCursor,
+      durationMs: Date.now() - startedAt,
+    },
+    "thumbnail repair finished",
+  );
   return NextResponse.json({
     checked: rows.length,
     repaired,

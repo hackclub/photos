@@ -19,6 +19,7 @@ import {
 import SearchGallery, { type MediaItem } from "@/app/search/SearchGallery";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import UserAvatar from "@/components/ui/UserAvatar";
+import { logger } from "@/lib/client-logger";
 
 interface Props {
   initialQuery: string;
@@ -141,7 +142,7 @@ export default function SearchClient({
           setResults(typedResults as any);
         }
       } catch (error) {
-        console.error("Search failed:", error);
+        logger.error("Search failed:", error);
       } finally {
         setLoading(false);
       }

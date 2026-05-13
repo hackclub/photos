@@ -7,6 +7,7 @@ import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { blurRequests, media } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { getSignedDownloadUrl, uploadToS3 } from "@/lib/media/s3";
 import { can, getUserContext } from "@/lib/policy";
 
@@ -51,8 +52,8 @@ async function renderBlurredPhoto(
         const boxWidth = right - left;
         const boxHeight = bottom - top;
         if (left + boxWidth > width || top + boxHeight > height) return null;
-      const pixelWidth = Math.max(1, Math.floor(boxWidth / 64));
-      const pixelHeight = Math.max(1, Math.floor(boxHeight / 64));
+        const pixelWidth = Math.max(1, Math.floor(boxWidth / 64));
+        const pixelHeight = Math.max(1, Math.floor(boxHeight / 64));
         const inputBuffer = await sharp(base)
           .extract({
             left,
@@ -62,7 +63,7 @@ async function renderBlurredPhoto(
           })
           .resize(pixelWidth, pixelHeight, { kernel: "nearest" })
           .resize(boxWidth, boxHeight, { kernel: "nearest" })
-        .blur(Math.max(40, intensity * 6))
+          .blur(Math.max(40, intensity * 6))
           .toBuffer();
         return { input: inputBuffer, left, top };
       }),
@@ -180,7 +181,7 @@ export async function submitBlurRequests(submissions: BlurSubmission[]) {
     revalidatePath("/users/[username]", "page");
     return { success: true };
   } catch (error) {
-    console.error("Error submitting blur requests:", error);
+    logger.error("Error submitting blur requests:", error);
     return { success: false, error: "Failed to submit blur requests" };
   }
 }

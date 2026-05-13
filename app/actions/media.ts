@@ -6,6 +6,7 @@ import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { eventParticipants, events, media, series } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { extractExifData } from "@/lib/media/exif";
 import { deleteFromS3, getMediaProxyUrl, uploadToS3 } from "@/lib/media/s3";
 import {
@@ -72,7 +73,7 @@ export async function uploadBanner(
     );
     return { success: true, bannerS3Key: key };
   } catch (error) {
-    console.error(`Error uploading ${entityType} banner:`, error);
+    logger.error(`Error uploading ${entityType} banner:`, error);
     return { success: false, error: "Failed to upload banner" };
   }
 }
@@ -102,7 +103,7 @@ export async function deleteBanner(
       try {
         await deleteMediaAndThumbnail(entity.bannerS3Key, null);
       } catch (error) {
-        console.error("Failed to delete banner from S3:", error);
+        logger.error("Failed to delete banner from S3:", error);
       }
     }
     await db
@@ -120,7 +121,7 @@ export async function deleteBanner(
     );
     return { success: true };
   } catch (error) {
-    console.error(`Error deleting ${entityType} banner:`, error);
+    logger.error(`Error deleting ${entityType} banner:`, error);
     return { success: false, error: "Failed to delete banner" };
   }
 }
@@ -219,13 +220,13 @@ export async function getMediaUrls(
             urls[item.thumbnailS3Key] = thumbUrl;
           }
         } catch (e) {
-          console.error(`Failed to sign URL for media ${item.id}`, e);
+          logger.error(`Failed to sign URL for media ${item.id}`, e);
         }
       }),
     );
     return { success: true, urls };
   } catch (error) {
-    console.error("Error generating media URLs:", error);
+    logger.error("Error generating media URLs:", error);
     return { success: false, error: "Failed to generate URLs" };
   }
 }
@@ -266,7 +267,7 @@ export async function updateMediaCaption(mediaId: string, caption: string) {
     revalidatePath(`/events`);
     return { success: true };
   } catch (error) {
-    console.error("Error updating caption:", error);
+    logger.error("Error updating caption:", error);
     return { success: false, error: "Failed to update caption" };
   }
 }
@@ -361,7 +362,7 @@ export async function uploadMedia(formData: FormData) {
           }
         }
       } catch (e) {
-        console.error("Image processing error:", e);
+        logger.error("Image processing error:", e);
       }
     } else if (file.type.startsWith("video/")) {
       try {
@@ -382,7 +383,7 @@ export async function uploadMedia(formData: FormData) {
           tags,
         );
       } catch (e) {
-        console.error("Video processing error:", e);
+        logger.error("Video processing error:", e);
       }
     }
     let inserted: typeof media.$inferSelect;
@@ -413,9 +414,11 @@ export async function uploadMedia(formData: FormData) {
     }
     try {
       const { broadcastNewPhoto } = await import("@/app/api/feed/stream/route");
-      broadcastNewPhoto(inserted.id).catch(console.error);
+      broadcastNewPhoto(inserted.id).catch((error) => {
+        logger.error("Failed to broadcast new photo:", error);
+      });
     } catch (error) {
-      console.error("Failed to broadcast new photo:", error);
+      logger.error("Failed to broadcast new photo:", error);
     }
     await auditLog(user.id, "upload", "media", inserted.id, {
       eventId,
@@ -424,7 +427,7 @@ export async function uploadMedia(formData: FormData) {
     revalidatePath(`/events/${eventId}`);
     return { success: true, media: inserted };
   } catch (error) {
-    console.error("Upload error:", error);
+    logger.error("Upload error:", error);
     return { success: false, error: "Upload failed" };
   }
 }
@@ -457,7 +460,7 @@ export async function getDownloadUrl(mediaId: string) {
     const url = `/media/${mediaId}?download=true`;
     return { success: true, url };
   } catch (error) {
-    console.error("Error getting download URL:", error);
+    logger.error("Error getting download URL:", error);
     return { success: false, error: "Failed to get download URL" };
   }
 }
@@ -497,13 +500,13 @@ export async function deleteMedia(mediaId: string) {
           and(eq(reports.mediaId, mediaId), eq(reports.status, "pending")),
         );
     } catch (e) {
-      console.error("Failed to auto-resolve reports for deleted media:", e);
+      logger.error("Failed to auto-resolve reports for deleted media:", e);
     }
     revalidatePath(`/events/${mediaItem.eventId}`);
     revalidatePath("/users/[username]", "page");
     return { success: true };
   } catch (error) {
-    console.error("Error deleting media:", error);
+    logger.error("Error deleting media:", error);
     return { success: false, error: "Failed to delete media" };
   }
 }

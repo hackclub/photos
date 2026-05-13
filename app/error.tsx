@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { HiArrowPath, HiExclamationTriangle, HiHome } from "react-icons/hi2";
+import { logger } from "@/lib/client-logger";
 export default function GlobalError({
   error,
   reset,
@@ -12,7 +13,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    logger.error(error);
   }, [error]);
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-zinc-950">
@@ -49,7 +50,9 @@ export default function GlobalError({
             <HiArrowPath className="w-5 h-5" />
             <span>Try again</span>
           </button>
-          <Link prefetch={false} href="/"
+          <Link
+            prefetch={false}
+            href="/"
             className="inline-flex items-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-medium rounded-lg transition-colors"
           >
             <HiHome className="w-5 h-5" />

@@ -37,6 +37,7 @@ import FormInput from "@/components/ui/FormInput";
 import FormTextarea from "@/components/ui/FormTextarea";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import UserSearch from "@/components/ui/UserSearch";
+import { logger } from "@/lib/client-logger";
 import type { eventAdmins, events, series } from "@/lib/db/schema";
 import type { PublicUser } from "@/lib/user-display";
 
@@ -109,7 +110,7 @@ export default function EditEventClient({
         throw new Error(result.error || "Failed to update event");
       }
     } catch (error: unknown) {
-      console.error("Error updating event:", error);
+      logger.error("Error updating event:", error);
       const message =
         error instanceof Error ? error.message : "Failed to update event";
       alert(message);
@@ -124,7 +125,7 @@ export default function EditEventClient({
         setBannerS3Key(eventResult.event.bannerS3Key || null);
       }
     } catch (error) {
-      console.error("Error refetching event:", error);
+      logger.error("Error refetching event:", error);
     }
   };
   const handleChange = (
@@ -206,7 +207,7 @@ export default function EditEventClient({
         throw new Error(result.error || "Failed to remove admin");
       setAdmins(admins.filter((a) => a.userId !== adminToRemove));
     } catch (error) {
-      console.error("Error removing admin:", error);
+      logger.error("Error removing admin:", error);
       alert("Failed to remove admin");
     } finally {
       setAdminToRemove(null);
@@ -236,7 +237,7 @@ export default function EditEventClient({
       }
       setInviteCode(result.inviteCode);
     } catch (error) {
-      console.error("Error regenerating invite code:", error);
+      logger.error("Error regenerating invite code:", error);
       alert("Failed to regenerate invite code");
     } finally {
       setRegeneratingInvite(false);
@@ -279,7 +280,9 @@ export default function EditEventClient({
               <h1 className="text-3xl font-bold text-white mb-2">Edit Event</h1>
               <p className="text-zinc-400">Update event details and settings</p>
             </div>
-            <Link prefetch={false} href="/admin/events"
+            <Link
+              prefetch={false}
+              href="/admin/events"
               className="flex items-center gap-2 px-4 py-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
             >
               <HiXMark className="w-5 h-5" />
@@ -827,7 +830,9 @@ export default function EditEventClient({
           )}
 
           <div className="flex items-center justify-end gap-3">
-            <Link prefetch={false} href="/admin/events"
+            <Link
+              prefetch={false}
+              href="/admin/events"
               className="px-6 py-3 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors font-medium"
             >
               Cancel

@@ -4,6 +4,7 @@ import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { media, mediaTags, tags } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { can, getUserContext } from "@/lib/policy";
 export async function addTag(mediaId: string, tagName: string) {
   const session = await getSession();
@@ -53,7 +54,7 @@ export async function addTag(mediaId: string, tagName: string) {
     });
     return { success: true, tag: fullTag };
   } catch (error) {
-    console.error("Failed to add tag:", error);
+    logger.error("Failed to add tag:", error);
     return { success: false, error: "Failed to add tag" };
   }
 }
@@ -81,7 +82,7 @@ export async function removeTag(mediaId: string, tagId: string) {
     await auditLog(user.id, "delete", "tag_link", tagId, { mediaId });
     return { success: true };
   } catch (error) {
-    console.error("Failed to remove tag:", error);
+    logger.error("Failed to remove tag:", error);
     return { success: false, error: "Failed to remove tag" };
   }
 }
@@ -95,7 +96,7 @@ export async function searchByTag(query: string) {
     });
     return { success: true, tags: results };
   } catch (error) {
-    console.error("Failed to search tags:", error);
+    logger.error("Failed to search tags:", error);
     return { success: false, error: "Failed to search tags" };
   }
 }
@@ -108,7 +109,7 @@ export async function getTagByName(name: string) {
     if (!tag) return { success: false, error: "Tag not found" };
     return { success: true, tag };
   } catch (error) {
-    console.error("Failed to get tag by name:", error);
+    logger.error("Failed to get tag by name:", error);
     return { success: false, error: "Failed to get tag" };
   }
 }
@@ -122,7 +123,7 @@ export async function getMediaTags(mediaId: string) {
     });
     return { success: true, tags: results.map((r) => r.tag) };
   } catch (error) {
-    console.error("Failed to get media tags:", error);
+    logger.error("Failed to get media tags:", error);
     return { success: false, error: "Failed to get media tags" };
   }
 }
@@ -183,7 +184,7 @@ export async function getAllTags(
       },
     };
   } catch (error) {
-    console.error("Failed to get all tags:", error);
+    logger.error("Failed to get all tags:", error);
     return { success: false, error: "Failed to get tags" };
   }
 }
@@ -214,7 +215,7 @@ export async function updateTag(
     await auditLog(user.id, "update", "tag", tagId, updateData);
     return { success: true };
   } catch (error) {
-    console.error("Failed to update tag:", error);
+    logger.error("Failed to update tag:", error);
     return { success: false, error: "Failed to update tag" };
   }
 }
@@ -229,7 +230,7 @@ export async function deleteTag(tagId: string) {
     await auditLog(user.id, "delete", "tag", tagId, {});
     return { success: true };
   } catch (error) {
-    console.error("Failed to delete tag:", error);
+    logger.error("Failed to delete tag:", error);
     return { success: false, error: "Failed to delete tag" };
   }
 }

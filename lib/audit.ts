@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { type auditActionEnum, auditLogs } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 export async function auditLog(
   userId: string,
   action: (typeof auditActionEnum.enumValues)[number],
@@ -23,7 +24,7 @@ export async function auditLog(
       userAgent,
     });
   } catch (error) {
-    console.error("Failed to create audit log:", error);
+    logger.error("Failed to create audit log:", error);
   }
 }
 function anonymizeIp(ip: string): string {

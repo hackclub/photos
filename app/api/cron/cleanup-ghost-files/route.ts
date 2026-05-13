@@ -7,6 +7,7 @@ import { inArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { dataExports, events, media, series } from "@/lib/db/schema";
+import { logger, recordException, serializeError } from "@/lib/logger";
 import { deleteFromS3Batch, s3Client } from "@/lib/media/s3";
 export const maxDuration = 300;
 export async function GET(req: NextRequest) {
@@ -19,6 +20,7 @@ export async function GET(req: NextRequest) {
   const cursor = searchParams.get("cursor") || undefined;
 
   try {
+    logger.info({ cursor, force }, "ghost file cleanup started");
     let continuationToken: string | undefined = cursor;
     let totalChecked = 0;
     let totalDeleted = 0;
@@ -32,7 +34,10 @@ export async function GET(req: NextRequest) {
 
     do {
       if (Date.now() - startTime > TIME_LIMIT) {
-        console.log("Time limit reached, stopping cleanup early");
+        logger.info(
+          { checked: totalChecked, deleted: totalDeleted },
+          "ghost file cleanup time limit reached",
+        );
         break;
       }
 
@@ -95,6 +100,10 @@ export async function GET(req: NextRequest) {
         if (ghosts.length > 0) {
           await deleteFromS3Batch(ghosts);
           totalDeleted += ghosts.length;
+          logger.info(
+            { deleted: ghosts.length, checked: contents.length },
+            "ghost files deleted",
+          );
           if (deletedKeys.length < 100) {
             deletedKeys.push(...ghosts.slice(0, 100 - deletedKeys.length));
           }
@@ -103,6 +112,15 @@ export async function GET(req: NextRequest) {
       totalChecked += contents.length;
       continuationToken = response.NextContinuationToken;
     } while (continuationToken);
+    logger.info(
+      {
+        checked: totalChecked,
+        deleted: totalDeleted,
+        completed: !continuationToken,
+        nextCursor: continuationToken,
+      },
+      "ghost file cleanup finished",
+    );
     return NextResponse.json({
       success: true,
       checked: totalChecked,
@@ -112,7 +130,11 @@ export async function GET(req: NextRequest) {
       nextCursor: continuationToken,
     });
   } catch (error) {
-    console.error("Ghost file cleanup failed:", error);
+    await recordException(error);
+    logger.error(
+      { cursor, force, error: serializeError(error) },
+      "ghost file cleanup failed",
+    );
     return NextResponse.json(
       { success: false, error: String(error) },
       { status: 500 },

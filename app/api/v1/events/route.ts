@@ -4,6 +4,7 @@ import { unauthorizedResponse, validateApiKey } from "@/lib/auth-api";
 import { APP_URL } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { events } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 export async function GET(req: NextRequest) {
   const auth = await validateApiKey();
   if (!auth) {
@@ -51,7 +52,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Error fetching events:", error);
+    logger.error("Error fetching events:", error);
     return Response.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

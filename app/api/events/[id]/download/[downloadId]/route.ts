@@ -3,6 +3,7 @@ import { stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type NextRequest, NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(
@@ -37,11 +38,15 @@ export async function GET(
         });
         fileStream.on("end", () => {
           controller.close();
-          unlink(tempPath).catch(console.error);
+          unlink(tempPath).catch((error) => {
+            logger.error("Failed to remove downloaded zip:", error);
+          });
         });
         fileStream.on("error", (error) => {
           controller.error(error);
-          unlink(tempPath).catch(console.error);
+          unlink(tempPath).catch((unlinkError) => {
+            logger.error("Failed to remove errored download zip:", unlinkError);
+          });
         });
       },
     });
@@ -52,7 +57,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error("Download error:", error);
+    logger.error("Download error:", error);
     return NextResponse.json(
       { error: "Failed to download file" },
       { status: 500 },

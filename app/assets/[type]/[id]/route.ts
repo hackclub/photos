@@ -8,6 +8,7 @@ import { verifySessionToken } from "@/lib/auth";
 import { getUserContext } from "@/lib/auth-api";
 import { db } from "@/lib/db";
 import { events, series, users } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { s3Client } from "@/lib/media/s3";
 export const dynamic = "force-dynamic";
 
@@ -109,7 +110,7 @@ export async function GET(
     try {
       s3Response = await s3Client.send(command);
     } catch (error) {
-      console.error(`Failed to fetch asset from S3:`, error);
+      logger.error(`Failed to fetch asset from S3:`, error);
       return new NextResponse("Failed to fetch asset", { status: 502 });
     }
     const headers = new Headers();
@@ -129,7 +130,7 @@ export async function GET(
       headers,
     });
   } catch (error) {
-    console.error("Error serving asset:", error);
+    logger.error("Error serving asset:", error);
     return new NextResponse("Internal Server Error", { status: 500 });
   }
 }

@@ -7,6 +7,7 @@ import { HiArrowLeft } from "react-icons/hi2";
 import { getLatestMedia } from "@/app/actions/signage";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useHeicUrl } from "@/hooks/useHeicUrl";
+import { logger } from "@/lib/client-logger";
 
 type MediaItem = {
   id: string;
@@ -44,7 +45,7 @@ export default function LiveFeedPage() {
           }
         }
       } catch (error) {
-        console.error("Error fetching latest media:", error);
+        logger.error("Error fetching latest media:", error);
       }
     };
     fetchLatest();
@@ -56,7 +57,9 @@ export default function LiveFeedPage() {
       <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-8">
         <div className="max-w-md w-full space-y-8 text-center">
           <div className="flex items-center justify-between mb-8">
-            <Link prefetch={false} href="/sign"
+            <Link
+              prefetch={false}
+              href="/sign"
               className="text-zinc-400 hover:text-white transition-colors"
             >
               <HiArrowLeft className="w-6 h-6" />

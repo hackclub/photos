@@ -1,6 +1,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getBulkMediaUrls } from "@/app/actions/bulk";
+import { logger } from "@/lib/logger";
 import type { Event, MediaItem } from "@/types/media";
 export function useMediaGalleryData(
   media: MediaItem[],
@@ -125,7 +126,7 @@ export function useMediaGalleryData(
         setPresignedUrls((prev) => ({ ...prev, ...newUrls }));
       }
     } catch (error) {
-      console.error("Failed to load thumbnails:", error);
+      logger.error("Failed to load thumbnails:", error);
     }
   }, []);
 
@@ -184,7 +185,7 @@ export function useMediaGalleryData(
         setFullSizeUrl(url);
       } catch (error) {
         if (requestSeq !== fullSizeRequestSeqRef.current) return;
-        console.error("Failed to load full-size image:", error);
+        logger.error("Failed to load full-size image:", error);
       }
     },
     [selectedMedia],
@@ -202,7 +203,7 @@ export function useMediaGalleryData(
         fullSizeUrlCacheRef.current[id] = url;
       });
     } catch (error) {
-      console.error("Failed to prefetch full-size images:", error);
+      logger.error("Failed to prefetch full-size images:", error);
     }
   }, []);
 

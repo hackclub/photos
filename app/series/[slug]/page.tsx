@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { APP_URL } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { media, mediaLikes, series } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 import { createOgMetadata } from "@/lib/metadata";
 import { can, getUserContext } from "@/lib/policy";
@@ -95,7 +96,8 @@ export default async function SeriesDetailPage({
   const canEdit = await can(ctx, "manage", "series", seriesData.id);
   const seriesEvents = seriesData.events.map((event) => ({
     ...event,
-    isAdmin: canEdit || !!ctx?.eventAdmins.some((admin) => admin.eventId === event.id),
+    isAdmin:
+      canEdit || !!ctx?.eventAdmins.some((admin) => admin.eventId === event.id),
   }));
   const eventIds = seriesData.events.map((e) => e.id);
   const allMedia =
@@ -149,7 +151,7 @@ export default async function SeriesDetailPage({
           );
           eventMediaUrls.set(event.id, url);
         } catch (error) {
-          console.error(
+          logger.error(
             `Error fetching URL for event ${event.id} media:`,
             error,
           );

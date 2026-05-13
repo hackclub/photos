@@ -5,6 +5,7 @@ import { HiTag } from "react-icons/hi2";
 import { getAllTags } from "@/app/actions/tags";
 import { APP_URL } from "@/lib/constants";
 import type { tags as tagsSchema } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { getMediaProxyUrl } from "@/lib/media/s3";
 import { createOgMetadata } from "@/lib/metadata";
 
@@ -41,7 +42,7 @@ export default async function TagsPage() {
       try {
         previewUrl = getMediaProxyUrl(tag.previewMediaId, "thumbnail");
       } catch (e) {
-        console.error("Failed to get preview URL", e);
+        logger.error("Failed to get preview URL", e);
       }
     }
     return { ...tag, previewUrl };
@@ -76,7 +77,9 @@ export default async function TagsPage() {
                 colorStyle.split(" ").find((c) => c.startsWith("text-")) ||
                 "text-blue-400";
               return (
-                <Link prefetch={false} key={tag.id}
+                <Link
+                  prefetch={false}
+                  key={tag.id}
                   href={`/search?tag=${tag.id}`}
                   className="group relative aspect-4/3 overflow-hidden rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-zinc-600 transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-black/50"
                 >

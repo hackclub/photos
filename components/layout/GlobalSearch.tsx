@@ -12,6 +12,7 @@ import {
 import { globalSearch, type SearchResults } from "@/app/actions/search";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import UserAvatar from "@/components/ui/UserAvatar";
+import { logger } from "@/lib/client-logger";
 export default function GlobalSearch() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResults | null>(null);
@@ -45,7 +46,7 @@ export default function GlobalSearch() {
           setIsOpen(true);
         }
       } catch (error) {
-        console.error("Search error:", error);
+        logger.error("Search error:", error);
       } finally {
         setLoading(false);
       }

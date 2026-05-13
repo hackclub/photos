@@ -9,6 +9,7 @@ import {
 } from "react-icons/hi2";
 import { getUserReports } from "@/app/actions/reports";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { logger } from "@/lib/client-logger";
 
 interface Report {
   id: string;
@@ -32,7 +33,7 @@ export default function UserReports() {
           setReports(result.reports as any);
         }
       } catch (error) {
-        console.error("Error fetching reports:", error);
+        logger.error("Error fetching reports:", error);
       } finally {
         setLoading(false);
       }

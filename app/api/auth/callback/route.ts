@@ -11,19 +11,20 @@ import {
 } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get("code");
   const state = searchParams.get("state") || "/";
   const error = searchParams.get("error");
   if (error) {
-    console.error("OAuth error:", error);
+    logger.error("OAuth error:", error);
     return NextResponse.redirect(
       new URL(`/auth/error?error=${error}`, process.env.NEXTAUTH_URL),
     );
   }
   if (!code) {
-    console.error("No code provided");
+    logger.error("No code provided");
     return NextResponse.redirect(
       new URL("/auth/error?error=no_code", process.env.NEXTAUTH_URL),
     );
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
       );
     }
   } catch (error) {
-    console.error("Authentication error:", error);
+    logger.error("Authentication error:", error);
     return NextResponse.redirect(
       new URL(
         `/auth/error?error=auth_failed&message=${encodeURIComponent(error instanceof Error ? error.message : "Unknown error")}`,

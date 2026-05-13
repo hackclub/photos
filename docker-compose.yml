@@ -13,3 +13,4 @@ services:
       - .env
     environment:
       NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}

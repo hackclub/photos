@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { events } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { can, getUserContext } from "@/lib/policy";
 export async function GET(
   req: NextRequest,
@@ -32,7 +33,7 @@ export async function GET(
     }
     return NextResponse.json({ event });
   } catch (error) {
-    console.error("Get event error:", error);
+    logger.error("Get event error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

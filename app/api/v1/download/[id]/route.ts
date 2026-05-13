@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { getClientIpFromHeaders } from "@/lib/auth-api";
 import { db } from "@/lib/db";
 import { events, media, series } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { rateLimit } from "@/lib/rate-limit";
 export async function GET(
   req: NextRequest,
@@ -98,7 +99,7 @@ export async function GET(
     if (error instanceof Error && error.message === "NEXT_REDIRECT") {
       throw error;
     }
-    console.error("Error in download redirect:", error);
+    logger.error("Error in download redirect:", error);
     return new Response("Internal Server Error", { status: 500 });
   }
 }

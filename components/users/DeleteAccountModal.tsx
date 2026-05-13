@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { HiDocumentText, HiTrash, HiXMark } from "react-icons/hi2";
 import { getBulkMediaUrls } from "@/app/actions/bulk";
 import UserAvatar from "@/components/ui/UserAvatar";
+import { logger } from "@/lib/client-logger";
 
 interface User {
   name: string;
@@ -62,7 +63,7 @@ export default function DeleteAccountModal({
               }
             }
           } catch (e) {
-            console.error("Failed to fetch previews:", e);
+            logger.error("Failed to fetch previews:", e);
           }
         }
       };

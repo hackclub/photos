@@ -13,6 +13,7 @@ import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { dataExports, users } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { deleteFromS3, uploadToS3 } from "@/lib/media/s3";
 import { getUserContext } from "@/lib/policy";
 export async function requestDataExport() {
@@ -52,7 +53,7 @@ export async function requestDataExport() {
         try {
           await deleteFromS3(exp.s3Key);
         } catch (e) {
-          console.error(`Failed to delete old export S3 key ${exp.s3Key}:`, e);
+          logger.error(`Failed to delete old export S3 key ${exp.s3Key}:`, e);
         }
       }
       await db.delete(dataExports).where(eq(dataExports.id, exp.id));
@@ -73,7 +74,7 @@ export async function requestDataExport() {
     revalidatePath("/settings");
     return { success: true };
   } catch (error) {
-    console.error("Error requesting data export:", error);
+    logger.error("Error requesting data export:", error);
     return { success: false, error: "Failed to request data export" };
   }
 }
@@ -170,7 +171,7 @@ async function processDataExport(exportId: string, userId: string) {
           });
         }
       } catch (err) {
-        console.error(`Failed to add media ${item.id} to export:`, err);
+        logger.error(`Failed to add media ${item.id} to export:`, err);
       }
     }
     zipFile.end();
@@ -191,17 +192,19 @@ async function processDataExport(exportId: string, userId: string) {
         })
         .where(eq(dataExports.id, exportId));
     } catch (dbError) {
-      console.error("Failed to update export record after upload:", dbError);
+      logger.error("Failed to update export record after upload:", dbError);
       try {
         await deleteFromS3(s3Key);
       } catch (s3Error) {
-        console.error("Failed to cleanup orphaned export file:", s3Error);
+        logger.error("Failed to cleanup orphaned export file:", s3Error);
       }
       throw dbError;
     }
-    await unlink(tempPath).catch(console.error);
+    await unlink(tempPath).catch((error) => {
+      logger.error("Failed to remove temporary export file:", error);
+    });
   } catch (error) {
-    console.error("Data export failed:", error);
+    logger.error("Data export failed:", error);
     const currentExport = await db.query.dataExports.findFirst({
       where: eq(dataExports.id, exportId),
       columns: { status: true },
@@ -246,7 +249,7 @@ export async function cancelDataExport(exportId: string) {
     revalidatePath("/settings");
     return { success: true };
   } catch (error) {
-    console.error("Error cancelling export:", error);
+    logger.error("Error cancelling export:", error);
     return { success: false, error: "Failed to cancel export" };
   }
 }
@@ -276,7 +279,7 @@ export async function getLatestExport() {
       },
     };
   } catch (error) {
-    console.error("Error getting latest export:", error);
+    logger.error("Error getting latest export:", error);
     return { success: false, error: "Failed to get export status" };
   }
 }
@@ -300,7 +303,7 @@ export async function deleteExport(exportId: string) {
       try {
         await deleteFromS3(exportRecord.s3Key);
       } catch (e) {
-        console.error(
+        logger.error(
           `Failed to delete export S3 key ${exportRecord.s3Key}:`,
           e,
         );
@@ -313,7 +316,7 @@ export async function deleteExport(exportId: string) {
     revalidatePath("/settings");
     return { success: true };
   } catch (error) {
-    console.error("Error deleting export:", error);
+    logger.error("Error deleting export:", error);
     return { success: false, error: "Failed to delete export" };
   }
 }

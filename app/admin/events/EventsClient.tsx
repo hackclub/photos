@@ -12,6 +12,7 @@ import {
 import { deleteEvent } from "@/app/actions/events";
 import EventCard from "@/components/events/EventCard";
 import { AdminSearch, AdminToolbar } from "@/components/ui/AdminPageLayout";
+import { logger } from "@/lib/client-logger";
 
 interface Event {
   id: string;
@@ -82,7 +83,7 @@ export default function EventsClient({ events }: EventsClientProps) {
       setSelectedEvents(new Set());
       router.refresh();
     } catch (error) {
-      console.error("Error deleting events:", error);
+      logger.error("Error deleting events:", error);
       alert("Failed to delete some events. Please try again.");
     } finally {
       setIsDeleting(false);
@@ -203,7 +204,9 @@ export default function EventsClient({ events }: EventsClientProps) {
               : "Create your first event to start collecting photos from Hack Club gatherings"}
           </p>
           {!(searchQuery || visibilityFilter !== "all") && (
-            <Link prefetch={false} href="/admin/events/new"
+            <Link
+              prefetch={false}
+              href="/admin/events/new"
               className="inline-flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all"
             >
               <HiPlus className="text-xl" />

@@ -3,6 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { getAccessibleEventIds, getUserContext } from "@/lib/policy";
 export async function getMapData(eventSlug?: string | null) {
   try {
@@ -66,7 +67,12 @@ export async function getMapData(eventSlug?: string | null) {
       if (accessibleEventIds.has(item.eventId)) {
         const lat = Number(item.latitude);
         const lng = Number(item.longitude);
-        if (item.latitude !== null && item.longitude !== null && !isNaN(lat) && !isNaN(lng)) {
+        if (
+          item.latitude !== null &&
+          item.longitude !== null &&
+          !Number.isNaN(lat) &&
+          !Number.isNaN(lng)
+        ) {
           accessibleMedia.push({
             id: item.id,
             filename: item.filename,
@@ -117,8 +123,8 @@ export async function getMapData(eventSlug?: string | null) {
       if (accessibleLocationEventIds.has(event.id)) {
         const lat = Number(event.latitude);
         const lng = Number(event.longitude);
-        if (isNaN(lat) || isNaN(lng)) continue;
-        
+        if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
+
         const eventPhotos = await db
           .select({
             id: media.id,
@@ -155,7 +161,7 @@ export async function getMapData(eventSlug?: string | null) {
       },
     };
   } catch (error) {
-    console.error("Error fetching map data:", error);
+    logger.error("Error fetching map data:", error);
     return { success: false, error: "Failed to fetch map data" };
   }
 }

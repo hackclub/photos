@@ -1,4 +1,5 @@
 import Redis from "ioredis";
+import { logger } from "@/lib/logger";
 
 function createRedisClient() {
   const url = process.env.REDIS_URL;
@@ -79,7 +80,7 @@ export async function rateLimit(
       resetAt: computedResetAt,
     };
   } catch (err) {
-    console.error("[rate-limit] backend error:", err);
+    logger.error("[rate-limit] backend error:", err);
     if (shouldFailOpen(config)) {
       return { success: true, remaining: config.limit, resetAt };
     }

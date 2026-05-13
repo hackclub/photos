@@ -15,6 +15,7 @@ import { createEvent } from "@/app/actions/events";
 import LocationSearch from "@/components/map/LocationSearch";
 import FormInput from "@/components/ui/FormInput";
 import FormTextarea from "@/components/ui/FormTextarea";
+import { logger } from "@/lib/client-logger";
 
 interface NewEventClientProps {
   allowedSeries: {
@@ -68,7 +69,7 @@ export default function NewEventClient({ allowedSeries }: NewEventClientProps) {
         throw new Error(result.error || "Failed to create event");
       }
     } catch (error: unknown) {
-      console.error("Error creating event:", error);
+      logger.error("Error creating event:", error);
       const message =
         error instanceof Error ? error.message : "Failed to create event";
       alert(message);
@@ -125,7 +126,9 @@ export default function NewEventClient({ allowedSeries }: NewEventClientProps) {
                 Set up a new photo collection for a Hack Club event
               </p>
             </div>
-            <Link prefetch={false} href="/admin/events"
+            <Link
+              prefetch={false}
+              href="/admin/events"
               className="flex items-center gap-2 px-4 py-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
             >
               <HiXMark className="w-5 h-5" />
@@ -392,7 +395,9 @@ export default function NewEventClient({ allowedSeries }: NewEventClientProps) {
           </div>
 
           <div className="flex items-center justify-end gap-3">
-            <Link prefetch={false} href="/admin/events"
+            <Link
+              prefetch={false}
+              href="/admin/events"
               className="px-6 py-3 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors font-medium"
             >
               Cancel

@@ -5,6 +5,7 @@ import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { series } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { deleteMediaAndThumbnail } from "@/lib/media/thumbnail";
 import { can, getUserContext } from "@/lib/policy";
 
@@ -34,7 +35,7 @@ export async function deleteSeries(seriesIdOrSlug: string) {
     try {
       await deleteMediaAndThumbnail(seriesData.bannerS3Key, null);
     } catch (error) {
-      console.error("Error deleting banner from S3:", error);
+      logger.error("Error deleting banner from S3:", error);
       return {
         success: false,
         error: "Failed to delete series banner from S3",
@@ -89,7 +90,7 @@ export async function updateSeries(seriesId: string, data: SeriesInput) {
     revalidatePath("/admin/series");
     return { success: true, series: updatedSeries };
   } catch (error: unknown) {
-    console.error("Update series error:", error);
+    logger.error("Update series error:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Failed to update series";
     return {
@@ -127,7 +128,7 @@ export async function getAllSeries() {
     }
     return { success: true, series: accessibleSeries };
   } catch (error) {
-    console.error("Error fetching all series:", error);
+    logger.error("Error fetching all series:", error);
     return { success: false, error: "Failed to fetch series" };
   }
 }
@@ -165,7 +166,7 @@ export async function createSeries(data: SeriesInput) {
     revalidatePath("/admin/series");
     return { success: true, series: newSeries };
   } catch (error: unknown) {
-    console.error("Create series error:", error);
+    logger.error("Create series error:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Failed to create series";
     return {

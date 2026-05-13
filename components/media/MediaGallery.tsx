@@ -15,6 +15,7 @@ import {
 import { bulkDeleteMedia } from "@/app/actions/bulk";
 import { deleteMedia, getDownloadUrl } from "@/app/actions/media";
 import { useMediaGalleryData } from "@/hooks/useMediaGallery";
+import { logger } from "@/lib/client-logger";
 import type { Event, MediaItem } from "@/types/media";
 import ConfirmModal from "../ui/ConfirmModal";
 import ServerActionModal from "../ui/ServerActionModal";
@@ -285,7 +286,7 @@ export default function MediaGallery({
       a.click();
       document.body.removeChild(a);
     } catch (error) {
-      console.error("Download failed:", error);
+      logger.error("Download failed:", error);
       alert("Failed to download file");
     } finally {
       setDownloading(false);
@@ -381,7 +382,7 @@ export default function MediaGallery({
       if (error instanceof Error && error.name === "AbortError") {
         return;
       }
-      console.error("Bulk download failed:", error);
+      logger.error("Bulk download failed:", error);
       alert("Failed to download files");
       setPreparing(false);
       setDownloading(false);
@@ -413,7 +414,7 @@ export default function MediaGallery({
         setDeleting(false);
       }, 2000);
     } catch (error) {
-      console.error("Bulk delete failed:", error);
+      logger.error("Bulk delete failed:", error);
       alert("Failed to delete items");
       setDeleting(false);
     }

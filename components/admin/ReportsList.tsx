@@ -17,6 +17,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/client-logger";
 
 const PhotoDetailModal = dynamic(
   () => import("@/components/media/PhotoDetailModal"),
@@ -84,7 +85,7 @@ export default function ReportsList() {
           setReports(result.reports as unknown as Report[]);
         }
       } catch (error) {
-        console.error("Error fetching reports:", error);
+        logger.error("Error fetching reports:", error);
       } finally {
         setLoading(false);
       }
@@ -102,7 +103,7 @@ export default function ReportsList() {
         const data = await getBulkMediaUrls(thumbnailKeys);
         setPresignedUrls(data.urls || {});
       } catch (error) {
-        console.error("Failed to load thumbnails:", error);
+        logger.error("Failed to load thumbnails:", error);
       }
     };
     loadThumbnails();
@@ -118,7 +119,7 @@ export default function ReportsList() {
         const url = data.urls?.[selectedMedia.id] ?? null;
         setFullSizeUrl(url);
       } catch (error) {
-        console.error("Failed to load full-size image:", error);
+        logger.error("Failed to load full-size image:", error);
       }
     };
     loadFullSize();
@@ -136,7 +137,7 @@ export default function ReportsList() {
         );
       }
     } catch (error) {
-      console.error("Error resolving report:", error);
+      logger.error("Error resolving report:", error);
     } finally {
       setActionLoading(null);
     }
@@ -161,7 +162,7 @@ export default function ReportsList() {
         }
       }
     } catch (error) {
-      console.error("Error deleting media:", error);
+      logger.error("Error deleting media:", error);
     } finally {
       setActionLoading(null);
       setShowDeleteModal(false);
@@ -185,7 +186,7 @@ export default function ReportsList() {
         await handleResolve(selectedReport.id, "resolved");
       }
     } catch (error) {
-      console.error("Error banning user:", error);
+      logger.error("Error banning user:", error);
     } finally {
       setActionLoading(null);
       setShowBanModal(false);

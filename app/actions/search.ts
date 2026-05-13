@@ -11,6 +11,7 @@ import {
   tags,
   users,
 } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import {
   augmentMediaWithPermissions,
   can,
@@ -172,7 +173,7 @@ export async function globalSearch(query: string): Promise<{
       },
     };
   } catch (error) {
-    console.error("Global search error:", error);
+    logger.error("Global search error:", error);
     return { success: false, error: "Failed to perform search" };
   }
 }
@@ -232,7 +233,7 @@ export async function getSearchFilterOptions() {
       },
     };
   } catch (error) {
-    console.error("Failed to fetch filter options:", error);
+    logger.error("Failed to fetch filter options:", error);
     return { success: false, error: "Failed to fetch filter options" };
   }
 }
@@ -420,7 +421,7 @@ export async function advancedSearch(
       },
     };
   } catch (error) {
-    console.error("Advanced search error:", error);
+    logger.error("Advanced search error:", error);
     return { success: false, error: "Failed to perform advanced search" };
   }
 }

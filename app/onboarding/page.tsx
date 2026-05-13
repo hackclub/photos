@@ -14,6 +14,7 @@ import {
 import { useDebounce } from "use-debounce";
 import { trackRybbitEvent } from "@/components/analytics/RybbitUserIdentifier";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { logger } from "@/lib/client-logger";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -79,7 +80,7 @@ export default function OnboardingPage() {
         setIsHandleAvailable(result.available);
         setError(result.available ? "" : result.error || "Handle unavailable");
       } catch (err) {
-        console.error(err);
+        logger.error(err);
         setError("Failed to verify handle availability");
       } finally {
         setIsCheckingHandle(false);
@@ -103,7 +104,7 @@ export default function OnboardingPage() {
           return;
         }
       } catch (err) {
-        console.error(err);
+        logger.error(err);
         setError("Failed to verify handle availability");
         return;
       } finally {

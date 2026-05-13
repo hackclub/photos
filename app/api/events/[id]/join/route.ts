@@ -4,6 +4,7 @@ import { joinEvent } from "@/app/actions/events";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { events } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 export async function POST(
   req: NextRequest,
   {
@@ -37,7 +38,7 @@ export async function POST(
     }
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Join event error:", error);
+    logger.error("Join event error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { getClientIpFromHeaders, getUserContext } from "@/lib/auth-api";
 import { db } from "@/lib/db";
 import { events, media, series } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { can } from "@/lib/policy";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -102,7 +103,7 @@ export async function GET(
     if (error instanceof Error && error.message === "NEXT_REDIRECT") {
       throw error;
     }
-    console.error("Error in view redirect:", error);
+    logger.error("Error in view redirect:", error);
     return new Response("Internal Server Error", { status: 500 });
   }
 }

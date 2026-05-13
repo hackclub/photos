@@ -5,6 +5,7 @@ import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { apiKeys } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { getUserContext } from "@/lib/policy";
 import { getUserDisplayName, toPublicUser } from "@/lib/user-display";
 export async function listAllApiKeys() {
@@ -32,7 +33,7 @@ export async function listAllApiKeys() {
       keys: keys.map((key) => ({ ...key, user: toPublicUser(key.user) })),
     };
   } catch (error) {
-    console.error("Error listing all API keys:", error);
+    logger.error("Error listing all API keys:", error);
     return { success: false, error: "Failed to list API keys" };
   }
 }
@@ -62,7 +63,7 @@ export async function revokeApiKeyAdmin(id: string) {
     revalidatePath("/admin/api-keys");
     return { success: true };
   } catch (error) {
-    console.error("Error revoking API key:", error);
+    logger.error("Error revoking API key:", error);
     return { success: false, error: "Failed to revoke API key" };
   }
 }

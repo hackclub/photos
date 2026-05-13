@@ -11,6 +11,7 @@ import {
   pendingEventAdmins,
   series,
 } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { getMediaProxyUrl } from "@/lib/media/s3";
 import { deleteBatchMedia } from "@/lib/media/thumbnail";
 import { can, getUserContext } from "@/lib/policy";
@@ -58,14 +59,14 @@ export async function getBulkMediaUrls(s3Keys?: string[], mediaIds?: string[]) {
           try {
             urls[item.id] = getMediaProxyUrl(item.id);
           } catch (error) {
-            console.error(`Failed to sign URL for media ${item.id}:`, error);
+            logger.error(`Failed to sign URL for media ${item.id}:`, error);
           }
         }),
       );
     }
     return { success: true, urls };
   } catch (error) {
-    console.error("Error generating bulk URLs:", error);
+    logger.error("Error generating bulk URLs:", error);
     return { success: false, error: "Failed to generate URLs" };
   }
 }
@@ -128,7 +129,7 @@ export async function bulkDeleteMedia(mediaIds: string[]) {
       failed: failedItems.length,
     };
   } catch (error) {
-    console.error("Bulk delete error:", error);
+    logger.error("Bulk delete error:", error);
     return { success: false, error: "Failed to delete media" };
   }
 }
@@ -233,7 +234,7 @@ export async function bulkCreateEvents(
         }
         results.created++;
       } catch (error: unknown) {
-        console.error(`Failed to create event ${eventData.name}:`, error);
+        logger.error(`Failed to create event ${eventData.name}:`, error);
         results.failed++;
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
@@ -244,7 +245,7 @@ export async function bulkCreateEvents(
     }
     return { success: true, ...results };
   } catch (error: unknown) {
-    console.error("Bulk create error:", error);
+    logger.error("Bulk create error:", error);
     const errorMessage =
       error instanceof Error
         ? error.message

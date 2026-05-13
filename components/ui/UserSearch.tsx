@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { HiMagnifyingGlass, HiUserPlus, HiXMark } from "react-icons/hi2";
+import { logger } from "@/lib/client-logger";
 import UserAvatar from "./UserAvatar";
 
 interface User {
@@ -86,7 +87,7 @@ export default function UserSearch({
           setShowDropdown(filtered.length > 0);
         }
       } catch (error) {
-        console.error("Search error:", error);
+        logger.error("Search error:", error);
       } finally {
         setIsSearching(false);
       }

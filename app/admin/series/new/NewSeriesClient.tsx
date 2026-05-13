@@ -6,6 +6,7 @@ import { HiCheck, HiEye, HiRectangleStack, HiXMark } from "react-icons/hi2";
 import { createSeries } from "@/app/actions/series";
 import FormInput from "@/components/ui/FormInput";
 import FormTextarea from "@/components/ui/FormTextarea";
+import { logger } from "@/lib/client-logger";
 export default function NewSeriesClient() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -44,7 +45,7 @@ export default function NewSeriesClient() {
         throw new Error(result.error || "Failed to create series");
       }
     } catch (error: unknown) {
-      console.error("Error creating series:", error);
+      logger.error("Error creating series:", error);
       const message =
         error instanceof Error ? error.message : "Failed to create series";
       alert(message);
@@ -100,7 +101,9 @@ export default function NewSeriesClient() {
                 Organize related events into a series collection
               </p>
             </div>
-            <Link prefetch={false} href="/admin/series"
+            <Link
+              prefetch={false}
+              href="/admin/series"
               className="flex items-center gap-2 px-4 py-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
             >
               <HiXMark className="w-5 h-5" />
@@ -191,7 +194,9 @@ export default function NewSeriesClient() {
           </div>
 
           <div className="flex items-center justify-end gap-3">
-            <Link prefetch={false} href="/admin/series"
+            <Link
+              prefetch={false}
+              href="/admin/series"
               className="px-6 py-3 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors font-medium"
             >
               Cancel

@@ -22,6 +22,7 @@ import {
 import { db } from "@/lib/db";
 import { events, media, reports, series, users } from "@/lib/db/schema";
 import { formatBytes } from "@/lib/format";
+import { logger } from "@/lib/logger";
 import { getUserContext } from "@/lib/policy";
 export default async function AdminDashboard() {
   const userResult = await getCurrentUser();
@@ -79,7 +80,7 @@ export default async function AdminDashboard() {
       );
       return { ...item, presignedUrl };
     } catch (error) {
-      console.error("Error fetching URL for", item.id, error);
+      logger.error("Error fetching URL for", item.id, error);
       return { ...item, presignedUrl: null as string | null };
     }
   });
@@ -162,7 +163,9 @@ export default async function AdminDashboard() {
             </div>
           </div>
 
-          <Link prefetch={false} href="/admin/reports"
+          <Link
+            prefetch={false}
+            href="/admin/reports"
             className={`p-6 bg-zinc-900 border rounded-xl transition-all hover:border-red-600/50 ${pendingReportsCount > 0 ? "border-red-900/50 bg-red-900/5" : "border-zinc-800"}`}
           >
             <div className="flex items-center gap-4">
@@ -194,7 +197,9 @@ export default async function AdminDashboard() {
             Quick Actions
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Link prefetch={false} href="/admin/events/new"
+            <Link
+              prefetch={false}
+              href="/admin/events/new"
               className="group flex items-center gap-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl hover:border-red-600/50 transition-all"
             >
               <div className="w-10 h-10 rounded-lg bg-red-600/10 flex items-center justify-center group-hover:bg-red-600/20 transition-colors">
@@ -207,7 +212,9 @@ export default async function AdminDashboard() {
               </div>
             </Link>
 
-            <Link prefetch={false} href="/admin/series/new"
+            <Link
+              prefetch={false}
+              href="/admin/series/new"
               className="group flex items-center gap-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl hover:border-purple-600/50 transition-all"
             >
               <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
@@ -220,7 +227,9 @@ export default async function AdminDashboard() {
               </div>
             </Link>
 
-            <Link prefetch={false} href="/admin/users"
+            <Link
+              prefetch={false}
+              href="/admin/users"
               className="group flex items-center gap-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl hover:border-indigo-600/50 transition-all"
             >
               <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center group-hover:bg-indigo-500/20 transition-colors">
@@ -233,7 +242,9 @@ export default async function AdminDashboard() {
               </div>
             </Link>
 
-            <Link prefetch={false} href="/admin/storage"
+            <Link
+              prefetch={false}
+              href="/admin/storage"
               className="group flex items-center gap-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl hover:border-orange-600/50 transition-all"
             >
               <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
@@ -251,7 +262,9 @@ export default async function AdminDashboard() {
         <div>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-white">Recent Uploads</h2>
-            <Link prefetch={false} href="/feed"
+            <Link
+              prefetch={false}
+              href="/feed"
               className="text-sm text-red-400 hover:text-red-300 transition-colors"
             >
               View all →
@@ -263,7 +276,9 @@ export default async function AdminDashboard() {
               {mediaWithUrls.map((item) => {
                 const isVideo = item.mimeType.startsWith("video/");
                 return (
-                  <Link prefetch={false} key={item.id}
+                  <Link
+                    prefetch={false}
+                    key={item.id}
                     href={`/events/${item.event.slug}`}
                     className="group aspect-square bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 hover:border-red-600/50 transition-all relative"
                   >

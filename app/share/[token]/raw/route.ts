@@ -4,6 +4,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { type NextRequest, NextResponse } from "next/server";
 import { getSharedMedia } from "@/app/actions/sharing";
+import { logger } from "@/lib/logger";
 import { convertHeicToJpeg } from "@/lib/media/heic";
 import { s3Client } from "@/lib/media/s3";
 export async function GET(
@@ -43,7 +44,7 @@ export async function GET(
           },
         });
       } catch (e) {
-        console.error("[HEIC Conversion] Error converting HEIC:", e);
+        logger.error("[HEIC Conversion] Error converting HEIC:", e);
         return new NextResponse(
           `Image processing failed: ${e instanceof Error ? e.message : String(e)}`,
           { status: 500 },
@@ -58,7 +59,7 @@ export async function GET(
     try {
       s3Response = await s3Client.send(command);
     } catch (error) {
-      console.error(`Failed to fetch from S3:`, error);
+      logger.error(`Failed to fetch from S3:`, error);
       return new NextResponse("Failed to fetch media", { status: 502 });
     }
     const headers = new Headers();
@@ -90,7 +91,7 @@ export async function GET(
       headers,
     });
   } catch (error) {
-    console.error("Error generating download URL:", error);
+    logger.error("Error generating download URL:", error);
     return new NextResponse("Internal Server Error", { status: 500 });
   }
 }

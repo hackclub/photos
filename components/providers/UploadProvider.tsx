@@ -12,6 +12,7 @@ import {
 } from "react";
 import { finalizeUpload, getPresignedUrl } from "@/app/actions/upload";
 import { trackRybbitEvent } from "@/components/analytics/RybbitUserIdentifier";
+import { logger } from "@/lib/client-logger";
 import {
   extractMetadata,
   generateThumbnail,
@@ -311,7 +312,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       if (error instanceof Error && error.message === "Upload cancelled")
         return;
-      console.error("Upload error:", error);
+      logger.error("Upload error:", error);
       setFiles((prev) =>
         prev.map((f) =>
           f.id === fileId

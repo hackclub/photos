@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/Table";
+import { logger } from "@/lib/client-logger";
 import { formatBytes } from "@/lib/format";
 
 interface StorageStats {
@@ -723,7 +724,7 @@ function CleanupButton() {
       );
       window.location.reload();
     } catch (error) {
-      console.error("Cleanup error:", error);
+      logger.error("Cleanup error:", error);
       alert(
         `Cleanup failed: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
@@ -796,7 +797,7 @@ function RepairThumbnailsButton() {
       );
       window.location.reload();
     } catch (error) {
-      console.error("Thumbnail repair error:", error);
+      logger.error("Thumbnail repair error:", error);
       alert(
         `Thumbnail repair failed: ${error instanceof Error ? error.message : "Unknown error"}`,
       );

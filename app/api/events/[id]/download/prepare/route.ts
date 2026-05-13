@@ -12,6 +12,7 @@ import { getSession } from "@/lib/auth";
 import { getClientIpFromHeaders } from "@/lib/auth-api";
 import { db } from "@/lib/db";
 import { events } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { s3Client } from "@/lib/media/s3";
 import { can, getUserContext } from "@/lib/policy";
 import { rateLimit } from "@/lib/rate-limit";
@@ -40,7 +41,7 @@ async function cleanupOldZipFiles() {
       });
     await Promise.allSettled(cleanupPromises);
   } catch (error) {
-    console.error("Failed to cleanup old ZIP files:", error);
+    logger.error("Failed to cleanup old ZIP files:", error);
   }
 }
 export async function POST(
@@ -54,7 +55,9 @@ export async function POST(
   },
 ) {
   try {
-    await cleanupOldZipFiles().catch(console.error);
+    await cleanupOldZipFiles().catch((error) => {
+      logger.error("Failed to cleanup old zip files:", error);
+    });
     const session = await getSession();
     const { id: eventId } = await params;
     const body = await req.json();
@@ -113,14 +116,16 @@ export async function POST(
     let totalSize = 0;
     let hasError = false;
     output.on("error", (err) => {
-      console.error("Output stream error:", err);
+      logger.error("Output stream error:", err);
       hasError = true;
     });
     zipFile.outputStream.pipe(output);
     for (const mediaItem of mediaToDownload) {
       if (req.signal.aborted) {
         output.destroy();
-        await unlink(tempPath).catch(console.error);
+        await unlink(tempPath).catch((error) => {
+          logger.error("Failed to remove aborted download zip:", error);
+        });
         return NextResponse.json({ error: "Aborted" }, { status: 499 });
       }
       if (hasError) break;
@@ -131,7 +136,7 @@ export async function POST(
         });
         const s3Response = await s3Client.send(command);
         if (!s3Response.Body) {
-          console.error(`No body for ${mediaItem.filename}`);
+          logger.error(`No body for ${mediaItem.filename}`);
           continue;
         }
         const contentLength = s3Response.ContentLength || 0;
@@ -146,7 +151,7 @@ export async function POST(
         });
         fileCount++;
       } catch (error) {
-        console.error(`Error adding ${mediaItem.filename}:`, error);
+        logger.error(`Error adding ${mediaItem.filename}:`, error);
       }
     }
     if (hasError) {
@@ -172,7 +177,7 @@ export async function POST(
       totalSize,
     });
   } catch (error) {
-    console.error("Prepare download error:", error);
+    logger.error("Prepare download error:", error);
     return NextResponse.json(
       { error: "Failed to prepare download" },
       { status: 500 },

@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { claimPendingAdminGrantsForUser } from "@/lib/pending-admins";
 import { getUserContext } from "@/lib/policy";
 import { getUserDisplayName } from "@/lib/user-display";
@@ -39,7 +40,7 @@ export async function checkHandleAvailability(handle: string) {
     }
     return { available: true };
   } catch (error) {
-    console.error("Error checking handle availability:", error);
+    logger.error("Error checking handle availability:", error);
     return { available: false, error: "Internal server error" };
   }
 }
@@ -153,7 +154,7 @@ export async function completeOnboarding(data: { handle: string }) {
     revalidatePath("/");
     return { success: true };
   } catch (error) {
-    console.error("Error completing onboarding:", error);
+    logger.error("Error completing onboarding:", error);
     return { success: false, error: "Failed to complete onboarding" };
   }
 }

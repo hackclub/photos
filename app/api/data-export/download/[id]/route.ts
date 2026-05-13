@@ -7,6 +7,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { dataExports } from "@/lib/db/schema";
+import { logger } from "@/lib/logger";
 import { s3Client } from "@/lib/media/s3";
 import { getUserContext } from "@/lib/policy";
 export async function GET(
@@ -57,7 +58,7 @@ export async function GET(
     try {
       s3Response = await s3Client.send(command);
     } catch (error) {
-      console.error("Failed to fetch export file from S3:", error);
+      logger.error("Failed to fetch export file from S3:", error);
       return NextResponse.json(
         { error: "Failed to fetch export file" },
         { status: 502 },
@@ -80,7 +81,7 @@ export async function GET(
       headers,
     });
   } catch (error) {
-    console.error("Error downloading export:", error);
+    logger.error("Error downloading export:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 },
