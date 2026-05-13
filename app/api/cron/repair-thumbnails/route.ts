@@ -1,5 +1,10 @@
+import { existsSync } from "node:fs";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { eq, gt } from "drizzle-orm";
+import ffmpeg from "fluent-ffmpeg";
 import { type NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { db } from "@/lib/db";
@@ -67,19 +72,104 @@ async function fallbackImageThumbnail(
   mediaId: string,
   tags: Record<string, string>,
 ) {
-  const output = await sharp(buffer, {
-    failOn: "none",
-    animated: true,
-    limitInputPixels: false,
-  })
-    .rotate()
-    .flatten({ background: "#111111" })
-    .resize(400, 400, { fit: "cover", position: "attention" })
-    .jpeg({ quality: 82, mozjpeg: true })
-    .toBuffer();
+  const attempts = [
+    () =>
+      sharp(buffer, { failOn: "none", animated: true, limitInputPixels: false })
+        .rotate()
+        .flatten({ background: "#ffffff" })
+        .resize(400, 400, { fit: "cover", position: "attention" })
+        .jpeg({ quality: 82, mozjpeg: true })
+        .toBuffer(),
+    () =>
+      sharp(buffer, { failOn: "none", limitInputPixels: false })
+        .rotate()
+        .flatten({ background: "#ffffff" })
+        .resize(400, 400, { fit: "cover", position: "center" })
+        .jpeg({ quality: 82, mozjpeg: true })
+        .toBuffer(),
+    () =>
+      sharp(buffer, { failOn: "none", limitInputPixels: false })
+        .resize(400, 400, { fit: "cover", position: "center" })
+        .jpeg({ quality: 82, mozjpeg: true })
+        .toBuffer(),
+    () =>
+      sharp(buffer, { failOn: "none", limitInputPixels: false })
+        .resize(400, 400, { fit: "contain", background: "#ffffff" })
+        .jpeg({ quality: 82, mozjpeg: true })
+        .toBuffer(),
+  ];
+  let output: Buffer | null = null;
+  let lastError: unknown;
+  for (const attempt of attempts) {
+    try {
+      output = await attempt();
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (!output) {
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("Could not extract real image thumbnail");
+  }
   const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
   await uploadToS3(output, thumbnailS3Key, "image/jpeg", undefined, tags);
   return thumbnailS3Key;
+}
+
+async function fallbackVideoThumbnail(
+  buffer: Buffer,
+  mediaId: string,
+  tags: Record<string, string>,
+) {
+  const tempDir = path.join(os.tmpdir(), "repair-thumbnails");
+  await mkdir(tempDir, { recursive: true });
+  const inputPath = path.join(tempDir, `${mediaId}-source`);
+  const outputPath = path.join(tempDir, `${mediaId}-thumb.jpg`);
+  await writeFile(inputPath, buffer);
+  const timestamps = ["00:00:01.000", "00:00:00.000", "00:00:02.000", "10%"];
+  try {
+    for (const timestamp of timestamps) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          ffmpeg(inputPath)
+            .outputOptions(["-frames:v 1", "-q:v 3"])
+            .screenshots({
+              count: 1,
+              folder: tempDir,
+              filename: `${mediaId}-thumb.jpg`,
+              timestamps: [timestamp],
+            })
+            .on("end", () => resolve())
+            .on("error", reject);
+        });
+        if (existsSync(outputPath)) break;
+      } catch {
+        if (existsSync(outputPath)) break;
+      }
+    }
+    if (!existsSync(outputPath))
+      throw new Error("No video thumbnail extracted");
+    const thumbnailBuffer = await sharp(await readFile(outputPath), {
+      failOn: "none",
+    })
+      .resize(400, 400, { fit: "cover", position: "center" })
+      .jpeg({ quality: 82, mozjpeg: true })
+      .toBuffer();
+    const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
+    await uploadToS3(
+      thumbnailBuffer,
+      thumbnailS3Key,
+      "image/jpeg",
+      undefined,
+      tags,
+    );
+    return thumbnailS3Key;
+  } finally {
+    await unlink(inputPath).catch(() => {});
+    await unlink(outputPath).catch(() => {});
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -118,6 +208,9 @@ export async function GET(request: NextRequest) {
       );
       if (!thumbnailS3Key && item.mimeType.startsWith("image/")) {
         thumbnailS3Key = await fallbackImageThumbnail(buffer, item.id, tags);
+      }
+      if (!thumbnailS3Key && item.mimeType.startsWith("video/")) {
+        thumbnailS3Key = await fallbackVideoThumbnail(buffer, item.id, tags);
       }
       if (!thumbnailS3Key)
         throw new Error("Thumbnail generation returned null");
