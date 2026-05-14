@@ -14,7 +14,7 @@ const redactPaths = [
 const pinoLogger = pino({
   level: process.env.LOG_LEVEL ?? "info",
   base: {
-    service: process.env.OTEL_SERVICE_NAME ?? "hackclub-photos",
+    service_name: process.env.OTEL_SERVICE_NAME ?? "hackclub-photos",
     environment: process.env.NODE_ENV,
   },
   redact: {

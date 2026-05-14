@@ -31,6 +31,41 @@ const safeEndpoint = endpoint?.startsWith("https://in-sig.deployor.dev")
   ? endpoint
   : undefined;
 
+function buildResourceAttributes() {
+  const envAttributes = Object.fromEntries(
+    (process.env.OTEL_RESOURCE_ATTRIBUTES ?? "")
+      .split(",")
+      .flatMap((attribute) => {
+        const separator = attribute.indexOf("=");
+        if (separator === -1) return [];
+
+        return [
+          [
+            attribute.slice(0, separator).trim(),
+            attribute.slice(separator + 1).trim(),
+          ],
+        ];
+      }),
+  );
+
+  const environment =
+    process.env.DEPLOYMENT_ENVIRONMENT ?? process.env.NODE_ENV ?? "development";
+
+  return {
+    ...envAttributes,
+    [ATTR_SERVICE_NAME]: process.env.OTEL_SERVICE_NAME ?? "hackclub-photos",
+    [ATTR_SERVICE_NAMESPACE]: envAttributes[ATTR_SERVICE_NAMESPACE] ?? "photos",
+    [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]:
+      envAttributes[ATTR_DEPLOYMENT_ENVIRONMENT_NAME] ?? environment,
+    ...(process.env.APP_VERSION
+      ? { [ATTR_SERVICE_VERSION]: process.env.APP_VERSION }
+      : {}),
+    ...(process.env.HOSTNAME
+      ? { [ATTR_SERVICE_INSTANCE_ID]: process.env.HOSTNAME }
+      : {}),
+  };
+}
+
 function logsUrl() {
   if (!safeEndpoint) return undefined;
   if (safeEndpoint.endsWith("/v1/logs")) return safeEndpoint;
@@ -106,20 +141,7 @@ export function initializeLogsExporter() {
   }
 
   loggerProvider = new LoggerProvider({
-    resource: resourceFromAttributes({
-      [ATTR_SERVICE_NAME]: process.env.OTEL_SERVICE_NAME ?? "hackclub-photos",
-      [ATTR_SERVICE_NAMESPACE]: "photos",
-      [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]:
-        process.env.DEPLOYMENT_ENVIRONMENT ??
-        process.env.NODE_ENV ??
-        "development",
-      ...(process.env.APP_VERSION
-        ? { [ATTR_SERVICE_VERSION]: process.env.APP_VERSION }
-        : {}),
-      ...(process.env.HOSTNAME
-        ? { [ATTR_SERVICE_INSTANCE_ID]: process.env.HOSTNAME }
-        : {}),
-    }),
+    resource: resourceFromAttributes(buildResourceAttributes()),
     processors: [
       new BatchLogRecordProcessor(
         new OTLPLogExporter({
