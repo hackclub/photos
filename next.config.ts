@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  outputFileTracingIncludes: {
+    "/*": ["./otel-bootstrap.cjs", "./node_modules/@opentelemetry/**/*"],
+  },
   reactCompiler: true,
   images: {
     formats: ["image/avif", "image/webp"],

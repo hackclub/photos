@@ -7,4 +7,4 @@ if [ -n "${DATABASE_URL:-}" ]; then
   printf '\n'
 fi
 
-exec bun server.js
+exec bun --require ./otel-bootstrap.cjs server.js
