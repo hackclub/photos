@@ -1,4 +1,5 @@
 import pino from "pino";
+import { exportLogEntry } from "@/lib/logs-exporter";
 
 const redactPaths = [
   "req.headers.authorization",
@@ -38,6 +39,41 @@ type LogLevel = "error" | "warn" | "info";
 
 function write(level: LogLevel, args: unknown[]) {
   (pinoLogger[level] as (...args: unknown[]) => void)(...args);
+  exportLogEntry(toLogEntry(level, args));
+}
+
+function toLogEntry(level: LogLevel, args: unknown[]) {
+  const [first, second, ...rest] = args;
+  const attributes: Record<string, unknown> = {};
+  let message = "";
+  let error: unknown;
+
+  if (first && typeof first === "object" && !(first instanceof Error)) {
+    Object.assign(attributes, first);
+    message = typeof second === "string" ? second : String(second ?? "");
+    if (second instanceof Error) error = second;
+  } else {
+    message = typeof first === "string" ? first : String(first ?? "");
+    if (first instanceof Error) error = first;
+    if (second instanceof Error) error = second;
+    if (second !== undefined && !(second instanceof Error)) {
+      attributes.detail = String(second);
+    }
+  }
+
+  if (rest.length > 0) {
+    attributes.extra = rest.map((item) =>
+      item instanceof Error ? item.message : String(item),
+    );
+  }
+
+  if (error instanceof Error) {
+    attributes["error.name"] = error.name;
+    attributes["error.message"] = error.message;
+    attributes["error.stack"] = error.stack;
+  }
+
+  return { level, message, attributes, error };
 }
 
 export const logger = {

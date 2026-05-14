@@ -96,7 +96,7 @@ if (globalThis.__hackClubPhotosOtelStarted) {
         "@opentelemetry/instrumentation-pino": { enabled: false },
       }),
       new PinoInstrumentation({
-        disableLogSending: false,
+        disableLogSending: true,
         disableLogCorrelation: false,
         logKeys: {
           traceId: "trace_id",
