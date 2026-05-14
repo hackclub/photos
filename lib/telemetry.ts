@@ -36,6 +36,24 @@ export const storageOperationDuration = meter.createHistogram(
   },
 );
 
+export const storageOperationsTotal = meter.createCounter(
+  "storage_operations_total",
+  {
+    description: "Total number of S3/storage operations",
+    unit: "1",
+  },
+);
+
+export const cronJobDuration = meter.createHistogram("cron_job_duration_ms", {
+  description: "Cron job route duration",
+  unit: "ms",
+});
+
+export const cronJobsTotal = meter.createCounter("cron_jobs_total", {
+  description: "Total number of cron job runs",
+  unit: "1",
+});
+
 export async function traceAsync<T>(
   name: string,
   attributes: Record<string, string | number | boolean | undefined>,
@@ -64,4 +82,24 @@ export async function traceAsync<T>(
 
 export function durationMs(startedAt: number) {
   return Date.now() - startedAt;
+}
+
+export function recordStorageOperation(
+  operation: string,
+  status: "success" | "error",
+  startedAt: number,
+) {
+  const attributes = { operation, status };
+  storageOperationDuration.record(durationMs(startedAt), attributes);
+  storageOperationsTotal.add(1, attributes);
+}
+
+export function recordCronJob(
+  job: string,
+  status: "success" | "error" | "unauthorized",
+  startedAt: number,
+) {
+  const attributes = { job, status };
+  cronJobDuration.record(durationMs(startedAt), attributes);
+  cronJobsTotal.add(1, attributes);
 }

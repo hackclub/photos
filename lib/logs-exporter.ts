@@ -151,7 +151,7 @@ export function initializeLogsExporter() {
         {
           maxQueueSize: 1000,
           maxExportBatchSize: 64,
-          scheduledDelayMillis: 5000,
+          scheduledDelayMillis: 1000,
           exportTimeoutMillis: 30000,
         },
       ),

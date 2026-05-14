@@ -12,6 +12,7 @@ import { media } from "@/lib/db/schema";
 import { logger, recordException, serializeError } from "@/lib/logger";
 import { s3Client, uploadToS3 } from "@/lib/media/s3";
 import { generateAndUploadThumbnail } from "@/lib/media/thumbnail";
+import { recordCronJob } from "@/lib/telemetry";
 
 const BATCH_SIZE = 500;
 const REPAIR_CONCURRENCY = 8;
@@ -180,77 +181,93 @@ export async function GET(request: NextRequest) {
     !process.env.CRON_SECRET ||
     authHeader !== `Bearer ${process.env.CRON_SECRET}`
   ) {
+    recordCronJob("repair_thumbnails", "unauthorized", startedAt);
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const cursor = request.nextUrl.searchParams.get("cursor") || undefined;
-  logger.info({ cursor }, "thumbnail repair started");
-  const rows = await db.query.media.findMany({
-    where: cursor ? gt(media.id, cursor) : undefined,
-    orderBy: (m, { asc }) => [asc(m.id)],
-    limit: BATCH_SIZE,
-  });
-  const results = await mapLimit(rows, REPAIR_CONCURRENCY, async (item) => {
-    const hasThumbnail = item.thumbnailS3Key
-      ? await objectExists(item.thumbnailS3Key)
-      : false;
-    if (hasThumbnail) return { repaired: 0, failed: 0 };
-    try {
-      const sourceKeys = [
-        item.s3Key,
-        item.blurredS3Key,
-        item.originalS3Key,
-      ].filter((key): key is string => Boolean(key));
-      const buffer = await getObjectBuffer(sourceKeys);
-      const tags = { uploadedBy: item.uploadedById, eventId: item.eventId };
-      let thumbnailS3Key = await generateAndUploadThumbnail(
-        buffer,
-        item.mimeType,
-        item.id,
-        undefined,
-        tags,
-      );
-      if (!thumbnailS3Key && item.mimeType.startsWith("image/")) {
-        thumbnailS3Key = await fallbackImageThumbnail(buffer, item.id, tags);
+  try {
+    const cursor = request.nextUrl.searchParams.get("cursor") || undefined;
+    logger.info({ cursor }, "thumbnail repair started");
+    const rows = await db.query.media.findMany({
+      where: cursor ? gt(media.id, cursor) : undefined,
+      orderBy: (m, { asc }) => [asc(m.id)],
+      limit: BATCH_SIZE,
+    });
+    const results = await mapLimit(rows, REPAIR_CONCURRENCY, async (item) => {
+      const hasThumbnail = item.thumbnailS3Key
+        ? await objectExists(item.thumbnailS3Key)
+        : false;
+      if (hasThumbnail) return { repaired: 0, failed: 0 };
+      try {
+        const sourceKeys = [
+          item.s3Key,
+          item.blurredS3Key,
+          item.originalS3Key,
+        ].filter((key): key is string => Boolean(key));
+        const buffer = await getObjectBuffer(sourceKeys);
+        const tags = { uploadedBy: item.uploadedById, eventId: item.eventId };
+        let thumbnailS3Key = await generateAndUploadThumbnail(
+          buffer,
+          item.mimeType,
+          item.id,
+          undefined,
+          tags,
+        );
+        if (!thumbnailS3Key && item.mimeType.startsWith("image/")) {
+          thumbnailS3Key = await fallbackImageThumbnail(buffer, item.id, tags);
+        }
+        if (!thumbnailS3Key && item.mimeType.startsWith("video/")) {
+          thumbnailS3Key = await fallbackVideoThumbnail(buffer, item.id, tags);
+        }
+        if (!thumbnailS3Key)
+          throw new Error("Thumbnail generation returned null");
+        await db
+          .update(media)
+          .set({ thumbnailS3Key })
+          .where(eq(media.id, item.id));
+        return { repaired: 1, failed: 0 };
+      } catch (error) {
+        await recordException(error);
+        logger.error(
+          { mediaId: item.id, error: serializeError(error) },
+          "thumbnail repair failed",
+        );
+        return { repaired: 0, failed: 1 };
       }
-      if (!thumbnailS3Key && item.mimeType.startsWith("video/")) {
-        thumbnailS3Key = await fallbackVideoThumbnail(buffer, item.id, tags);
-      }
-      if (!thumbnailS3Key)
-        throw new Error("Thumbnail generation returned null");
-      await db
-        .update(media)
-        .set({ thumbnailS3Key })
-        .where(eq(media.id, item.id));
-      return { repaired: 1, failed: 0 };
-    } catch (error) {
-      await recordException(error);
-      logger.error(
-        { mediaId: item.id, error: serializeError(error) },
-        "thumbnail repair failed",
-      );
-      return { repaired: 0, failed: 1 };
-    }
-  });
-  const repaired = results.reduce((sum, result) => sum + result.repaired, 0);
-  const failed = results.reduce((sum, result) => sum + result.failed, 0);
-  const nextCursor =
-    rows.length === BATCH_SIZE ? rows[rows.length - 1]?.id : undefined;
-  logger.info(
-    {
+    });
+    const repaired = results.reduce((sum, result) => sum + result.repaired, 0);
+    const failed = results.reduce((sum, result) => sum + result.failed, 0);
+    const nextCursor =
+      rows.length === BATCH_SIZE ? rows[rows.length - 1]?.id : undefined;
+    logger.info(
+      {
+        checked: rows.length,
+        repaired,
+        failed,
+        nextCursor,
+        completed: !nextCursor,
+        durationMs: Date.now() - startedAt,
+      },
+      "thumbnail repair finished",
+    );
+    recordCronJob(
+      "repair_thumbnails",
+      failed > 0 ? "error" : "success",
+      startedAt,
+    );
+    return NextResponse.json({
       checked: rows.length,
       repaired,
       failed,
       nextCursor,
       completed: !nextCursor,
-      durationMs: Date.now() - startedAt,
-    },
-    "thumbnail repair finished",
-  );
-  return NextResponse.json({
-    checked: rows.length,
-    repaired,
-    failed,
-    nextCursor,
-    completed: !nextCursor,
-  });
+    });
+  } catch (error) {
+    await recordException(error);
+    recordCronJob("repair_thumbnails", "error", startedAt);
+    logger.error({ error: serializeError(error) }, "thumbnail repair failed");
+    return NextResponse.json(
+      { success: false, error: String(error) },
+      { status: 500 },
+    );
+  }
 }

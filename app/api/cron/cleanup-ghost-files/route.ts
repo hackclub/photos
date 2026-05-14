@@ -9,10 +9,13 @@ import { db } from "@/lib/db";
 import { dataExports, events, media, series } from "@/lib/db/schema";
 import { logger, recordException, serializeError } from "@/lib/logger";
 import { deleteFromS3Batch, s3Client } from "@/lib/media/s3";
+import { recordCronJob } from "@/lib/telemetry";
 export const maxDuration = 300;
 export async function GET(req: NextRequest) {
+  const startedAt = Date.now();
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    recordCronJob("cleanup_ghost_files", "unauthorized", startedAt);
     return new NextResponse("Unauthorized", { status: 401 });
   }
   const { searchParams } = new URL(req.url);
@@ -121,6 +124,7 @@ export async function GET(req: NextRequest) {
       },
       "ghost file cleanup finished",
     );
+    recordCronJob("cleanup_ghost_files", "success", startedAt);
     return NextResponse.json({
       success: true,
       checked: totalChecked,
@@ -131,6 +135,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     await recordException(error);
+    recordCronJob("cleanup_ghost_files", "error", startedAt);
     logger.error(
       { cursor, force, error: serializeError(error) },
       "ghost file cleanup failed",
