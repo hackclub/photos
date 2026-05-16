@@ -24,6 +24,12 @@ out/
 *.tsbuildinfo
 .swc/
 .turbo/
+__pycache__/
+*.py[cod]
+services/vision-worker/app/__pycache__/
+
+# local face model weights
+services/vision-worker/models/
 
 # package manager artifacts (choose one; repo uses npm via Dockerfile)
 yarn.lock
