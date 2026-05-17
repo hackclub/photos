@@ -10,7 +10,7 @@ import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { convertHeicToJpeg } from "@/lib/media/heic";
-import { s3Client } from "@/lib/media/s3";
+import { S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
 import { can } from "@/lib/policy";
 
 const getCachedMedia = unstable_cache(
@@ -38,9 +38,19 @@ export async function GET(
   },
 ) {
   const { mediaId, variant: variantPath } = await params;
+  if (!/^[0-9a-f-]{36}$/i.test(mediaId)) {
+    return new NextResponse("Media not found", { status: 404 });
+  }
   const variant = variantPath?.[0];
+  if (variant && !["thumbnail", "display", "original"].includes(variant)) {
+    return new NextResponse("Not found", { status: 404 });
+  }
   const searchParams = request.nextUrl.searchParams;
   const download = searchParams.get("download") === "true";
+  const requestRange = request.headers.get("range") ?? undefined;
+  if (requestRange && !/^bytes=\d*-\d*(,\d*-\d*)?$/.test(requestRange)) {
+    return new NextResponse("Invalid range", { status: 416 });
+  }
   const mediaItem = await getCachedMedia(mediaId);
   if (!mediaItem) {
     return new NextResponse("Media not found", { status: 404 });
@@ -100,18 +110,27 @@ export async function GET(
     }
   }
   const command = new GetObjectCommand({
-    Bucket: process.env.S3_BUCKET_NAME,
+    Bucket: S3_BUCKET_NAME,
     Key: s3Key,
+    Range: requestRange,
+    IfNoneMatch: request.headers.get("if-none-match") ?? undefined,
+    IfModifiedSince: request.headers.get("if-modified-since")
+      ? new Date(request.headers.get("if-modified-since") as string)
+      : undefined,
   });
   let s3Response: GetObjectCommandOutput;
   try {
     s3Response = await s3Client.send(command);
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.$metadata?.httpStatusCode === 304) {
+      return new NextResponse(null, { status: 304 });
+    }
     logger.error(`Failed to fetch from S3:`, error);
     return new NextResponse("Failed to fetch media", { status: 502 });
   }
   const headers = new Headers();
   headers.set("Content-Type", s3Response.ContentType || mediaItem.mimeType);
+  headers.set("X-Content-Type-Options", "nosniff");
   if (s3Response.ContentLength) {
     headers.set("Content-Length", String(s3Response.ContentLength));
   }
@@ -120,6 +139,12 @@ export async function GET(
   }
   if (s3Response.LastModified) {
     headers.set("Last-Modified", s3Response.LastModified.toUTCString());
+  }
+  if (s3Response.AcceptRanges) {
+    headers.set("Accept-Ranges", s3Response.AcceptRanges);
+  }
+  if (s3Response.ContentRange) {
+    headers.set("Content-Range", s3Response.ContentRange);
   }
   if (variant === "original") {
     return new NextResponse("Not found", { status: 404 });
@@ -133,7 +158,10 @@ export async function GET(
       variant === "thumbnail"
         ? "public, max-age=31536000, immutable"
         : "public, max-age=86400, stale-while-revalidate=604800";
-    const cdnCache = "public, max-age=31536000, stale-while-revalidate=604800";
+    const cdnCache =
+      variant === "thumbnail"
+        ? "public, max-age=31536000, immutable"
+        : "public, max-age=31536000, stale-while-revalidate=604800";
     headers.set("Cache-Control", browserCache);
     headers.set("CDN-Cache-Control", cdnCache);
     headers.set("Cloudflare-CDN-Cache-Control", cdnCache);
@@ -146,7 +174,7 @@ export async function GET(
     headers.set("Content-Disposition", `inline; filename="${filename}"`);
   }
   return new NextResponse(s3Response.Body as ReadableStream, {
-    status: 200,
+    status: s3Response.ContentRange ? 206 : 200,
     headers,
   });
 }

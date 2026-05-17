@@ -305,6 +305,29 @@ export default function PhotoDetailModal({
   const [generatingLink, setGeneratingLink] = useState(false);
   const [copiedLink, setCopiedLink] = useState<"view" | "raw" | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [commentsLoaded, setCommentsLoaded] = useState(false);
+  const [showLocationMap, setShowLocationMap] = useState(false);
+  const exif = (media.exifData || {}) as unknown as ExifData;
+  const hasCamera = exif.Make || exif.make || exif.Model || exif.model;
+  const hasLens = exif.LensModel || exif.lensModel;
+  const hasCameraSettings =
+    exif.FocalLength !== undefined ||
+    exif.focalLength !== undefined ||
+    exif.FNumber !== undefined ||
+    exif.fNumber !== undefined ||
+    exif.ExposureTime !== undefined ||
+    exif.exposureTime !== undefined ||
+    exif.ISO !== undefined ||
+    exif.iso !== undefined;
+  const hasLocation =
+    (media.latitude !== undefined &&
+      media.latitude !== null &&
+      media.longitude !== undefined &&
+      media.longitude !== null) ||
+    (exif.latitude !== undefined && exif.longitude !== undefined);
+  const hasTakenDate = exif.DateTimeOriginal || exif.dateTimeOriginal;
+  const latitude = media.latitude ?? exif.latitude;
+  const longitude = media.longitude ?? exif.longitude;
   const displayedMentions = useMemo(() => {
     const uploaderIsMentioned = mentions.some(
       (m) => m.id === media.uploadedBy.id,
@@ -358,6 +381,8 @@ export default function PhotoDetailModal({
 
     setComments([]);
     setLoadingComments(true);
+    setCommentsLoaded(false);
+    setShowLocationMap(false);
 
     setLikeCount(media.likeCount || 0);
     setHasLiked(false);
@@ -455,7 +480,11 @@ export default function PhotoDetailModal({
 
     const fetchData = async () => {
       try {
-        const likesData = await getMediaLikes(media.id);
+        const [likesData, tagsData, mentionsData] = await Promise.all([
+          getMediaLikes(media.id),
+          getMediaTags(media.id),
+          getMediaMentions(media.id),
+        ]);
         if (shouldIgnore()) return;
         if (likesData.success) {
           setLikeCount(likesData.likeCount ?? 0);
@@ -463,33 +492,21 @@ export default function PhotoDetailModal({
         }
 
         setLoadingTags(true);
-        const tagsData = await getMediaTags(media.id);
-        if (shouldIgnore()) return;
         if (tagsData.success && tagsData.tags) {
           setTags(tagsData.tags);
         }
         setLoadingTags(false);
 
         setLoadingMentions(true);
-        const mentionsData = await getMediaMentions(media.id);
-        if (shouldIgnore()) return;
         if (mentionsData.success && mentionsData.mentions) {
           setMentions(mentionsData.mentions);
         }
         setLoadingMentions(false);
-
-        setLoadingComments(true);
-        const commentsData = await getMediaComments(media.id);
-        if (shouldIgnore()) return;
-        if (commentsData.success && commentsData.comments) {
-          setComments(commentsData.comments as unknown as Comment[]);
-        }
       } catch (error) {
         if (shouldIgnore()) return;
         logger.error("Error fetching data:", error);
       } finally {
         if (!shouldIgnore()) {
-          setLoadingComments(false);
           setLoadingTags(false);
           setLoadingMentions(false);
         }
@@ -502,6 +519,35 @@ export default function PhotoDetailModal({
       cancelled = true;
     };
   }, [media.id]);
+
+  useEffect(() => {
+    if (activeTab !== "comments" || commentsLoaded) return;
+    let cancelled = false;
+    setLoadingComments(true);
+    getMediaComments(media.id)
+      .then((commentsData) => {
+        if (cancelled) return;
+        if (commentsData.success && commentsData.comments) {
+          setComments(commentsData.comments as unknown as Comment[]);
+        }
+        setCommentsLoaded(true);
+      })
+      .catch((error) => {
+        if (!cancelled) logger.error("Error fetching comments:", error);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingComments(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, commentsLoaded, media.id]);
+
+  useEffect(() => {
+    if (activeTab !== "info" || !hasLocation || showLocationMap) return;
+    const timer = window.setTimeout(() => setShowLocationMap(true), 700);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, hasLocation, showLocationMap]);
   const handleLike = async () => {
     if (!currentUserId) {
       window.location.href = "/auth/signin";
@@ -557,6 +603,7 @@ export default function PhotoDetailModal({
           replies: [],
         } as unknown as Comment;
         setComments((prev) => [newCommentObj, ...prev]);
+        setCommentsLoaded(true);
         setNewComment("");
       }
     } catch (error) {
@@ -931,27 +978,6 @@ export default function PhotoDetailModal({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose, hasPrevious, onPrevious, hasNext, onNext]);
-  const exif = (media.exifData || {}) as unknown as ExifData;
-  const hasCamera = exif.Make || exif.make || exif.Model || exif.model;
-  const hasLens = exif.LensModel || exif.lensModel;
-  const hasCameraSettings =
-    exif.FocalLength !== undefined ||
-    exif.focalLength !== undefined ||
-    exif.FNumber !== undefined ||
-    exif.fNumber !== undefined ||
-    exif.ExposureTime !== undefined ||
-    exif.exposureTime !== undefined ||
-    exif.ISO !== undefined ||
-    exif.iso !== undefined;
-  const hasLocation =
-    (media.latitude !== undefined &&
-      media.latitude !== null &&
-      media.longitude !== undefined &&
-      media.longitude !== null) ||
-    (exif.latitude !== undefined && exif.longitude !== undefined);
-  const hasTakenDate = exif.DateTimeOriginal || exif.dateTimeOriginal;
-  const latitude = media.latitude ?? exif.latitude;
-  const longitude = media.longitude ?? exif.longitude;
   return (
     <div
       className="fixed inset-0 z-50 flex min-h-dvh items-stretch justify-center overflow-hidden bg-black/95 supports-[height:100dvh]:h-dvh"
@@ -1931,12 +1957,16 @@ export default function PhotoDetailModal({
                       </div>
                     </div>
                     <div className="rounded-lg overflow-hidden border border-zinc-800">
-                      <MiniMap
-                        lat={latitude}
-                        lng={longitude}
-                        zoom={14}
-                        className="h-40 w-full"
-                      />
+                      {showLocationMap ? (
+                        <MiniMap
+                          lat={latitude}
+                          lng={longitude}
+                          zoom={14}
+                          className="h-40 w-full"
+                        />
+                      ) : (
+                        <div className="h-40 w-full animate-pulse bg-zinc-900" />
+                      )}
                       <a
                         href={`/map?lat=${latitude}&lng=${longitude}&zoom=15`}
                         className="block w-full py-2 text-center text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors"

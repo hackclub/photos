@@ -30,6 +30,16 @@ const INITIAL_VISIBLE_ITEMS = 60;
 const VISIBLE_ITEMS_INCREMENT = 60;
 const THUMBNAIL_BATCH_SIZE = 24;
 
+function getGalleryBatchDelay() {
+  const nav = navigator as Navigator & {
+    deviceMemory?: number;
+  };
+  const lowEndDevice =
+    (nav.deviceMemory !== undefined && nav.deviceMemory <= 3) ||
+    (navigator.hardwareConcurrency || 4) <= 4;
+  return lowEndDevice ? 140 : 70;
+}
+
 let galleryImageObserver: IntersectionObserver | null = null;
 
 function getGalleryImageObserver() {
@@ -234,11 +244,14 @@ export default function MediaGallery({
       void loadThumbnailUrls(items);
 
       if (queuedThumbnailIdsRef.current.size > 0) {
-        thumbnailFlushTimerRef.current = setTimeout(flush, 120);
+        thumbnailFlushTimerRef.current = setTimeout(
+          flush,
+          getGalleryBatchDelay(),
+        );
       }
     };
 
-    thumbnailFlushTimerRef.current = setTimeout(flush, 80);
+    thumbnailFlushTimerRef.current = setTimeout(flush, getGalleryBatchDelay());
   };
 
   const prefetchAdjacentMedia = (item: MediaItem) => {

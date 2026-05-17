@@ -30,9 +30,15 @@ export async function GET(
   }
 
   const { id } = await params;
+  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+    return new Response("Not Found", { status: 404 });
+  }
   const searchParams = req.nextUrl.searchParams;
   const variant = searchParams.get("variant") || "display";
   const type = searchParams.get("type") || "media";
+  if (!["display", "thumbnail", "original"].includes(variant)) {
+    return new Response("Invalid variant", { status: 400 });
+  }
   try {
     const { user } = await getUserContext();
     let s3Key: string | null = null;

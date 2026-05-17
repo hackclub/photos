@@ -50,18 +50,98 @@ export async function processImageUpload(
   );
 }
 
-async function processImageUploadInternal(
-  input: Readable | Buffer,
+async function encodeJpegThumbnail(image: sharp.Sharp) {
+  return await image
+    .rotate()
+    .resize(400, 400, {
+      fit: "cover",
+      position: "attention",
+      withoutEnlargement: false,
+      kernel: sharp.kernel.lanczos3,
+    })
+    .flatten({ background: "#111111" })
+    .normalise()
+    .jpeg({ quality: 76, mozjpeg: true, progressive: true })
+    .toBuffer();
+}
+
+async function buildRobustImageThumbnail(buffer: Buffer) {
+  const attempts = [
+    () =>
+      sharp(buffer, { failOn: "none", animated: true, limitInputPixels: false })
+        .rotate()
+        .flatten({ background: "#111111" })
+        .resize(400, 400, {
+          fit: "cover",
+          position: "attention",
+          withoutEnlargement: false,
+          kernel: sharp.kernel.lanczos3,
+        })
+        .normalise()
+        .jpeg({ quality: 76, mozjpeg: true, progressive: true })
+        .toBuffer(),
+    () =>
+      sharp(buffer, { failOn: "none", limitInputPixels: false })
+        .rotate()
+        .flatten({ background: "#111111" })
+        .resize(400, 400, {
+          fit: "cover",
+          position: "center",
+          withoutEnlargement: false,
+          kernel: sharp.kernel.lanczos3,
+        })
+        .normalise()
+        .jpeg({ quality: 76, mozjpeg: true, progressive: true })
+        .toBuffer(),
+    () =>
+      sharp(buffer, { failOn: "none", limitInputPixels: false })
+        .flatten({ background: "#111111" })
+        .resize(400, 400, {
+          fit: "cover",
+          position: "center",
+          withoutEnlargement: false,
+          kernel: sharp.kernel.lanczos3,
+        })
+        .jpeg({ quality: 76, mozjpeg: true, progressive: true })
+        .toBuffer(),
+  ];
+  let lastError: unknown;
+  for (const attempt of attempts) {
+    try {
+      return await attempt();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Could not generate image thumbnail");
+}
+
+async function uploadThumbnail(
+  thumbnailBuffer: Buffer,
   mediaId: string,
-  uploadedBy: string,
-  eventId: string,
-  mimeType?: string,
+  tags?: Record<string, string>,
+  signal?: AbortSignal,
 ) {
-  const buffer = Buffer.isBuffer(input) ? input : await streamToBuffer(input);
+  const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
+  await uploadToS3(thumbnailBuffer, thumbnailS3Key, "image/jpeg", signal, tags);
+  return thumbnailS3Key;
+}
+
+async function generateImageThumbnailBuffer(
+  buffer: Buffer,
+  mimeType?: string,
+): Promise<{
+  thumbnailBuffer: Buffer;
+  width?: number;
+  height?: number;
+  exifBuffer?: Buffer;
+}> {
   const isHeic =
     mimeType?.toLowerCase() === "image/heic" ||
     mimeType?.toLowerCase() === "image/heif";
-  const processHeic = async () => {
+  if (isHeic) {
     let decoder: any = decode;
     if (
       typeof decoder !== "function" &&
@@ -72,17 +152,34 @@ async function processImageUploadInternal(
     const { width, height, data } = await decoder({
       buffer: new Uint8Array(buffer).buffer,
     });
-    const thumbnailBuffer = await sharp(Buffer.from(data), {
-      raw: { width, height, channels: 4 },
-    })
-      .resize(400, 400, {
-        fit: "cover",
-        position: "center",
-      })
-      .toFormat("jpeg", { quality: 80, mozjpeg: true })
-      .toBuffer();
-    const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
-    await uploadToS3(thumbnailBuffer, thumbnailS3Key, "image/jpeg", undefined, {
+    const thumbnailBuffer = await encodeJpegThumbnail(
+      sharp(Buffer.from(data), { raw: { width, height, channels: 4 } }),
+    );
+    return { thumbnailBuffer, width, height, exifBuffer: buffer };
+  }
+  const image = sharp(buffer, { failOn: "none", limitInputPixels: false });
+  const metadata = await image.metadata();
+  const thumbnailBuffer = await buildRobustImageThumbnail(buffer);
+  return {
+    thumbnailBuffer,
+    width: metadata.width,
+    height: metadata.height,
+    exifBuffer: metadata.exif,
+  };
+}
+
+async function processImageUploadInternal(
+  input: Readable | Buffer,
+  mediaId: string,
+  uploadedBy: string,
+  eventId: string,
+  mimeType?: string,
+) {
+  const buffer = Buffer.isBuffer(input) ? input : await streamToBuffer(input);
+  try {
+    const { thumbnailBuffer, width, height, exifBuffer } =
+      await generateImageThumbnailBuffer(buffer, mimeType);
+    const thumbnailS3Key = await uploadThumbnail(thumbnailBuffer, mediaId, {
       uploadedBy,
       eventId,
     });
@@ -90,62 +187,23 @@ async function processImageUploadInternal(
       thumbnailS3Key,
       width,
       height,
-      exifBuffer: buffer,
-    };
-  };
-  if (isHeic) {
-    try {
-      return await processHeic();
-    } catch (error) {
-      logger.error("Error processing HEIC image:", error);
-    }
-  }
-  try {
-    const pipeline = sharp(buffer);
-    const metadataPromise = pipeline.metadata();
-    const thumbnailPromise = pipeline
-      .clone()
-      .rotate()
-      .resize(400, 400, {
-        fit: "cover",
-        position: "center",
-      })
-      .toFormat("jpeg", { quality: 80, mozjpeg: true })
-      .toBuffer()
-      .then(async (buf) => {
-        const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
-        await uploadToS3(buf, thumbnailS3Key, "image/jpeg", undefined, {
-          uploadedBy,
-          eventId,
-        });
-        return thumbnailS3Key;
-      });
-    const [metadata, thumbnailS3Key] = await Promise.all([
-      metadataPromise,
-      thumbnailPromise,
-    ]);
-    return {
-      thumbnailS3Key,
-      width: metadata.width,
-      height: metadata.height,
-      exifBuffer: metadata.exif,
+      exifBuffer,
     };
   } catch (error: any) {
-    if (
-      !isHeic &&
-      (error.message?.includes("unsupported image format") ||
-        error.message?.includes(
-          "Input buffer contains unsupported image format",
-        ))
-    ) {
+    if (mimeType?.toLowerCase() !== "image/heic") {
       logger.info(
         "Sharp failed with unsupported format, attempting HEIC fallback...",
       );
       try {
-        return await processHeic();
+        const { thumbnailBuffer, width, height, exifBuffer } =
+          await generateImageThumbnailBuffer(buffer, "image/heic");
+        const thumbnailS3Key = await uploadThumbnail(thumbnailBuffer, mediaId, {
+          uploadedBy,
+          eventId,
+        });
+        return { thumbnailS3Key, width, height, exifBuffer };
       } catch (heicError) {
         logger.error("HEIC fallback failed:", heicError);
-        throw error;
       }
     }
     throw error;
@@ -185,52 +243,14 @@ export async function generateAndUploadThumbnail(
           logger.error("Image thumbnail generation requires a Buffer input");
           return null;
         }
-        let thumbnailBuffer: Buffer;
-        const isHeic =
-          mimeType.toLowerCase() === "image/heic" ||
-          mimeType.toLowerCase() === "image/heif";
-        if (isHeic) {
-          let decoder: any = decode;
-          if (
-            typeof decoder !== "function" &&
-            typeof decoder?.default === "function"
-          ) {
-            decoder = decoder.default;
-          }
-          const { width, height, data } = await decoder({
-            buffer: new Uint8Array(input).buffer,
-          });
-          thumbnailBuffer = await sharp(Buffer.from(data), {
-            raw: { width, height, channels: 4 },
-          })
-            .resize(400, 400, {
-              fit: "cover",
-              position: "center",
-            })
-            .toFormat("jpeg", { quality: 80, mozjpeg: true })
-            .toBuffer();
-        } else {
-          thumbnailBuffer = await sharp(input)
-            .rotate()
-            .resize(400, 400, {
-              fit: "cover",
-              position: "center",
-            })
-            .toFormat("jpeg", { quality: 80, mozjpeg: true })
-            .toBuffer();
-        }
+        const { thumbnailBuffer } = await generateImageThumbnailBuffer(
+          input,
+          mimeType,
+        );
         if (signal?.aborted) {
           return null;
         }
-        const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
-        await uploadToS3(
-          thumbnailBuffer,
-          thumbnailS3Key,
-          "image/jpeg",
-          signal,
-          tags,
-        );
-        return thumbnailS3Key;
+        return await uploadThumbnail(thumbnailBuffer, mediaId, tags, signal);
       },
     );
     thumbnailGenerationDuration.record(durationMs(startedAt), {
@@ -312,13 +332,9 @@ async function generateVideoThumbnail(
     if (signal?.aborted) return null;
     const { readFile } = await import("node:fs/promises");
     const thumbnailBuffer = await readFile(tempThumbnailPath);
-    const processedThumbnail = await sharp(thumbnailBuffer)
-      .resize(400, 400, {
-        fit: "cover",
-        position: "center",
-      })
-      .toFormat("jpeg", { quality: 80, mozjpeg: true })
-      .toBuffer();
+    const processedThumbnail = await encodeJpegThumbnail(
+      sharp(thumbnailBuffer),
+    );
     if (signal?.aborted) return null;
     const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
     await uploadToS3(

@@ -4,6 +4,7 @@ import {
   bigint,
   boolean,
   doublePrecision,
+  index,
   integer,
   jsonb,
   pgEnum,
@@ -92,92 +93,141 @@ export const series = pgTable("series", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
-export const events = pgTable("events", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-  description: text("description"),
-  bannerS3Key: text("banner_s3_key"),
-  seriesId: uuid("series_id").references(() => series.id, {
-    onDelete: "set null",
+export const events = pgTable(
+  "events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    description: text("description"),
+    bannerS3Key: text("banner_s3_key"),
+    seriesId: uuid("series_id").references(() => series.id, {
+      onDelete: "set null",
+    }),
+    visibility: visibilityEnum("visibility").notNull().default("auth_required"),
+    allowPublicSharing: boolean("allow_public_sharing").notNull().default(true),
+    requiresInvite: boolean("requires_invite").notNull().default(false),
+    inviteCode: text("invite_code").unique(),
+    eventDate: timestamp("event_date"),
+    location: text("location"),
+    locationCity: text("location_city"),
+    locationCountry: text("location_country"),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    createdById: uuid("created_by_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    visibilityIdx: index("events_visibility_idx").on(t.visibility),
+    createdByCreatedAtIdx: index("events_created_by_created_at_idx").on(
+      t.createdById,
+      t.createdAt.desc(),
+    ),
   }),
-  visibility: visibilityEnum("visibility").notNull().default("auth_required"),
-  allowPublicSharing: boolean("allow_public_sharing").notNull().default(true),
-  requiresInvite: boolean("requires_invite").notNull().default(false),
-  inviteCode: text("invite_code").unique(),
-  eventDate: timestamp("event_date"),
-  location: text("location"),
-  locationCity: text("location_city"),
-  locationCountry: text("location_country"),
-  latitude: doublePrecision("latitude"),
-  longitude: doublePrecision("longitude"),
-  createdById: uuid("created_by_id")
-    .notNull()
-    .references(() => users.id),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
-export const media = pgTable("media", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  eventId: uuid("event_id")
-    .notNull()
-    .references(() => events.id, { onDelete: "cascade" }),
-  uploadedById: uuid("uploaded_by_id")
-    .notNull()
-    .references(() => users.id),
-  s3Key: text("s3_key").notNull(),
-  s3Url: text("s3_url").notNull(),
-  thumbnailS3Key: text("thumbnail_s3_key"),
-  originalS3Key: text("original_s3_key"),
-  originalThumbnailS3Key: text("original_thumbnail_s3_key"),
-  blurredS3Key: text("blurred_s3_key"),
-  blurredThumbnailS3Key: text("blurred_thumbnail_s3_key"),
-  blurStatus: blurRequestStatusEnum("blur_status"),
-  filename: text("filename").notNull(),
-  mimeType: text("mime_type").notNull(),
-  fileSize: integer("file_size").notNull(),
-  width: integer("width"),
-  height: integer("height"),
-  latitude: doublePrecision("latitude"),
-  longitude: doublePrecision("longitude"),
-  exifData: jsonb("exif_data"),
-  takenAt: timestamp("taken_at"),
-  caption: text("caption"),
-  apiKeyId: uuid("api_key_id").references((): AnyPgColumn => apiKeys.id, {
-    onDelete: "set null",
+);
+export const media = pgTable(
+  "media",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    uploadedById: uuid("uploaded_by_id")
+      .notNull()
+      .references(() => users.id),
+    s3Key: text("s3_key").notNull(),
+    s3Url: text("s3_url").notNull(),
+    thumbnailS3Key: text("thumbnail_s3_key"),
+    originalS3Key: text("original_s3_key"),
+    originalThumbnailS3Key: text("original_thumbnail_s3_key"),
+    blurredS3Key: text("blurred_s3_key"),
+    blurredThumbnailS3Key: text("blurred_thumbnail_s3_key"),
+    blurStatus: blurRequestStatusEnum("blur_status"),
+    filename: text("filename").notNull(),
+    mimeType: text("mime_type").notNull(),
+    fileSize: integer("file_size").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    exifData: jsonb("exif_data"),
+    takenAt: timestamp("taken_at"),
+    caption: text("caption"),
+    apiKeyId: uuid("api_key_id").references((): AnyPgColumn => apiKeys.id, {
+      onDelete: "set null",
+    }),
+    uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    eventUploadedAtIdx: index("media_event_uploaded_at_idx").on(
+      t.eventId,
+      t.uploadedAt.desc(),
+    ),
+    uploadedByIdIdx: index("media_uploaded_by_id_idx").on(t.uploadedById),
+    apiKeyIdIdx: index("media_api_key_id_idx").on(t.apiKeyId),
   }),
-  uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
-});
-export const eventParticipants = pgTable("event_participants", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  eventId: uuid("event_id")
-    .notNull()
-    .references(() => events.id, { onDelete: "cascade" }),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  joinedAt: timestamp("joined_at").notNull().defaultNow(),
-});
-export const seriesAdmins = pgTable("series_admins", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  seriesId: uuid("series_id")
-    .notNull()
-    .references(() => series.id, { onDelete: "cascade" }),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  grantedAt: timestamp("granted_at").notNull().defaultNow(),
-});
-export const eventAdmins = pgTable("event_admins", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  eventId: uuid("event_id")
-    .notNull()
-    .references(() => events.id, { onDelete: "cascade" }),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  grantedAt: timestamp("granted_at").notNull().defaultNow(),
-});
+);
+export const eventParticipants = pgTable(
+  "event_participants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    joinedAt: timestamp("joined_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    userJoinedAtIdx: index("event_participants_user_joined_at_idx").on(
+      t.userId,
+      t.joinedAt.desc(),
+    ),
+    userEventIdx: index("event_participants_user_event_idx").on(
+      t.userId,
+      t.eventId,
+    ),
+  }),
+);
+export const seriesAdmins = pgTable(
+  "series_admins",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    seriesId: uuid("series_id")
+      .notNull()
+      .references(() => series.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    grantedAt: timestamp("granted_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    userSeriesIdx: index("series_admins_user_series_idx").on(
+      t.userId,
+      t.seriesId,
+    ),
+  }),
+);
+export const eventAdmins = pgTable(
+  "event_admins",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    grantedAt: timestamp("granted_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    userEventIdx: index("event_admins_user_event_idx").on(t.userId, t.eventId),
+  }),
+);
 export const pendingSeriesAdmins = pgTable("pending_series_admins", {
   id: uuid("id").primaryKey().defaultRandom(),
   seriesId: uuid("series_id")
@@ -208,32 +258,47 @@ export const pendingEventAdmins = pgTable("pending_event_admins", {
   }),
   claimedAt: timestamp("claimed_at"),
 });
-export const mediaLikes = pgTable("media_likes", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  mediaId: uuid("media_id")
-    .notNull()
-    .references(() => media.id, { onDelete: "cascade" }),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-export const mediaComments = pgTable("media_comments", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  mediaId: uuid("media_id")
-    .notNull()
-    .references(() => media.id, { onDelete: "cascade" }),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  parentCommentId: uuid("parent_comment_id").references(
-    (): AnyPgColumn => mediaComments.id,
-    { onDelete: "cascade" },
-  ),
-  content: text("content").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+export const mediaLikes = pgTable(
+  "media_likes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    mediaId: uuid("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    userMediaIdx: index("media_likes_user_media_idx").on(t.userId, t.mediaId),
+  }),
+);
+export const mediaComments = pgTable(
+  "media_comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    mediaId: uuid("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    parentCommentId: uuid("parent_comment_id").references(
+      (): AnyPgColumn => mediaComments.id,
+      { onDelete: "cascade" },
+    ),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    mediaCreatedAtIdx: index("media_comments_media_created_at_idx").on(
+      t.mediaId,
+      t.createdAt.desc(),
+    ),
+  }),
+);
 export const commentLikes = pgTable("comment_likes", {
   id: uuid("id").primaryKey().defaultRandom(),
   commentId: uuid("comment_id")

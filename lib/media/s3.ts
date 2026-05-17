@@ -74,6 +74,7 @@ if (!forcePathStyleFromEnv && endpoint?.includes(".r2.cloudflarestorage.com")) {
   s3Config.forcePathStyle = true;
 }
 const s3Client = new S3Client(s3Config);
+export const S3_BUCKET_NAME = s3BucketName;
 
 async function traceStorageOperation<T>(
   spanName: string,

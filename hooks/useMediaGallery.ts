@@ -3,6 +3,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getBulkMediaUrls } from "@/app/actions/bulk";
 import { logger } from "@/lib/logger";
 import type { Event, MediaItem } from "@/types/media";
+
+function shouldReduceMediaPrefetch() {
+  if (typeof navigator === "undefined") return false;
+  const nav = navigator as Navigator & {
+    deviceMemory?: number;
+  };
+  return Boolean(
+    (nav.deviceMemory !== undefined && nav.deviceMemory <= 3) ||
+      (navigator.hardwareConcurrency || 4) <= 4,
+  );
+}
 export function useMediaGalleryData(
   media: MediaItem[],
   events: Event[],
@@ -192,6 +203,7 @@ export function useMediaGalleryData(
   );
 
   const prefetchFullSizeUrls = useCallback(async (items: MediaItem[]) => {
+    if (shouldReduceMediaPrefetch()) return;
     const mediaIds = items
       .filter((item) => !fullSizeUrlCacheRef.current[item.id])
       .map((item) => item.id);

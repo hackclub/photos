@@ -7,6 +7,7 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { media, series as seriesTable } from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
+import { getRandomMediaIds } from "@/app/actions/signage";
 import { can, getUserContext } from "@/lib/policy";
 export default async function SeriesPage() {
   const session = await getSession();
@@ -69,23 +70,10 @@ export default async function SeriesPage() {
   );
   let heroImages: string[] = [];
   if (eventIds.length > 0) {
-    const randomMedia = await db.query.media.findMany({
-      where: inArray(media.eventId, eventIds),
-      limit: 20,
-      orderBy: [desc(media.uploadedAt)],
-    });
-    heroImages = randomMedia
-      .map((m) => {
-        try {
-          if (m.thumbnailS3Key) {
-            return getMediaProxyUrl(m.id, "thumbnail");
-          }
-          return getMediaProxyUrl(m.id);
-        } catch (_e) {
-          return null;
-        }
-      })
-      .filter((url): url is string => !!url);
+    const randomMediaIds = await getRandomMediaIds(20);
+    if (randomMediaIds.success) {
+      heroImages = randomMediaIds.ids.map((id) => getMediaProxyUrl(id, "thumbnail"));
+    }
   }
   return (
     <div className="min-h-screen">

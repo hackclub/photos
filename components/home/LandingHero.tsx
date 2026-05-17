@@ -1,6 +1,7 @@
 "use client";
 import { Anton } from "next/font/google";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { twMerge } from "tailwind-merge";
 
 const heroFont = Anton({
@@ -20,11 +21,15 @@ export default function LandingHero({
   actions,
 }: LandingHeroProps) {
   const baseImages = images.slice(0, 12);
+  const [seed, setSeed] = useState(0);
+  useEffect(() => {
+    setSeed(Math.floor(Date.now() / 3600000));
+  }, []);
   const prepareRow = (offset: number) => {
     if (baseImages.length === 0) return [];
     const rowImages = Array.from(
       { length: Math.min(baseImages.length, 6) },
-      (_, i) => baseImages[(i + offset) % baseImages.length],
+      (_, i) => baseImages[(i + offset + seed) % baseImages.length],
     );
     return [...rowImages, ...rowImages];
   };

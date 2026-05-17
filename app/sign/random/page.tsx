@@ -15,6 +15,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { useHeicUrl } from "@/hooks/useHeicUrl";
 import { logger } from "@/lib/client-logger";
+import { getRandomMediaIds } from "@/app/actions/signage";
 
 type MediaItem = {
   id: string;
@@ -82,7 +83,7 @@ export default function RandomSignagePage() {
   const mediaQueue = useRef<MediaItem[]>([]);
   const prefetchThreshold = 3;
   useEffect(() => {
-    getSeriesAndEvents().then((res) => {
+    Promise.all([getSeriesAndEvents(), getRandomMediaIds(1)]).then(([res]) => {
       if (res.success) {
         setOptions({
           series: res.series || [],

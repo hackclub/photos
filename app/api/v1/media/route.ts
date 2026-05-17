@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { unauthorizedResponse, validateApiKey } from "@/lib/auth-api";
 import { APP_URL } from "@/lib/constants";
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
   const isRandom = searchParams.get("random") === "true";
   const eventSlug = searchParams.get("event");
-  const page = parseInt(searchParams.get("page") || "1", 10);
+  const page = Math.max(parseInt(searchParams.get("page") || "1", 10), 1);
   const limitParam = parseInt(searchParams.get("limit") || "20", 10);
   const countParam = parseInt(searchParams.get("count") || "1", 10);
   const limit = isRandom
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       .innerJoin(events, eq(media.eventId, events.id))
       .where(and(...conditions));
     const mediaItems = await baseQuery
-      .orderBy(desc(media.uploadedAt))
+      .orderBy(isRandom ? sql`random()` : desc(media.uploadedAt))
       .limit(limit)
       .offset(isRandom ? 0 : offset);
     const mediaWithUrls = mediaItems.map((item) => {

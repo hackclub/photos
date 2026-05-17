@@ -16,6 +16,7 @@ import { logger } from "@/lib/client-logger";
 import {
   extractMetadata,
   generateThumbnail,
+  getAdaptiveUploadLimits,
   MAX_CONCURRENT_PROCESSING,
   MAX_CONCURRENT_UPLOADS,
   MAX_IMAGE_SIZE,
@@ -189,6 +190,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       let finalThumbnailS3Key: string | null = null;
       let finalMediaId: string;
       let thumbnailBlob: Blob | null = null;
+      let thumbnailError: string | null = null;
       let metadata: {
         exifData: ExifData | null;
         width: number | null;
@@ -201,10 +203,21 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         height: null,
         takenAt: null,
       };
-      [thumbnailBlob, metadata] = await Promise.all([
+      const [thumbnailResult, extractedMetadata] = await Promise.allSettled([
         generateThumbnail(fileObj.file),
         extractMetadata(fileObj.file),
       ]);
+      if (thumbnailResult.status === "fulfilled") {
+        thumbnailBlob = thumbnailResult.value;
+      } else {
+        thumbnailError =
+          thumbnailResult.reason instanceof Error
+            ? thumbnailResult.reason.message
+            : "Client thumbnail generation failed";
+      }
+      if (extractedMetadata.status === "fulfilled") {
+        metadata = extractedMetadata.value;
+      }
       if (fileObj.file.size > MULTIPART_THRESHOLD) {
         const result = await uploadMultipartToS3(
           fileObj.file,
@@ -298,6 +311,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           exifData: metadata.exifData,
           s3Key: finalS3Key,
           thumbnailS3Key: thumbnailBlob ? finalThumbnailS3Key : null,
+          thumbnailFailed: !thumbnailBlob,
+          thumbnailError,
         },
         true,
       );
@@ -402,13 +417,21 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       }
       return;
     }
+    const adaptiveLimits = getAdaptiveUploadLimits();
+    const maxUploads = Math.min(
+      MAX_CONCURRENT_UPLOADS,
+      adaptiveLimits.maxUploads,
+    );
+    const maxProcessing = Math.min(
+      MAX_CONCURRENT_PROCESSING,
+      adaptiveLimits.maxProcessing,
+    );
     if (
-      uploadingFiles.length < MAX_CONCURRENT_UPLOADS &&
-      processingFiles.length < MAX_CONCURRENT_PROCESSING
+      uploadingFiles.length < maxUploads &&
+      processingFiles.length < maxProcessing
     ) {
-      const uploadSlots = MAX_CONCURRENT_UPLOADS - uploadingFiles.length;
-      const processingSlots =
-        MAX_CONCURRENT_PROCESSING - processingFiles.length;
+      const uploadSlots = maxUploads - uploadingFiles.length;
+      const processingSlots = maxProcessing - processingFiles.length;
       const slotsAvailable = Math.min(uploadSlots, processingSlots);
       if (slotsAvailable > 0) {
         const filesToStart = pendingFiles.slice(0, slotsAvailable);

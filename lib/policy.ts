@@ -1,4 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
+import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
 import {
   eventAdmins,
@@ -210,23 +211,13 @@ async function checkEventPermission(
 
   let isEventAdmin = false;
   if (user) {
-    const eventAdmin = await db.query.eventAdmins.findFirst({
-      where: and(
-        eq(eventAdmins.userId, user.id),
-        eq(eventAdmins.eventId, eventId),
-      ),
-    });
-    let isSeriesAdmin = false;
-    if (eventData.seriesId) {
-      const seriesAdmin = await db.query.seriesAdmins.findFirst({
-        where: and(
-          eq(seriesAdmins.userId, user.id),
-          eq(seriesAdmins.seriesId, eventData.seriesId),
-        ),
-      });
-      isSeriesAdmin = !!seriesAdmin;
-    }
-    isEventAdmin = !!eventAdmin || isSeriesAdmin;
+    const isDirectEventAdmin = user.eventAdmins.some(
+      (admin) => admin.eventId === eventId,
+    );
+    const isSeriesAdmin = eventData.seriesId
+      ? user.seriesAdmins.some((admin) => admin.seriesId === eventData.seriesId)
+      : false;
+    isEventAdmin = isDirectEventAdmin || isSeriesAdmin;
   }
 
   if (action === "view") {
@@ -316,7 +307,6 @@ async function checkCommentPermission(
   }
   return false;
 }
-import { unstable_cache } from "next/cache";
 
 export const getCachedUserContext = unstable_cache(
   async (userId: string) => {
@@ -339,7 +329,7 @@ export const getCachedUserContext = unstable_cache(
     });
   },
   ["user-context"],
-  { revalidate: 3600, tags: ["user"] }
+  { revalidate: 3600, tags: ["user"] },
 );
 
 export async function getUserContext(

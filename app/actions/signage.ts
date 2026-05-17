@@ -43,7 +43,7 @@ export async function getRandomMedia(filter: SignageFilter = {}, limit = 50) {
     ];
     const randomMedia = await db.query.media.findMany({
       where: and(...conditions),
-      orderBy: [desc(media.uploadedAt)],
+      orderBy: [sql`random()`],
       limit: limit,
       with: {
         event: true,
@@ -127,6 +127,29 @@ export async function getLatestMedia(limit = 1) {
   } catch (error) {
     logger.error("Error fetching latest media:", error);
     return { success: false, error: "Failed to fetch latest media" };
+  }
+}
+
+export async function getRandomMediaIds(limit = 12) {
+  try {
+    const session = await getSession();
+    const user = await getUserContext(session?.id);
+    if (user?.isBanned) return { success: true, ids: [] as string[] };
+    const accessibleEventIds = await getAccessibleEventIdsForUser(user?.id);
+    if (accessibleEventIds.length === 0) return { success: true, ids: [] as string[] };
+    const rows = await db.query.media.findMany({
+      where: and(
+        inArray(media.eventId, accessibleEventIds),
+        sql`${media.mimeType} LIKE 'image/%'`,
+      ),
+      orderBy: [sql`random()`],
+      limit,
+      columns: { id: true },
+    });
+    return { success: true, ids: rows.map((row) => row.id) };
+  } catch (error) {
+    logger.error("Error fetching random media ids:", error);
+    return { success: false, error: "Failed to fetch media" };
   }
 }
 export async function getSeriesAndEvents() {

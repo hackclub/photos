@@ -12,6 +12,7 @@ import {
 } from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 import { getAccessibleEventIds, getUserContext } from "@/lib/policy";
+import { getRandomMediaIds } from "@/app/actions/signage";
 export default async function EventsPage() {
   const session = await getSession();
   const ctx = await getUserContext(session?.id);
@@ -100,25 +101,10 @@ export default async function EventsPage() {
     return b.createdAt.getTime() - a.createdAt.getTime();
   });
   const randomMedia =
-    eventIds.length > 0
-      ? await db.query.media.findMany({
-          where: inArray(media.eventId, eventIds),
-          limit: 20,
-          orderBy: [desc(media.uploadedAt)],
-        })
-      : [];
-  const heroImages = randomMedia
-    .map((m) => {
-      try {
-        if (m.thumbnailS3Key) {
-          return getMediaProxyUrl(m.id, "thumbnail");
-        }
-        return getMediaProxyUrl(m.id);
-      } catch (_e) {
-        return null;
-      }
-    })
-    .filter((url): url is string => !!url);
+    eventIds.length > 0 ? await getRandomMediaIds(20) : { success: true, ids: [] };
+  const heroImages = randomMedia.success
+    ? randomMedia.ids.map((id) => getMediaProxyUrl(id, "thumbnail"))
+    : [];
   return (
     <div className="min-h-screen">
       <Hero

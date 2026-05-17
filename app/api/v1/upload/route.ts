@@ -69,6 +69,9 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+    if (!/^[0-9a-f-]{36}$/i.test(eventId)) {
+      return NextResponse.json({ error: "Invalid event ID" }, { status: 400 });
+    }
     const validation = validateMediaFile(file);
     if (!validation.valid) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
@@ -81,7 +84,7 @@ export async function POST(req: NextRequest) {
         { status: 403 },
       );
     }
-    const storageCheck = await checkStorageLimit(user.id, file.size);
+    const storageCheck = await checkStorageLimit(user.id, file.size, ctx);
     if (!storageCheck.allowed) {
       return NextResponse.json(
         { error: "Storage limit exceeded" },
@@ -98,7 +101,6 @@ export async function POST(req: NextRequest) {
       eventId,
       uploadedBy: user.id,
     };
-    await uploadToS3(originalBuffer, s3Key, mimeType, undefined, tags);
     let thumbnailS3Key: string | null = null;
     let exifData: Record<string, unknown> | null = null;
     let width: number | null = null;
@@ -106,6 +108,13 @@ export async function POST(req: NextRequest) {
     let takenAt: Date | null = null;
     let latitude: number | null = null;
     let longitude: number | null = null;
+    const uploadOriginalPromise = uploadToS3(
+      originalBuffer,
+      s3Key,
+      mimeType,
+      undefined,
+      tags,
+    );
     if (file.type.startsWith("image/")) {
       try {
         const result = await processImageUpload(
@@ -116,8 +125,8 @@ export async function POST(req: NextRequest) {
           mimeType,
         );
         thumbnailS3Key = result.thumbnailS3Key;
-        width = result.width;
-        height = result.height;
+        width = result.width ?? null;
+        height = result.height ?? null;
         if (result.exifBuffer) {
           const exifResult = await extractExifData(result.exifBuffer, mimeType);
           if (exifResult) {
@@ -155,6 +164,12 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         logger.error("Video processing error:", e);
       }
+    }
+    try {
+      await uploadOriginalPromise;
+    } catch (error) {
+      await deleteMediaAndThumbnail(s3Key, thumbnailS3Key);
+      throw error;
     }
     let inserted: typeof media.$inferSelect;
     try {

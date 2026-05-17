@@ -1,7 +1,11 @@
 "use server";
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
-import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  HeadObjectCommand,
+  NotFound,
+} from "@aws-sdk/client-s3";
 import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -14,6 +18,7 @@ import {
   createMultipartUpload,
   getSignedPartUrl,
   getSignedUploadUrl,
+  S3_BUCKET_NAME,
   s3Client,
 } from "@/lib/media/s3";
 import {
@@ -29,6 +34,31 @@ import {
   photoUploadsTotal,
   traceAsync,
 } from "@/lib/telemetry";
+
+const MEDIA_KEY_PATTERN = /^media\/([0-9a-f-]{36})\/[A-Za-z0-9._-]+$/i;
+const UUID_PATTERN = /^[0-9a-f-]{36}$/i;
+
+function getMediaIdFromKey(s3Key: string) {
+  return MEDIA_KEY_PATTERN.exec(s3Key)?.[1] ?? null;
+}
+
+async function objectExists(key: string) {
+  try {
+    await s3Client.send(
+      new HeadObjectCommand({
+        Bucket: S3_BUCKET_NAME,
+        Key: key,
+      }),
+    );
+    return true;
+  } catch (error: any) {
+    if (error instanceof NotFound || error?.$metadata?.httpStatusCode === 404) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 export async function getPresignedUrl(
   eventId: string,
   filename: string,
@@ -40,6 +70,9 @@ export async function getPresignedUrl(
     const user = await getUserContext(session?.id);
     if (!user) {
       return { success: false, error: "Unauthorized" };
+    }
+    if (!UUID_PATTERN.test(eventId)) {
+      return { success: false, error: "Invalid event ID" };
     }
     if (!(await can(user, "upload", "event", eventId))) {
       return {
@@ -54,7 +87,7 @@ export async function getPresignedUrl(
     if (!validation.valid) {
       return { success: false, error: validation.error };
     }
-    const storageCheck = await checkStorageLimit(user.id, fileSize);
+    const storageCheck = await checkStorageLimit(user.id, fileSize, user);
     if (!storageCheck.allowed) {
       const remainingGB = (
         (storageCheck.limit - storageCheck.currentUsage) /
@@ -96,10 +129,13 @@ export async function initiateMultipartUpload(
     const session = await getSession();
     const user = await getUserContext(session?.id);
     if (!user) return { success: false, error: "Unauthorized" };
+    if (!UUID_PATTERN.test(eventId)) {
+      return { success: false, error: "Invalid event ID" };
+    }
     if (!(await can(user, "upload", "event", eventId))) {
       return { success: false, error: "Forbidden" };
     }
-    const storageCheck = await checkStorageLimit(user.id, fileSize);
+    const storageCheck = await checkStorageLimit(user.id, fileSize, user);
     if (!storageCheck.allowed) {
       return { success: false, error: "Storage limit exceeded" };
     }
@@ -134,6 +170,19 @@ export async function getMultipartPresignedUrls(
     const session = await getSession();
     const user = await getUserContext(session?.id);
     if (!user) return { success: false, error: "Unauthorized" };
+    if (!getMediaIdFromKey(s3Key)) {
+      return { success: false, error: "Invalid upload key" };
+    }
+    if (
+      partNumbers.length === 0 ||
+      partNumbers.length > 100 ||
+      partNumbers.some(
+        (partNumber) =>
+          !Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000,
+      )
+    ) {
+      return { success: false, error: "Invalid upload parts" };
+    }
     const urls = await Promise.all(
       partNumbers.map((partNumber) =>
         getSignedPartUrl(s3Key, uploadId, partNumber),
@@ -157,6 +206,9 @@ export async function completeMultipart(
     const session = await getSession();
     const user = await getUserContext(session?.id);
     if (!user) return { success: false, error: "Unauthorized" };
+    if (!getMediaIdFromKey(s3Key) || parts.length === 0) {
+      return { success: false, error: "Invalid upload key" };
+    }
     await completeMultipartUpload(s3Key, uploadId, parts);
     return { success: true };
   } catch (error) {
@@ -169,6 +221,9 @@ export async function abortMultipart(s3Key: string, uploadId: string) {
     const session = await getSession();
     const user = await getUserContext(session?.id);
     if (!user) return { success: false, error: "Unauthorized" };
+    if (!getMediaIdFromKey(s3Key)) {
+      return { success: false, error: "Invalid upload key" };
+    }
     await abortMultipartUpload(s3Key, uploadId);
     return { success: true };
   } catch (error) {
@@ -189,6 +244,8 @@ export async function finalizeUpload(
     exifData: ExifData | null;
     s3Key: string;
     thumbnailS3Key: string | null;
+    thumbnailFailed?: boolean;
+    thumbnailError?: string | null;
   },
   skipRevalidation = false,
 ) {
@@ -206,25 +263,64 @@ export async function finalizeUpload(
         if (!user) {
           return { success: false, error: "Unauthorized" };
         }
+        if (!UUID_PATTERN.test(eventId) || !UUID_PATTERN.test(mediaId)) {
+          return { success: false, error: "Invalid upload identity" };
+        }
         if (!(await can(user, "upload", "event", eventId))) {
           return { success: false, error: "Forbidden" };
+        }
+        const validation = validateMediaFile({
+          type: data.mimeType,
+          size: data.fileSize,
+        } as File);
+        if (!validation.valid) {
+          return { success: false, error: validation.error };
+        }
+        if (getMediaIdFromKey(data.s3Key) !== mediaId) {
+          return { success: false, error: "Invalid upload key" };
+        }
+        if (
+          data.thumbnailS3Key &&
+          getMediaIdFromKey(data.thumbnailS3Key) !== mediaId
+        ) {
+          return { success: false, error: "Invalid thumbnail key" };
+        }
+        if (data.thumbnailFailed) {
+          logger.warn(
+            {
+              mediaId,
+              eventId,
+              reason: data.thumbnailError,
+              mimeType: data.mimeType,
+            },
+            "Client thumbnail generation failed; falling back to server processing",
+          );
         }
         let realFileSize = data.fileSize;
         let serverExifData = null;
         let thumbnailS3Key = data.thumbnailS3Key;
         try {
           const headCommand = new HeadObjectCommand({
-            Bucket: process.env.S3_BUCKET_NAME,
+            Bucket: S3_BUCKET_NAME,
             Key: data.s3Key,
           });
           const s3Metadata = await s3Client.send(headCommand);
           if (s3Metadata.ContentLength) {
             realFileSize = s3Metadata.ContentLength;
           }
-          if (data.mimeType.startsWith("image/")) {
+          if (realFileSize > data.fileSize + 1024 * 1024) {
+            return { success: false, error: "Uploaded file size mismatch" };
+          }
+          if (
+            data.thumbnailS3Key &&
+            !(await objectExists(data.thumbnailS3Key))
+          ) {
+            thumbnailS3Key = null;
+          }
+          if (data.mimeType.startsWith("image/") && !thumbnailS3Key) {
             try {
               const getCommand = new GetObjectCommand({
-                Bucket: process.env.S3_BUCKET_NAME,
+                Bucket: S3_BUCKET_NAME,
                 Key: data.s3Key,
               });
               const s3Object = await s3Client.send(getCommand);
@@ -260,7 +356,7 @@ export async function finalizeUpload(
           } else if (data.mimeType.startsWith("video/")) {
             try {
               const getCommand = new GetObjectCommand({
-                Bucket: process.env.S3_BUCKET_NAME,
+                Bucket: S3_BUCKET_NAME,
                 Key: data.s3Key,
               });
               const s3Object = await s3Client.send(getCommand);

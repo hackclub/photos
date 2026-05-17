@@ -11,10 +11,19 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 31536000,
     localPatterns: [
       {
-        pathname: "/**",
+        pathname: "/media/**",
       },
       {
-        pathname: "/**",
+        pathname: "/assets/**",
+      },
+      {
+        pathname: "/api/v1/download/**",
+      },
+      {
+        pathname: "/api/v1/view/**",
+      },
+      {
+        pathname: "/media/**",
         search: "?t=*",
       },
     ],

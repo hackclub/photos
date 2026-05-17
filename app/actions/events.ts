@@ -313,6 +313,12 @@ export async function createEvent(data: EventInput) {
     slug,
     seriesId,
   } = data;
+  if (!name.trim()) {
+    return { success: false, error: "Event name is required" };
+  }
+  if (!slug.trim()) {
+    return { success: false, error: "Event slug is required" };
+  }
   let inviteCode = null;
   if (requiresInvite) {
     const { randomBytes } = await import("node:crypto");
@@ -360,6 +366,12 @@ export async function createEvent(data: EventInput) {
         return {
           success: false,
           error: "An event with this slug already exists.",
+        };
+      }
+      if (error?.constraint_name === "events_invite_code_unique") {
+        return {
+          success: false,
+          error: "Invite code generation conflicted. Please try again.",
         };
       }
     }

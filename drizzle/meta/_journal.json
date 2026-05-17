@@ -15,6 +15,13 @@
       "when": 1778506225000,
       "tag": "0001_blur_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778976571854,
+      "tag": "0002_optimize_media_performance",
+      "breakpoints": true
     }
   ]
 }

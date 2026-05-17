@@ -1,6 +1,7 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { events, media, users } from "@/lib/db/schema";
+import type { UserContext } from "@/lib/policy";
 import { getUserContext } from "@/lib/policy";
 import { getUserDisplayName } from "@/lib/user-display";
 export const DEFAULT_STORAGE_LIMIT = 20 * 1024 * 1024 * 1024;
@@ -17,13 +18,14 @@ export async function getUserStorageUsage(userId: string): Promise<number> {
 export async function checkStorageLimit(
   userId: string,
   newFileSize: number,
+  existingUserContext?: UserContext | null,
 ): Promise<{
   allowed: boolean;
   currentUsage: number;
   limit: number;
   isUnlimited: boolean;
 }> {
-  const userContext = await getUserContext(userId);
+  const userContext = existingUserContext ?? (await getUserContext(userId));
   if (!userContext) {
     throw new Error("User not found");
   }

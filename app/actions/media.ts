@@ -346,8 +346,8 @@ export async function uploadMedia(formData: FormData) {
           mimeType,
         );
         thumbnailS3Key = result.thumbnailS3Key;
-        width = result.width;
-        height = result.height;
+        width = result.width ?? null;
+        height = result.height ?? null;
         if (result.exifBuffer) {
           const exifResult = await extractExifData(result.exifBuffer, mimeType);
           if (exifResult) {

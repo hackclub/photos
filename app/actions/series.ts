@@ -142,6 +142,12 @@ export async function createSeries(data: SeriesInput) {
     return { success: false, error: "Forbidden" };
   }
   const { name, description, visibility, slug } = data;
+  if (!name.trim()) {
+    return { success: false, error: "Series name is required" };
+  }
+  if (!slug.trim()) {
+    return { success: false, error: "Series slug is required" };
+  }
   try {
     const [newSeries] = await db
       .insert(series)
@@ -167,6 +173,11 @@ export async function createSeries(data: SeriesInput) {
     return { success: true, series: newSeries };
   } catch (error: unknown) {
     logger.error("Create series error:", error);
+    if (error instanceof Error) {
+      if (error.message.includes("duplicate key")) {
+        return { success: false, error: "A series with this slug already exists." };
+      }
+    }
     const errorMessage =
       error instanceof Error ? error.message : "Failed to create series";
     return {

@@ -11,6 +11,7 @@ import {
   seriesAdmins,
 } from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
+import { getRandomMediaIds } from "@/app/actions/signage";
 export default async function HomePage() {
   const session = await getSession();
   if (!session) {
@@ -119,22 +120,10 @@ export default async function HomePage() {
   const joinedEventIds = userParticipations.map((p) => p.eventId);
   let heroImages: string[] = [];
   if (joinedEventIds.length > 0) {
-    const randomMedia = await db.query.media.findMany({
-      where: (media, { inArray }) => inArray(media.eventId, joinedEventIds),
-      limit: 20,
-      orderBy: [desc(media.uploadedAt)],
-    });
-    const urls = randomMedia.map((m) => {
-      try {
-        if (m.thumbnailS3Key) {
-          return getMediaProxyUrl(m.id, "thumbnail");
-        }
-        return getMediaProxyUrl(m.id);
-      } catch (_e) {
-        return null;
-      }
-    });
-    heroImages = urls.filter((url): url is string => !!url);
+    const randomMediaIds = await getRandomMediaIds(20);
+    if (randomMediaIds.success) {
+      heroImages = randomMediaIds.ids.map((id) => getMediaProxyUrl(id, "thumbnail"));
+    }
   }
   return (
     <UserDashboard

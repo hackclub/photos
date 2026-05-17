@@ -1,0 +1,11 @@
+CREATE INDEX IF NOT EXISTS "events_visibility_idx" ON "events" ("visibility");
+CREATE INDEX IF NOT EXISTS "events_created_by_created_at_idx" ON "events" ("created_by_id", "created_at" DESC);
+CREATE INDEX IF NOT EXISTS "media_event_uploaded_at_idx" ON "media" ("event_id", "uploaded_at" DESC);
+CREATE INDEX IF NOT EXISTS "media_uploaded_by_id_idx" ON "media" ("uploaded_by_id");
+CREATE INDEX IF NOT EXISTS "media_api_key_id_idx" ON "media" ("api_key_id");
+CREATE INDEX IF NOT EXISTS "event_participants_user_joined_at_idx" ON "event_participants" ("user_id", "joined_at" DESC);
+CREATE INDEX IF NOT EXISTS "event_participants_user_event_idx" ON "event_participants" ("user_id", "event_id");
+CREATE INDEX IF NOT EXISTS "series_admins_user_series_idx" ON "series_admins" ("user_id", "series_id");
+CREATE INDEX IF NOT EXISTS "event_admins_user_event_idx" ON "event_admins" ("user_id", "event_id");
+CREATE INDEX IF NOT EXISTS "media_likes_user_media_idx" ON "media_likes" ("user_id", "media_id");
+CREATE INDEX IF NOT EXISTS "media_comments_media_created_at_idx" ON "media_comments" ("media_id", "created_at" DESC);

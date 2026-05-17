@@ -9,7 +9,7 @@ import { getUserContext } from "@/lib/auth-api";
 import { db } from "@/lib/db";
 import { events, series, users } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
-import { s3Client } from "@/lib/media/s3";
+import { S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
 export const dynamic = "force-dynamic";
 
 export async function GET(
@@ -24,6 +24,13 @@ export async function GET(
   },
 ) {
   const { type, id } = await params;
+  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+    return new NextResponse("Not Found", { status: 404 });
+  }
+  const requestRange = req.headers.get("range") ?? undefined;
+  if (requestRange && !/^bytes=\d*-\d*(,\d*-\d*)?$/.test(requestRange)) {
+    return new NextResponse("Invalid range", { status: 416 });
+  }
   let { user } = await getUserContext();
 
   if (!user) {
@@ -103,30 +110,54 @@ export async function GET(
       return new NextResponse("Not Found", { status: 404 });
     }
     const command = new GetObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME,
+      Bucket: S3_BUCKET_NAME,
       Key: s3Key,
+      Range: requestRange,
+      IfNoneMatch: req.headers.get("if-none-match") ?? undefined,
+      IfModifiedSince: req.headers.get("if-modified-since")
+        ? new Date(req.headers.get("if-modified-since") as string)
+        : undefined,
     });
     let s3Response: GetObjectCommandOutput;
     try {
       s3Response = await s3Client.send(command);
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.$metadata?.httpStatusCode === 304) {
+        return new NextResponse(null, { status: 304 });
+      }
       logger.error(`Failed to fetch asset from S3:`, error);
       return new NextResponse("Failed to fetch asset", { status: 502 });
     }
     const headers = new Headers();
+    headers.set("X-Content-Type-Options", "nosniff");
     if (s3Response.ContentType) {
       headers.set("Content-Type", s3Response.ContentType);
     }
     if (s3Response.ContentLength) {
       headers.set("Content-Length", String(s3Response.ContentLength));
     }
+    if (s3Response.ETag) {
+      headers.set("ETag", s3Response.ETag);
+    }
+    if (s3Response.LastModified) {
+      headers.set("Last-Modified", s3Response.LastModified.toUTCString());
+    }
+    if (s3Response.AcceptRanges) {
+      headers.set("Accept-Ranges", s3Response.AcceptRanges);
+    }
+    if (s3Response.ContentRange) {
+      headers.set("Content-Range", s3Response.ContentRange);
+    }
     if (isPublic) {
-      headers.set("Cache-Control", "public, max-age=31536000, immutable");
+      const cacheControl = "public, max-age=31536000, immutable";
+      headers.set("Cache-Control", cacheControl);
+      headers.set("CDN-Cache-Control", cacheControl);
+      headers.set("Cloudflare-CDN-Cache-Control", cacheControl);
     } else {
       headers.set("Cache-Control", "private, max-age=3600");
     }
     return new NextResponse(s3Response.Body as ReadableStream, {
-      status: 200,
+      status: s3Response.ContentRange ? 206 : 200,
       headers,
     });
   } catch (error) {
