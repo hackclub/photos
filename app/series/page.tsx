@@ -71,9 +71,7 @@ export default async function SeriesPage() {
   let heroImages: string[] = [];
   if (eventIds.length > 0) {
     const randomMediaIds = await getRandomMediaIds(20);
-    if (randomMediaIds.success) {
-      heroImages = randomMediaIds.ids.map((id) => getMediaProxyUrl(id, "thumbnail"));
-    }
+    heroImages = (randomMediaIds.ids ?? []).map((id) => getMediaProxyUrl(id, "thumbnail"));
   }
   return (
     <div className="min-h-screen">

@@ -121,9 +121,7 @@ export default async function HomePage() {
   let heroImages: string[] = [];
   if (joinedEventIds.length > 0) {
     const randomMediaIds = await getRandomMediaIds(20);
-    if (randomMediaIds.success) {
-      heroImages = randomMediaIds.ids.map((id) => getMediaProxyUrl(id, "thumbnail"));
-    }
+    heroImages = (randomMediaIds.ids ?? []).map((id) => getMediaProxyUrl(id, "thumbnail"));
   }
   return (
     <UserDashboard

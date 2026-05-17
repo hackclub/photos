@@ -101,10 +101,9 @@ export default async function EventsPage() {
     return b.createdAt.getTime() - a.createdAt.getTime();
   });
   const randomMedia =
-    eventIds.length > 0 ? await getRandomMediaIds(20) : { success: true, ids: [] };
-  const heroImages = randomMedia.success
-    ? randomMedia.ids.map((id) => getMediaProxyUrl(id, "thumbnail"))
-    : [];
+    eventIds.length > 0 ? await getRandomMediaIds(20) : { success: true as const, ids: [] as string[] };
+  const heroMediaIds = randomMedia.ids ?? [];
+  const heroImages = heroMediaIds.map((id) => getMediaProxyUrl(id, "thumbnail"));
   return (
     <div className="min-h-screen">
       <Hero
