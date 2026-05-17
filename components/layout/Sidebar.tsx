@@ -35,7 +35,11 @@ const publicNavigation = [
 const adminNavigation = [
   { name: "Admin Dashboard", href: "/admin", icon: HiCog6Tooth },
   { name: "Reports", href: "/admin/reports", icon: HiExclamationTriangle },
-  { name: "Blur Requests", href: "/admin/blur-requests", icon: HiExclamationTriangle },
+  {
+    name: "Blur Requests",
+    href: "/admin/blur-requests",
+    icon: HiExclamationTriangle,
+  },
   { name: "Manage Events", href: "/admin/events", icon: HiCalendar },
   { name: "Manage Series", href: "/admin/series", icon: HiFolder },
   { name: "Manage Tags", href: "/admin/tags", icon: HiTag },
@@ -133,7 +137,11 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
         </button>
 
         <div className="border-b border-zinc-800 p-4 pt-[calc(env(safe-area-inset-top)+1rem)] sm:p-6">
-          <Link prefetch={false} href="/" className="flex items-center gap-3 mb-4">
+          <Link
+            prefetch={false}
+            href="/"
+            className="flex items-center gap-3 mb-4"
+          >
             <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
               <Image
                 src={logoUrl}
@@ -158,7 +166,9 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
             {publicNavigation.map((item) => {
               const isActive = pathname === item.href;
               return (
-                <Link prefetch={false} key={item.name}
+                <Link
+                  prefetch={false}
+                  key={item.name}
                   href={item.href}
                   className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
                     isActive
@@ -174,7 +184,9 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
 
             {user && (
               <>
-                <Link prefetch={false} href={`/users/${user.handle || user.id}`}
+                <Link
+                  prefetch={false}
+                  href={`/users/${user.handle || user.id}`}
                   className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
                     pathname === `/users/${user.handle || user.id}`
                       ? "bg-red-600 text-white shadow-lg "
@@ -184,7 +196,9 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
                   <HiUser className="w-5 h-5" />
                   My Profile
                 </Link>
-                <Link prefetch={false} href="/developer"
+                <Link
+                  prefetch={false}
+                  href="/developer"
                   className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
                     pathname === "/developer"
                       ? "bg-red-600 text-white shadow-lg "
@@ -214,7 +228,9 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
                 .map((item) => {
                   const isActive = pathname === item.href;
                   return (
-                    <Link prefetch={false} key={item.name}
+                    <Link
+                      prefetch={false}
+                      key={item.name}
                       href={item.href}
                       className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
                         isActive
@@ -233,7 +249,9 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
 
         {user ? (
           <div className="border-t border-zinc-800 p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-            <Link prefetch={false} href={`/users/${user.handle || user.id}`}
+            <Link
+              prefetch={false}
+              href={`/users/${user.handle || user.id}`}
               className="group -mx-2 mb-3 flex min-h-12 items-center gap-3 rounded-xl p-2 transition-colors hover:bg-zinc-800/50"
             >
               <UserAvatar user={user} size="md" />
@@ -252,12 +270,16 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
               Sign Out
             </button>
             <div className="mt-4 pt-4 border-t border-zinc-800/50 flex flex-wrap gap-x-4 gap-y-2">
-              <Link prefetch={false} href="/privacy"
+              <Link
+                prefetch={false}
+                href="/privacy"
                 className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
               >
                 Privacy Policy
               </Link>
-              <Link prefetch={false} href="/imprint"
+              <Link
+                prefetch={false}
+                href="/imprint"
                 className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
               >
                 Imprint
@@ -266,18 +288,24 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
           </div>
         ) : (
           <div className="border-t border-zinc-800 p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-            <Link prefetch={false} href="/auth/signin"
+            <Link
+              prefetch={false}
+              href="/auth/signin"
               className="block min-h-11 w-full rounded-xl bg-red-600 px-4 py-2.5 text-center text-sm font-medium text-white transition-all hover:bg-red-700"
             >
               Sign In
             </Link>
             <div className="mt-4 pt-4 border-t border-zinc-800/50 flex flex-wrap gap-x-4 gap-y-2">
-              <Link prefetch={false} href="/privacy"
+              <Link
+                prefetch={false}
+                href="/privacy"
                 className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
               >
                 Privacy Policy
               </Link>
-              <Link prefetch={false} href="/imprint"
+              <Link
+                prefetch={false}
+                href="/imprint"
                 className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
               >
                 Imprint

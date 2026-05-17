@@ -5,8 +5,8 @@ import "./globals.css";
 import RybbitScript from "@/components/analytics/RybbitScript";
 import ComingSoon from "@/components/ComingSoon";
 import { comingSoon, maintenanceMode } from "@/flags";
-import { APP_URL } from "@/lib/constants";
 import { getSession } from "@/lib/auth";
+import { APP_URL } from "@/lib/constants";
 import { createOgMetadata } from "@/lib/metadata";
 import ClientLayout from "./ClientLayout";
 

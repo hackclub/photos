@@ -10,12 +10,15 @@ import {
   HiPlay,
   HiStop,
 } from "react-icons/hi2";
-import { getRandomMedia, getSeriesAndEvents } from "@/app/actions/signage";
+import {
+  getRandomMedia,
+  getRandomMediaIds,
+  getSeriesAndEvents,
+} from "@/app/actions/signage";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { useHeicUrl } from "@/hooks/useHeicUrl";
 import { logger } from "@/lib/client-logger";
-import { getRandomMediaIds } from "@/app/actions/signage";
 
 type MediaItem = {
   id: string;

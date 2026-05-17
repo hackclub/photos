@@ -1,13 +1,13 @@
-import { count, desc, eq, inArray } from "drizzle-orm";
+import { count, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { HiFolder } from "react-icons/hi2";
+import { getRandomMediaIds } from "@/app/actions/signage";
 import SeriesCard from "@/components/series/SeriesCard";
 import Hero from "@/components/ui/Hero";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { media, series as seriesTable } from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
-import { getRandomMediaIds } from "@/app/actions/signage";
 import { can, getUserContext } from "@/lib/policy";
 export default async function SeriesPage() {
   const session = await getSession();
@@ -71,7 +71,9 @@ export default async function SeriesPage() {
   let heroImages: string[] = [];
   if (eventIds.length > 0) {
     const randomMediaIds = await getRandomMediaIds(20);
-    heroImages = (randomMediaIds.ids ?? []).map((id) => getMediaProxyUrl(id, "thumbnail"));
+    heroImages = (randomMediaIds.ids ?? []).map((id) =>
+      getMediaProxyUrl(id, "thumbnail"),
+    );
   }
   return (
     <div className="min-h-screen">
@@ -86,7 +88,9 @@ export default async function SeriesPage() {
         images={heroImages}
         actions={
           ctx?.isGlobalAdmin && (
-            <Link prefetch={false} href="/admin/series"
+            <Link
+              prefetch={false}
+              href="/admin/series"
               className="inline-block px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all shadow-lg hover:scale-105"
             >
               + Create Series
@@ -132,7 +136,9 @@ export default async function SeriesPage() {
                 : "No public series available at this time."}
             </p>
             {ctx?.isGlobalAdmin && (
-              <Link prefetch={false} href="/admin/series"
+              <Link
+                prefetch={false}
+                href="/admin/series"
                 className="inline-block px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all shadow-lg "
               >
                 + Create First Series

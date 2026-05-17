@@ -54,12 +54,16 @@ export default async function ErrorPage({
         </div>
 
         <div className="mt-6 space-y-4">
-          <Link prefetch={false} href="/auth/signin"
+          <Link
+            prefetch={false}
+            href="/auth/signin"
             className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-600 transition-colors"
           >
             Try Again
           </Link>
-          <Link prefetch={false} href="/"
+          <Link
+            prefetch={false}
+            href="/"
             className="w-full flex justify-center py-3 px-4 border border-zinc-700 rounded-lg shadow-sm text-sm font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-500 transition-colors"
           >
             Go Home

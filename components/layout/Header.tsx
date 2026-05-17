@@ -10,7 +10,9 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center">
-            <Link prefetch={false} href="/"
+            <Link
+              prefetch={false}
+              href="/"
               className="text-xl font-bold text-white hover:text-red-400 transition-colors"
             >
               Hack Club Photos
@@ -22,24 +24,32 @@ export default function Header() {
               <LoadingSpinner size="sm" />
             ) : user ? (
               <>
-                <Link prefetch={false} href="/events"
+                <Link
+                  prefetch={false}
+                  href="/events"
                   className="text-zinc-300 hover:text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                 >
                   Events
                 </Link>
-                <Link prefetch={false} href="/series"
+                <Link
+                  prefetch={false}
+                  href="/series"
                   className="text-zinc-300 hover:text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                 >
                   Series
                 </Link>
-                <Link prefetch={false} href={`/users/${user.handle || user.id}`}
+                <Link
+                  prefetch={false}
+                  href={`/users/${user.handle || user.id}`}
                   className="flex items-center gap-2 text-zinc-300 hover:text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                 >
                   <UserAvatar user={user} size="sm" />
                   <span>{user.name}</span>
                 </Link>
                 {(user.isGlobalAdmin || user.hasAdminAccess) && (
-                  <Link prefetch={false} href="/admin"
+                  <Link
+                    prefetch={false}
+                    href="/admin"
                     className="text-red-400 hover:text-red-300 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                   >
                     Admin
@@ -54,7 +64,9 @@ export default function Header() {
                 </button>
               </>
             ) : (
-              <Link prefetch={false} href="/auth/signin"
+              <Link
+                prefetch={false}
+                href="/auth/signin"
                 className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
               >
                 Sign In

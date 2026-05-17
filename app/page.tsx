@@ -1,5 +1,6 @@
 import { count, desc, eq, inArray } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { getRandomMediaIds } from "@/app/actions/signage";
 import LandingPage from "@/components/home/LandingPage";
 import UserDashboard from "@/components/home/UserDashboard";
 import { deleteSession, getSession, refreshUser } from "@/lib/auth";
@@ -11,7 +12,6 @@ import {
   seriesAdmins,
 } from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
-import { getRandomMediaIds } from "@/app/actions/signage";
 export default async function HomePage() {
   const session = await getSession();
   if (!session) {
@@ -121,7 +121,9 @@ export default async function HomePage() {
   let heroImages: string[] = [];
   if (joinedEventIds.length > 0) {
     const randomMediaIds = await getRandomMediaIds(20);
-    heroImages = (randomMediaIds.ids ?? []).map((id) => getMediaProxyUrl(id, "thumbnail"));
+    heroImages = (randomMediaIds.ids ?? []).map((id) =>
+      getMediaProxyUrl(id, "thumbnail"),
+    );
   }
   return (
     <UserDashboard

@@ -80,7 +80,9 @@ export async function fetchFeedItems(
         ),
     })
     .from(media)
-    .where(and(inArray(media.eventId, accessibleEventIds), isNull(media.blurStatus)))
+    .where(
+      and(inArray(media.eventId, accessibleEventIds), isNull(media.blurStatus)),
+    )
     .orderBy(desc(media.uploadedAt))
     .limit(limit + offset);
   const recentComments = await db
@@ -93,7 +95,9 @@ export async function fetchFeedItems(
     })
     .from(mediaComments)
     .innerJoin(media, eq(mediaComments.mediaId, media.id))
-    .where(and(inArray(media.eventId, accessibleEventIds), isNull(media.blurStatus)))
+    .where(
+      and(inArray(media.eventId, accessibleEventIds), isNull(media.blurStatus)),
+    )
     .orderBy(desc(mediaComments.createdAt))
     .limit(limit + offset);
   const recentLikes = await db
@@ -105,7 +109,9 @@ export async function fetchFeedItems(
     })
     .from(mediaLikes)
     .innerJoin(media, eq(mediaLikes.mediaId, media.id))
-    .where(and(inArray(media.eventId, accessibleEventIds), isNull(media.blurStatus)))
+    .where(
+      and(inArray(media.eventId, accessibleEventIds), isNull(media.blurStatus)),
+    )
     .orderBy(desc(mediaLikes.createdAt))
     .limit(limit + offset);
   const allActivities = [

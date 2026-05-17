@@ -136,7 +136,8 @@ export async function getRandomMediaIds(limit = 12) {
     const user = await getUserContext(session?.id);
     if (user?.isBanned) return { success: true, ids: [] as string[] };
     const accessibleEventIds = await getAccessibleEventIdsForUser(user?.id);
-    if (accessibleEventIds.length === 0) return { success: true, ids: [] as string[] };
+    if (accessibleEventIds.length === 0)
+      return { success: true, ids: [] as string[] };
     const rows = await db.query.media.findMany({
       where: and(
         inArray(media.eventId, accessibleEventIds),

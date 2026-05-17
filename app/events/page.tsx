@@ -1,6 +1,7 @@
-import { count, desc, eq, inArray } from "drizzle-orm";
+import { count, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { HiCalendar } from "react-icons/hi2";
+import { getRandomMediaIds } from "@/app/actions/signage";
 import EventCard from "@/components/events/EventCard";
 import Hero from "@/components/ui/Hero";
 import { getSession } from "@/lib/auth";
@@ -12,7 +13,6 @@ import {
 } from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 import { getAccessibleEventIds, getUserContext } from "@/lib/policy";
-import { getRandomMediaIds } from "@/app/actions/signage";
 export default async function EventsPage() {
   const session = await getSession();
   const ctx = await getUserContext(session?.id);
@@ -101,9 +101,13 @@ export default async function EventsPage() {
     return b.createdAt.getTime() - a.createdAt.getTime();
   });
   const randomMedia =
-    eventIds.length > 0 ? await getRandomMediaIds(20) : { success: true as const, ids: [] as string[] };
+    eventIds.length > 0
+      ? await getRandomMediaIds(20)
+      : { success: true as const, ids: [] as string[] };
   const heroMediaIds = randomMedia.ids ?? [];
-  const heroImages = heroMediaIds.map((id) => getMediaProxyUrl(id, "thumbnail"));
+  const heroImages = heroMediaIds.map((id) =>
+    getMediaProxyUrl(id, "thumbnail"),
+  );
   return (
     <div className="min-h-screen">
       <Hero
@@ -118,7 +122,9 @@ export default async function EventsPage() {
         actions={
           (ctx?.isGlobalAdmin ||
             (ctx?.seriesAdmins && ctx.seriesAdmins.length > 0)) && (
-            <Link prefetch={false} href="/admin/events"
+            <Link
+              prefetch={false}
+              href="/admin/events"
               className="inline-block px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all shadow-lg hover:scale-105"
             >
               + Create Event
@@ -165,7 +171,9 @@ export default async function EventsPage() {
             </p>
             {(ctx?.isGlobalAdmin ||
               (ctx?.seriesAdmins && ctx.seriesAdmins.length > 0)) && (
-              <Link prefetch={false} href="/admin/events"
+              <Link
+                prefetch={false}
+                href="/admin/events"
                 className="inline-block px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all shadow-lg "
               >
                 + Create First Event

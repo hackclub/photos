@@ -175,7 +175,10 @@ export async function createSeries(data: SeriesInput) {
     logger.error("Create series error:", error);
     if (error instanceof Error) {
       if (error.message.includes("duplicate key")) {
-        return { success: false, error: "A series with this slug already exists." };
+        return {
+          success: false,
+          error: "A series with this slug already exists.",
+        };
       }
     }
     const errorMessage =

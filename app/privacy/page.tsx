@@ -148,7 +148,9 @@ export default function PrivacyPolicyPage() {
                 <p className="text-sm text-zinc-400 mb-4 flex-1">
                   Export all your information as a ZIP file
                 </p>
-                <Link prefetch={false} href="/settings/data-export"
+                <Link
+                  prefetch={false}
+                  href="/settings/data-export"
                   className="text-sm text-red-400 hover:text-red-300 font-medium"
                 >
                   Go to Data Export &rarr;
@@ -161,7 +163,9 @@ export default function PrivacyPolicyPage() {
                 <p className="text-sm text-zinc-400 mb-4 flex-1">
                   Permanently remove your account and all data.
                 </p>
-                <Link prefetch={false} href="/my-photos"
+                <Link
+                  prefetch={false}
+                  href="/my-photos"
                   className="text-sm text-red-400 hover:text-red-300 font-medium"
                 >
                   Go to Profile &rarr;

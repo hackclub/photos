@@ -1,5 +1,5 @@
-import Link from "next/link";
 import Image from "next/image";
+import Link from "next/link";
 
 export default function LandingPage() {
   return (
@@ -19,7 +19,9 @@ export default function LandingPage() {
         <p className="mt-3 text-sm text-zinc-400">
           The Landing page is under construction!
         </p>
-        <Link prefetch={false} href="/auth/signin"
+        <Link
+          prefetch={false}
+          href="/auth/signin"
           className="mt-8 inline-flex w-full items-center justify-center rounded-xl bg-red-600 px-5 py-3 font-semibold text-white transition hover:bg-red-700"
         >
           Log in

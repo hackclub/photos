@@ -12,8 +12,8 @@ import {
   HiPencil,
   HiPhoto,
   HiServer,
-  HiUsers,
   HiShieldCheck,
+  HiUsers,
 } from "react-icons/hi2";
 import { formatBytes } from "@/lib/format";
 

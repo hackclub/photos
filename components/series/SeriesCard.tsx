@@ -120,7 +120,12 @@ export default function SeriesCard({
             <h3 className="min-w-0 flex-1 truncate font-semibold text-lg text-white transition-colors group-hover:text-red-400">
               {series.name}
             </h3>
-            {isAdmin && <HiShieldCheck className="h-3.5 w-3.5 text-emerald-400" title="Admin" />}
+            {isAdmin && (
+              <HiShieldCheck
+                className="h-3.5 w-3.5 text-emerald-400"
+                title="Admin"
+              />
+            )}
           </div>
         </Link>
 

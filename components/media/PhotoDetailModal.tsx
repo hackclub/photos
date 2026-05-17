@@ -222,7 +222,6 @@ export default function PhotoDetailModal({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
-  const [previousImageUrl, setPreviousImageUrl] = useState<string | null>(null);
   const [videoError, setVideoError] = useState(false);
   const [videoRetryCount, setVideoRetryCount] = useState(0);
   const [blurRegions, setBlurRegions] = useState<BlurRect[]>(
@@ -405,13 +404,6 @@ export default function PhotoDetailModal({
     return () => window.clearTimeout(timeoutId);
   }, [imageLoaded, imageError, media.mimeType, media.id]);
 
-  useEffect(() => {
-    if (effectiveUrl) {
-      setPreviousImageUrl((current) => current ?? effectiveUrl);
-      setImageLoaded(false);
-      setImageError(false);
-    }
-  }, [effectiveUrl]);
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -1247,15 +1239,7 @@ export default function PhotoDetailModal({
                   <img
                     src={thumbnailUrl}
                     alt={media.filename}
-                    className="absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain opacity-65 blur-md scale-[1.02] transition-opacity duration-300"
-                    aria-hidden="true"
-                  />
-                )}
-                {previousImageUrl && effectiveUrl !== previousImageUrl && (
-                  <img
-                    src={previousImageUrl}
-                    alt=""
-                    className="absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain opacity-35 transition-opacity duration-200"
+                    className="absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain opacity-100 blur-[1px] scale-[1.005] transition-opacity duration-300"
                     aria-hidden="true"
                   />
                 )}
@@ -1268,11 +1252,11 @@ export default function PhotoDetailModal({
                       imageLoaded ? "opacity-100" : "opacity-0"
                     }`}
                     onLoad={() => {
-                      setPreviousImageUrl(effectiveUrl);
                       setImageLoaded(true);
                       setImageError(false);
                     }}
                     onError={(e) => {
+                      setImageLoaded(false);
                       if (retryCount < MAX_IMAGE_AUTO_RETRIES) {
                         onRequestFreshUrl?.();
 
@@ -1290,7 +1274,7 @@ export default function PhotoDetailModal({
                   />
                 )}
                 {!imageLoaded && !imageError && (
-                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black/25 pointer-events-none">
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black/10 pointer-events-none">
                     <LoadingSpinner size="xl" label="Loading image..." center />
                     <div className="rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-xs text-zinc-300 shadow-lg backdrop-blur-md">
                       {media.mimeType === "image/heic" ||
