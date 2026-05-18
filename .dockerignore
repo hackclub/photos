@@ -5,9 +5,13 @@ npm-debug.log
 README.md
 .next
 .git
-.env.development.local
-.env.test.local
-.env.production.local
+.env
+.env.*
 build
 dist
 .DS_Store
+.turbo
+.windsurf
+*.md
+docker-compose*
+LICENSE

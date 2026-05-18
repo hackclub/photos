@@ -17,17 +17,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN bun run build
 
-FROM oven/bun:1.3.6 AS runtime-deps
-ARG DEBIAN_FRONTEND=noninteractive
+FROM jrottenberg/ffmpeg:7.1-scratch AS ffmpeg
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
-        ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+FROM oven/bun:1.3.6 AS runtime-deps
+COPY --from=ffmpeg /ffmpeg /ffprobe /usr/local/bin/
 
 FROM runtime-deps AS runner
 WORKDIR /app
@@ -46,7 +39,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/drizzle ./drizzle
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/otel-bootstrap.cjs ./otel-bootstrap.cjs
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --chown=nextjs:nodejs package.json bun.lock ./
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --production --frozen-lockfile
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./docker-entrypoint.sh
 
 RUN chmod +x ./docker-entrypoint.sh
