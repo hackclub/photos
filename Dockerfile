@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM oven/bun:1.3.6 AS base
+FROM ghcr.io/oven-sh/bun:1.3.6 AS base
 WORKDIR /app
 
 FROM base AS deps
@@ -17,9 +17,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN bun run build
 
-FROM jrottenberg/ffmpeg:7.1-scratch AS ffmpeg
+FROM ghcr.io/jrottenberg/ffmpeg:7.1-scratch AS ffmpeg
 
-FROM oven/bun:1.3.6 AS runtime-deps
+FROM ghcr.io/oven-sh/bun:1.3.6 AS runtime-deps
 COPY --from=ffmpeg /ffmpeg /ffprobe /usr/local/bin/
 
 FROM runtime-deps AS runner
