@@ -17,10 +17,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN bun run build
 
-FROM jrottenberg/ffmpeg:7.1-alpine AS ffmpeg
+FROM mwader/static-ffmpeg:8.1.1 AS ffmpeg
 
 FROM oven/bun:1.3.6 AS runtime-deps
-COPY --from=ffmpeg /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/
+COPY --from=ffmpeg /ffmpeg /ffprobe /usr/local/bin/
 
 FROM runtime-deps AS runner
 WORKDIR /app
