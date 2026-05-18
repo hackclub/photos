@@ -104,12 +104,14 @@ export async function uploadToS3(
   contentType: string,
   signal?: AbortSignal,
   tags?: Record<string, string>,
+  contentLength?: number,
 ): Promise<void> {
   const params = {
     Bucket: s3BucketName,
     Key: key,
     Body: file,
     ContentType: contentType,
+    ContentLength: contentLength,
     CacheControl: "max-age=31536000, immutable",
     Tagging: tags ? new URLSearchParams(tags).toString() : undefined,
   };

@@ -1,7 +1,7 @@
 "use server";
 import { randomBytes } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { unlink } from "node:fs/promises";
+import { stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -180,8 +180,16 @@ async function processDataExport(exportId: string, userId: string) {
       output.on("error", reject);
     });
     const s3Key = `exports/${exportId}/archive.zip`;
+    const fileStats = await stat(tempPath);
     const fileStream = createReadStream(tempPath);
-    await uploadToS3(fileStream, s3Key, "application/zip");
+    await uploadToS3(
+      fileStream,
+      s3Key,
+      "application/zip",
+      undefined,
+      undefined,
+      fileStats.size,
+    );
     try {
       await db
         .update(dataExports)
