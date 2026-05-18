@@ -4,11 +4,11 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import archiver from "archiver";
 import { and, eq, gt } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import * as yazl from "yazl";
 import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -80,7 +80,6 @@ export async function requestDataExport() {
 }
 async function processDataExport(exportId: string, userId: string) {
   try {
-    await new Promise((resolve) => setTimeout(resolve, 3000));
     await db
       .update(dataExports)
       .set({ status: "processing" })
@@ -127,14 +126,11 @@ async function processDataExport(exportId: string, userId: string) {
     };
     const downloadId = randomBytes(16).toString("hex");
     const tempPath = join(tmpdir(), `data-export-${downloadId}.zip`);
-    const zipFile = new yazl.ZipFile();
     const output = createWriteStream(tempPath);
-    zipFile.outputStream.pipe(output);
+    const archive = archiver("zip", { zlib: { level: 6 } });
+    const done = pipeline(archive, output);
     const jsonContent = JSON.stringify(safeUserData, null, 2);
-    zipFile.addReadStream(Readable.from(jsonContent), "user-data.json", {
-      mode: 0o644,
-      size: Buffer.byteLength(jsonContent),
-    });
+    archive.append(jsonContent, { name: "user-data.json" });
     const mediaItems = userData.uploadedMedia || [];
     for (const [index, item] of mediaItems.entries()) {
       if (index % 5 === 0) {
@@ -143,12 +139,11 @@ async function processDataExport(exportId: string, userId: string) {
           columns: { status: true },
         });
         if (currentExport?.status === "cancelled") {
-          output.destroy();
+          archive.abort();
           await unlink(tempPath).catch(() => {});
           return;
         }
       }
-      await new Promise((resolve) => setTimeout(resolve, 200));
       try {
         const { GetObjectCommand } = await import("@aws-sdk/client-s3");
         const { s3Client } = await import("@/lib/media/s3");
@@ -158,27 +153,25 @@ async function processDataExport(exportId: string, userId: string) {
         });
         const response = await s3Client.send(command);
         if (response.Body) {
+          const bytes = await response.Body.transformToByteArray();
           const folder = item.mimeType.startsWith("image/")
             ? "photos"
             : "videos";
           const zipPath = `media/${folder}/${item.filename}`;
-          const stream = response.Body as Readable;
-          zipFile.addReadStream(stream, zipPath, {
-            mtime: item.uploadedAt,
-            mode: 0o644,
-            size: Number(item.fileSize),
-            forceZip64Format: true,
+          archive.append(Buffer.from(bytes), {
+            name: zipPath,
+            date:
+              item.uploadedAt instanceof Date
+                ? item.uploadedAt
+                : new Date(item.uploadedAt),
           });
         }
       } catch (err) {
         logger.error(`Failed to add media ${item.id} to export:`, err);
       }
     }
-    zipFile.end();
-    await new Promise<void>((resolve, reject) => {
-      output.on("finish", () => resolve());
-      output.on("error", reject);
-    });
+    await archive.finalize();
+    await done;
     const s3Key = `exports/${exportId}/archive.zip`;
     const fileStats = await stat(tempPath);
     const fileStream = createReadStream(tempPath);
