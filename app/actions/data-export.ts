@@ -5,7 +5,7 @@ import { stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
-import archiver from "archiver";
+import { ZipArchive } from "archiver";
 import { and, eq, gt } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
@@ -127,7 +127,7 @@ async function processDataExport(exportId: string, userId: string) {
     const downloadId = randomBytes(16).toString("hex");
     const tempPath = join(tmpdir(), `data-export-${downloadId}.zip`);
     const output = createWriteStream(tempPath);
-    const archive = archiver("zip", { zlib: { level: 6 } });
+    const archive = new ZipArchive({ zlib: { level: 6 } });
     const done = pipeline(archive, output);
     const jsonContent = JSON.stringify(safeUserData, null, 2);
     archive.append(jsonContent, { name: "user-data.json" });

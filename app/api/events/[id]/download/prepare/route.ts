@@ -3,11 +3,11 @@ import { createWriteStream } from "node:fs";
 import { readdir, stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-import * as yazl from "yazl";
+import { ZipArchive } from "archiver";
 import { getSession } from "@/lib/auth";
 import { getClientIpFromHeaders } from "@/lib/auth-api";
 import { db } from "@/lib/db";
@@ -110,25 +110,19 @@ export async function POST(
     mediaToDownload = mediaToDownload.slice(0, MAX_FILES_PER_DOWNLOAD);
     const downloadId = randomBytes(16).toString("hex");
     const tempPath = join(tmpdir(), `hackclub-photos-${downloadId}.zip`);
-    const zipFile = new yazl.ZipFile();
     const output = createWriteStream(tempPath);
+    const archive = new ZipArchive({ zlib: { level: 6 } });
+    const done = pipeline(archive, output);
     let fileCount = 0;
     let totalSize = 0;
-    let hasError = false;
-    output.on("error", (err) => {
-      logger.error("Output stream error:", err);
-      hasError = true;
-    });
-    zipFile.outputStream.pipe(output);
     for (const mediaItem of mediaToDownload) {
       if (req.signal.aborted) {
-        output.destroy();
+        archive.abort();
         await unlink(tempPath).catch((error) => {
           logger.error("Failed to remove aborted download zip:", error);
         });
         return NextResponse.json({ error: "Aborted" }, { status: 499 });
       }
-      if (hasError) break;
       try {
         const command = new GetObjectCommand({
           Bucket: process.env.S3_BUCKET_NAME,
@@ -145,25 +139,21 @@ export async function POST(
           ? "photos"
           : "videos";
         const zipPath = `${folder}/${mediaItem.filename}`;
-        zipFile.addReadStream(s3Response.Body as Readable, zipPath, {
-          mtime: mediaItem.uploadedAt,
-          mode: 0o644,
+        const bytes = await s3Response.Body.transformToByteArray();
+        archive.append(Buffer.from(bytes), {
+          name: zipPath,
+          date:
+            mediaItem.uploadedAt instanceof Date
+              ? mediaItem.uploadedAt
+              : new Date(mediaItem.uploadedAt),
         });
         fileCount++;
       } catch (error) {
         logger.error(`Error adding ${mediaItem.filename}:`, error);
       }
     }
-    if (hasError) {
-      throw new Error("Error occurred during ZIP creation");
-    }
-    zipFile.end();
-    await new Promise<void>((resolve, reject) => {
-      output.on("finish", () => {
-        resolve();
-      });
-      output.on("error", reject);
-    });
+    await archive.finalize();
+    await done;
     setTimeout(
       () => {
         unlink(tempPath).catch(() => {});
