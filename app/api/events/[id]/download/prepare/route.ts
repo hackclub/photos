@@ -3,11 +3,10 @@ import { createWriteStream } from "node:fs";
 import { readdir, stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pipeline } from "node:stream/promises";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { ZipArchive } from "archiver";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-import { ZipArchive } from "archiver";
 import { getSession } from "@/lib/auth";
 import { getClientIpFromHeaders } from "@/lib/auth-api";
 import { db } from "@/lib/db";
@@ -112,7 +111,7 @@ export async function POST(
     const tempPath = join(tmpdir(), `hackclub-photos-${downloadId}.zip`);
     const output = createWriteStream(tempPath);
     const archive = new ZipArchive({ zlib: { level: 6 } });
-    const done = pipeline(archive, output);
+    archive.pipe(output);
     let fileCount = 0;
     let totalSize = 0;
     for (const mediaItem of mediaToDownload) {
@@ -153,7 +152,11 @@ export async function POST(
       }
     }
     await archive.finalize();
-    await done;
+    await new Promise<void>((resolve, reject) => {
+      output.on("close", resolve);
+      output.on("error", reject);
+      archive.on("error", reject);
+    });
     setTimeout(
       () => {
         unlink(tempPath).catch(() => {});

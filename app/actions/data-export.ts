@@ -1,10 +1,9 @@
 "use server";
 import { randomBytes } from "node:crypto";
-import { createReadStream, createWriteStream } from "node:fs";
-import { stat, unlink } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pipeline } from "node:stream/promises";
 import { ZipArchive } from "archiver";
 import { and, eq, gt } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -128,7 +127,7 @@ async function processDataExport(exportId: string, userId: string) {
     const tempPath = join(tmpdir(), `data-export-${downloadId}.zip`);
     const output = createWriteStream(tempPath);
     const archive = new ZipArchive({ zlib: { level: 6 } });
-    const done = pipeline(archive, output);
+    archive.pipe(output);
     const jsonContent = JSON.stringify(safeUserData, null, 2);
     archive.append(jsonContent, { name: "user-data.json" });
     const mediaItems = userData.uploadedMedia || [];
@@ -171,17 +170,20 @@ async function processDataExport(exportId: string, userId: string) {
       }
     }
     await archive.finalize();
-    await done;
+    await new Promise<void>((resolve, reject) => {
+      output.on("close", resolve);
+      output.on("error", reject);
+      archive.on("error", reject);
+    });
     const s3Key = `exports/${exportId}/archive.zip`;
-    const fileStats = await stat(tempPath);
-    const fileStream = createReadStream(tempPath);
+    const fileBuffer = await readFile(tempPath);
     await uploadToS3(
-      fileStream,
+      fileBuffer,
       s3Key,
       "application/zip",
       undefined,
       undefined,
-      fileStats.size,
+      fileBuffer.length,
     );
     try {
       await db
