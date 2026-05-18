@@ -35,8 +35,8 @@ export const ALLOWED_VIDEO_TYPES = [
 ];
 export const MAX_IMAGE_SIZE = 50 * 1024 * 1024;
 export const MAX_VIDEO_SIZE = 5 * 1024 * 1024 * 1024;
-export const MAX_CONCURRENT_UPLOADS = 6;
-export const MAX_CONCURRENT_PROCESSING = 8;
+export const MAX_CONCURRENT_UPLOADS = 40;
+export const MAX_CONCURRENT_PROCESSING = 40;
 
 const MAX_UPLOAD_ATTEMPTS = 4;
 const THUMBNAIL_SIZE = 400;
@@ -76,13 +76,12 @@ export function getAdaptiveUploadLimits() {
   if (lowEndDevice) {
     return { maxUploads: 3, maxProcessing: 3 };
   }
-  if (fastNetwork && cores >= 8) {
-    return { maxUploads: 8, maxProcessing: 8 };
+  if (cores >= 4) {
+    return fastNetwork && cores >= 8
+      ? { maxUploads: 40, maxProcessing: 40 }
+      : { maxUploads: 12, maxProcessing: 12 };
   }
-  if (cores >= 6) {
-    return { maxUploads: 6, maxProcessing: 6 };
-  }
-  return { maxUploads: 4, maxProcessing: 4 };
+  return { maxUploads: 6, maxProcessing: 6 };
 }
 
 function getAdaptiveMultipartSettings(fileSize: number) {
@@ -90,17 +89,17 @@ function getAdaptiveMultipartSettings(fileSize: number) {
   if (lowEndDevice) {
     return { partSize: 16 * 1024 * 1024, concurrentParts: 3 };
   }
-  if (fastNetwork && cores >= 8) {
+  if (cores >= 4) {
     return {
       partSize:
         fileSize > 1024 * 1024 * 1024 ? 64 * 1024 * 1024 : 32 * 1024 * 1024,
-      concurrentParts: 8,
+      concurrentParts: fastNetwork && cores >= 8 ? 24 : 12,
     };
   }
   return {
     partSize:
       fileSize > 1024 * 1024 * 1024 ? 32 * 1024 * 1024 : 16 * 1024 * 1024,
-    concurrentParts: Math.min(6, Math.max(3, cores)),
+    concurrentParts: Math.min(8, Math.max(4, cores)),
   };
 }
 

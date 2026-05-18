@@ -325,29 +325,24 @@ export async function finalizeUpload(
               });
               const s3Object = await s3Client.send(getCommand);
               if (s3Object.Body) {
-                const {
-                  thumbnailS3Key: generatedKey,
-                  width,
-                  height,
-                  exifBuffer,
-                } = await processImageUpload(
+                const imageResult = await processImageUpload(
                   s3Object.Body as Readable,
                   mediaId,
                   user.id,
                   eventId,
                   data.mimeType,
                 );
-                if (generatedKey) {
-                  thumbnailS3Key = generatedKey;
-                }
-                let exifResult = null;
-                if (exifBuffer) {
-                  exifResult = await extractExifData(exifBuffer, data.mimeType);
+                const exifPromise = imageResult.exifBuffer
+                  ? extractExifData(imageResult.exifBuffer, data.mimeType)
+                  : Promise.resolve(null);
+                const [exifResult] = await Promise.all([exifPromise]);
+                if (imageResult.thumbnailS3Key) {
+                  thumbnailS3Key = imageResult.thumbnailS3Key;
                 }
                 serverExifData = {
                   ...(exifResult || {}),
-                  width: width || exifResult?.width,
-                  height: height || exifResult?.height,
+                  width: imageResult.width || exifResult?.width,
+                  height: imageResult.height || exifResult?.height,
                 };
               }
             } catch (e) {

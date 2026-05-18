@@ -42,6 +42,18 @@ interface UploadContextType {
   timeRemaining: number | null;
 }
 const UploadContext = createContext<UploadContextType | null>(null);
+const INITIAL_LIVE_CONCURRENCY = 10;
+const MIN_LIVE_CONCURRENCY = 3;
+const MAX_LIVE_CONCURRENCY = 40;
+const UPLOAD_CONCURRENCY_STAGES = [3, 6, 10, 14, 18, 24, 32, 40] as const;
+const STAGE_SPEEDS = [0, 2, 5, 9, 14, 22, 36, 55].map(
+  (mbps) => mbps * 1024 * 1024,
+);
+const MIN_EFFICIENT_BYTES_PER_UPLOAD = 1.25 * 1024 * 1024;
+const SLOW_UPLOAD_BYTES_PER_SECOND = 1.5 * 1024 * 1024;
+const PROCESSING_FAST_MS = 6000;
+const PROCESSING_SLOW_MS = 18000;
+
 export function useUpload() {
   const context = useContext(UploadContext);
   if (!context) {
@@ -62,6 +74,11 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   const smoothedSpeedRef = useRef<number>(0);
   const filesRef = useRef(files);
   const activeBatchIdRef = useRef<string | null>(null);
+  const liveUploadLimitRef = useRef(INITIAL_LIVE_CONCURRENCY);
+  const liveProcessingLimitRef = useRef(INITIAL_LIVE_CONCURRENCY);
+  const lastConcurrencyChangeRef = useRef<number>(0);
+  const stableFastSamplesRef = useRef(0);
+  const processingDurationRef = useRef(0);
   useEffect(() => {
     filesRef.current = files;
   }, [files]);
@@ -185,6 +202,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       ),
     );
     try {
+      const startedAt = performance.now();
       const MULTIPART_THRESHOLD = 100 * 1024 * 1024;
       let finalS3Key: string;
       let finalThumbnailS3Key: string | null = null;
@@ -319,6 +337,25 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       if (result.error) {
         throw new Error(result.error);
       }
+      const elapsedMs = performance.now() - startedAt;
+      processingDurationRef.current = processingDurationRef.current
+        ? processingDurationRef.current * 0.75 + elapsedMs * 0.25
+        : elapsedMs;
+      if (processingDurationRef.current < PROCESSING_FAST_MS) {
+        const nextStage = UPLOAD_CONCURRENCY_STAGES.find(
+          (stage) => stage > liveProcessingLimitRef.current,
+        );
+        liveProcessingLimitRef.current = Math.min(
+          MAX_LIVE_CONCURRENCY,
+          nextStage ?? liveProcessingLimitRef.current,
+        );
+      } else if (processingDurationRef.current > PROCESSING_SLOW_MS) {
+        liveProcessingLimitRef.current =
+          [...UPLOAD_CONCURRENCY_STAGES]
+            .reverse()
+            .find((stage) => stage < liveProcessingLimitRef.current) ??
+          MIN_LIVE_CONCURRENCY;
+      }
       setFiles((prev) =>
         prev.map((f) =>
           f.id === fileId ? { ...f, status: "success", progress: 100 } : f,
@@ -328,6 +365,20 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       if (error instanceof Error && error.message === "Upload cancelled")
         return;
       logger.error("Upload error:", error);
+      liveUploadLimitRef.current = Math.max(
+        MIN_LIVE_CONCURRENCY,
+        [...UPLOAD_CONCURRENCY_STAGES]
+          .reverse()
+          .find((stage) => stage < liveUploadLimitRef.current) ??
+          MIN_LIVE_CONCURRENCY,
+      );
+      liveProcessingLimitRef.current = Math.max(
+        MIN_LIVE_CONCURRENCY,
+        [...UPLOAD_CONCURRENCY_STAGES]
+          .reverse()
+          .find((stage) => stage < liveProcessingLimitRef.current) ??
+          MIN_LIVE_CONCURRENCY,
+      );
       setFiles((prev) =>
         prev.map((f) =>
           f.id === fileId
@@ -347,6 +398,10 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       setTimeRemaining(null);
       lastBytesLoadedRef.current = 0;
       smoothedSpeedRef.current = 0;
+      liveUploadLimitRef.current = INITIAL_LIVE_CONCURRENCY;
+      liveProcessingLimitRef.current = INITIAL_LIVE_CONCURRENCY;
+      stableFastSamplesRef.current = 0;
+      processingDurationRef.current = 0;
       return;
     }
     const interval = setInterval(() => {
@@ -372,6 +427,60 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
               : currentSpeed * alpha + smoothedSpeedRef.current * (1 - alpha);
           smoothedSpeedRef.current = newSmoothedSpeed;
           setUploadSpeed(newSmoothedSpeed);
+          const activeUploadCount = files.filter(
+            (f) => f.status === "uploading",
+          ).length;
+          const nowMs = Date.now();
+          const canAdjust = nowMs - lastConcurrencyChangeRef.current > 2000;
+          const effectiveActiveCount = Math.max(1, activeUploadCount);
+          const bytesPerActiveUpload = newSmoothedSpeed / effectiveActiveCount;
+          if (canAdjust && activeUploadCount >= liveUploadLimitRef.current) {
+            const targetStage = UPLOAD_CONCURRENCY_STAGES.findLastIndex(
+              (stage, index) =>
+                newSmoothedSpeed >= STAGE_SPEEDS[index] &&
+                (stage <= 24 ||
+                  bytesPerActiveUpload >= MIN_EFFICIENT_BYTES_PER_UPLOAD),
+            );
+            const targetLimit =
+              UPLOAD_CONCURRENCY_STAGES[Math.max(0, targetStage)] ??
+              MIN_LIVE_CONCURRENCY;
+            if (targetLimit > liveUploadLimitRef.current) {
+              stableFastSamplesRef.current += 1;
+              if (stableFastSamplesRef.current >= 2) {
+                liveUploadLimitRef.current = Math.min(
+                  MAX_LIVE_CONCURRENCY,
+                  Math.max(
+                    liveUploadLimitRef.current + 1,
+                    UPLOAD_CONCURRENCY_STAGES.find(
+                      (stage) => stage > liveUploadLimitRef.current,
+                    ) ?? MAX_LIVE_CONCURRENCY,
+                  ),
+                );
+                liveProcessingLimitRef.current = Math.max(
+                  liveProcessingLimitRef.current,
+                  liveUploadLimitRef.current,
+                );
+                stableFastSamplesRef.current = 0;
+                lastConcurrencyChangeRef.current = nowMs;
+              }
+            } else if (
+              newSmoothedSpeed < SLOW_UPLOAD_BYTES_PER_SECOND ||
+              bytesPerActiveUpload < MIN_EFFICIENT_BYTES_PER_UPLOAD / 2
+            ) {
+              const lowerStage = [...UPLOAD_CONCURRENCY_STAGES]
+                .reverse()
+                .find((stage) => stage < liveUploadLimitRef.current);
+              liveUploadLimitRef.current = lowerStage ?? MIN_LIVE_CONCURRENCY;
+              liveProcessingLimitRef.current = Math.min(
+                liveProcessingLimitRef.current,
+                Math.max(liveUploadLimitRef.current, MIN_LIVE_CONCURRENCY),
+              );
+              stableFastSamplesRef.current = 0;
+              lastConcurrencyChangeRef.current = nowMs;
+            } else {
+              stableFastSamplesRef.current = 0;
+            }
+          }
         } else if (
           totalBytesUploaded === lastBytesLoadedRef.current &&
           timeDiff > 2
@@ -421,10 +530,12 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     const maxUploads = Math.min(
       MAX_CONCURRENT_UPLOADS,
       adaptiveLimits.maxUploads,
+      liveUploadLimitRef.current,
     );
     const maxProcessing = Math.min(
       MAX_CONCURRENT_PROCESSING,
       adaptiveLimits.maxProcessing,
+      liveProcessingLimitRef.current,
     );
     if (
       uploadingFiles.length < maxUploads &&
