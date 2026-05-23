@@ -7,7 +7,7 @@ import { media, mediaLikes, series } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 import { createOgMetadata } from "@/lib/metadata";
-import { can, getUserContext } from "@/lib/policy";
+import { can, getAccessibleEventIds, getUserContext } from "@/lib/policy";
 import { toPublicUser } from "@/lib/user-display";
 import SeriesDetailClient from "./SeriesDetailClient";
 export async function generateMetadata({
@@ -94,12 +94,19 @@ export default async function SeriesDetailPage({
     notFound();
   }
   const canEdit = await can(ctx, "manage", "series", seriesData.id);
-  const seriesEvents = seriesData.events.map((event) => ({
+  const accessibleEventIds = await getAccessibleEventIds(
+    ctx?.id,
+    seriesData.events,
+  );
+  const accessibleEvents = seriesData.events.filter((event) =>
+    accessibleEventIds.has(event.id),
+  );
+  const seriesEvents = accessibleEvents.map((event) => ({
     ...event,
     isAdmin:
       canEdit || !!ctx?.eventAdmins.some((admin) => admin.eventId === event.id),
   }));
-  const eventIds = seriesData.events.map((e) => e.id);
+  const eventIds = accessibleEvents.map((e) => e.id);
   const allMedia =
     eventIds.length > 0
       ? await db.query.media.findMany({
@@ -140,7 +147,7 @@ export default async function SeriesDetailPage({
     m.mimeType.startsWith("video/"),
   ).length;
   const eventMediaUrls = new Map<string, string>();
-  for (const event of seriesData.events) {
+  for (const event of accessibleEvents) {
     if (!event.bannerS3Key) {
       const firstMedia = allMedia.find((m) => m.eventId === event.id);
       if (firstMedia) {
@@ -164,7 +171,7 @@ export default async function SeriesDetailPage({
     bannerUrl = getAssetProxyUrl("series-banner", seriesData.id);
   }
   const eventBannerUrls = new Map<string, string>();
-  for (const event of seriesData.events) {
+  for (const event of accessibleEvents) {
     if (event.bannerS3Key) {
       eventBannerUrls.set(event.id, getAssetProxyUrl("event-banner", event.id));
     }

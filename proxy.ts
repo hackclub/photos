@@ -7,16 +7,8 @@ const JWT_SECRET = new TextEncoder().encode(nextAuthSecret || "dev-insecure");
 const AUTH_REQUIRED_PATHS = [
   "/admin",
   "/api/data-export",
-  "/api/events",
-  "/api/feed",
   "/developer",
-  "/events",
-  "/feed",
-  "/map",
-  "/search",
-  "/series",
   "/settings",
-  "/tags",
   "/users",
 ];
 
@@ -93,16 +85,8 @@ export const config = {
   matcher: [
     "/admin/:path*",
     "/api/data-export/:path*",
-    "/api/events/:path*",
-    "/api/feed/:path*",
     "/developer/:path*",
-    "/events/:path*",
-    "/feed/:path*",
-    "/map/:path*",
-    "/search/:path*",
-    "/series/:path*",
     "/settings/:path*",
-    "/tags/:path*",
     "/users/:path*",
   ],
 };

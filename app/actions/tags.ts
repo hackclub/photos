@@ -5,7 +5,11 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { media, mediaTags, tags } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
-import { can, getUserContext } from "@/lib/policy";
+import {
+  can,
+  getAccessibleEventIdsForUser,
+  getUserContext,
+} from "@/lib/policy";
 export async function addTag(mediaId: string, tagName: string) {
   const session = await getSession();
   const user = await getUserContext(session?.id);
@@ -134,39 +138,67 @@ export async function getAllTags(
   sortBy: "name" | "count" | "created" = "count",
 ) {
   try {
+    const session = await getSession();
+    const user = await getUserContext(session?.id);
+    if (user?.isBanned) {
+      return {
+        success: true,
+        tags: [],
+        pagination: { page, limit, total: 0, totalPages: 0 },
+      };
+    }
+    const accessibleEventIds = await getAccessibleEventIdsForUser(user?.id);
+    if (accessibleEventIds.length === 0) {
+      return {
+        success: true,
+        tags: [],
+        pagination: { page, limit, total: 0, totalPages: 0 },
+      };
+    }
     const offset = (page - 1) * limit;
-    const _whereClause = search
-      ? ilike(tags.name, `%${search.toLowerCase()}%`)
-      : undefined;
     let orderByClause = "count DESC";
     if (sortBy === "name") orderByClause = "t.name ASC";
     if (sortBy === "created") orderByClause = "t.created_at DESC";
-    const searchClause = search
-      ? `WHERE t.name ILIKE '%${search.toLowerCase()}%'`
+    const escapedEventIds = accessibleEventIds
+      .map((id) => `'${id.replace(/'/g, "''")}'`)
+      .join(",");
+    const searchFilter = search
+      ? `AND t.name ILIKE '%${search.toLowerCase().replace(/'/g, "''")}%'`
       : "";
     const query = sql.raw(`
-   SELECT
-    t.*,
-    COUNT(mt.media_id) as count,
-    (
-     SELECT m.id
-     FROM media_tags mt2
-     JOIN media m ON mt2.media_id = m.id
-     WHERE mt2.tag_id = t.id
-     ORDER BY m.uploaded_at DESC
-     LIMIT 1
-    ) as preview_media_id
-   FROM tags t
-   LEFT JOIN media_tags mt ON t.id = mt.tag_id
-   ${searchClause}
-   GROUP BY t.id
-   ORDER BY ${orderByClause}
-   LIMIT ${limit} OFFSET ${offset}
-  `);
+    SELECT
+     t.*,
+     COUNT(mt.media_id) as count,
+     (
+      SELECT m2.id
+      FROM media_tags mt2
+      JOIN media m2 ON mt2.media_id = m2.id
+      WHERE mt2.tag_id = t.id
+      AND m2.event_id IN (${escapedEventIds})
+      ORDER BY m2.uploaded_at DESC
+      LIMIT 1
+     ) as preview_media_id
+    FROM tags t
+    JOIN media_tags mt ON t.id = mt.tag_id
+    JOIN media m ON mt.media_id = m.id
+    WHERE m.event_id IN (${escapedEventIds})
+    ${searchFilter}
+    GROUP BY t.id
+    ORDER BY ${orderByClause}
+    LIMIT ${limit} OFFSET ${offset}
+   `);
     const results = await db.execute(query);
     const countQuery = sql.raw(`
-   SELECT COUNT(*) as total FROM tags t ${searchClause}
-  `);
+    SELECT COUNT(*) as total FROM (
+     SELECT t.id
+     FROM tags t
+     JOIN media_tags mt ON t.id = mt.tag_id
+     JOIN media m ON mt.media_id = m.id
+     WHERE m.event_id IN (${escapedEventIds})
+     ${searchFilter}
+     GROUP BY t.id
+    ) filtered_tags
+   `);
     const countResult = await db.execute(countQuery);
     const total = Number(countResult[0].total);
     return {

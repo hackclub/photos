@@ -38,6 +38,10 @@ export default async function SeriesPage() {
         events: true,
       },
     });
+    series = series.map((s) => ({
+      ...s,
+      events: s.events.filter((event) => event.visibility === "public"),
+    }));
   }
   const adminSeriesIds = new Set<string>();
   if (ctx) {

@@ -204,30 +204,45 @@ export async function getSearchFilterOptions() {
     const [allEvents, allSeries, allUsers, allTags] = await Promise.all([
       db.query.events.findMany({
         orderBy: [desc(events.createdAt)],
-        columns: { id: true, name: true },
+        columns: { id: true, name: true, visibility: true, seriesId: true },
         limit: 100,
       }),
       db.query.series.findMany({
         orderBy: [desc(series.createdAt)],
-        columns: { id: true, name: true },
+        columns: { id: true, name: true, visibility: true },
         limit: 100,
       }),
-      db.query.users.findMany({
-        orderBy: [desc(users.createdAt)],
-        columns: { id: true, preferredName: true, handle: true, slackId: true },
-        limit: 100,
-      }),
+      session
+        ? db.query.users.findMany({
+            orderBy: [desc(users.createdAt)],
+            columns: {
+              id: true,
+              preferredName: true,
+              handle: true,
+              slackId: true,
+            },
+            limit: 100,
+          })
+        : Promise.resolve([]),
       db.query.tags.findMany({
         orderBy: [desc(tags.name)],
         columns: { id: true, name: true, color: true },
         limit: 100,
       }),
     ]);
+    const accessibleEventIds = await getAccessibleEventIds(user?.id, allEvents);
+    const visibleSeries = (
+      await Promise.all(
+        allSeries.map(async (s) =>
+          (await can(user, "view", "series", s)) ? s : null,
+        ),
+      )
+    ).filter((s) => s !== null);
     return {
       success: true,
       data: {
-        events: allEvents,
-        series: allSeries,
+        events: allEvents.filter((event) => accessibleEventIds.has(event.id)),
+        series: visibleSeries,
         users: allUsers.map(toPublicUser),
         tags: allTags,
       },
