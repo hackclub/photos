@@ -4,6 +4,7 @@ import { cookies, headers } from "next/headers";
 import { HACK_CLUB_AUTH_URL } from "@/lib/constants";
 import { logger, serializeError } from "@/lib/logger";
 import { claimPendingAdminGrantsForUser } from "@/lib/pending-admins";
+import { claimPendingOwnershipForUser } from "@/lib/pending-ownership";
 import { getUserDisplayName, toPublicUser } from "@/lib/user-display";
 import { db } from "./db";
 import { users } from "./db/schema";
@@ -29,6 +30,7 @@ export interface SessionUser {
   isGlobalAdmin: boolean;
   isBanned?: boolean;
   slackId?: string | null;
+  avatarUrl?: string | null;
   hasAdminAccess?: boolean;
 }
 export interface OnboardingUser {
@@ -269,6 +271,8 @@ export async function createOrUpdateUser(
 
     await claimPendingAdminGrantsForUser({ id: existingUser.id, slackId });
 
+    await claimPendingOwnershipForUser({ id: existingUser.id, slackId });
+
     return {
       ...toPublicUser(existingUser),
       id: existingUser.id,
@@ -294,6 +298,11 @@ export async function createOrUpdateUser(
     .returning();
 
   await claimPendingAdminGrantsForUser({
+    id: newUser.id,
+    slackId: newUser.slackId,
+  });
+
+  await claimPendingOwnershipForUser({
     id: newUser.id,
     slackId: newUser.slackId,
   });

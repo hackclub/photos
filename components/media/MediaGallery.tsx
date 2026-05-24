@@ -19,6 +19,7 @@ import { logger } from "@/lib/client-logger";
 import type { Event, MediaItem } from "@/types/media";
 import ConfirmModal from "../ui/ConfirmModal";
 import ServerActionModal from "../ui/ServerActionModal";
+import ChangeOwnerModal from "./ChangeOwnerModal";
 import MediaGalleryToolbar from "./MediaGalleryToolbar";
 import VideoIndicator from "./VideoIndicator";
 
@@ -195,6 +196,7 @@ export default function MediaGallery({
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [showChangeOwnerModal, setShowChangeOwnerModal] = useState(false);
   const [mediaToDelete, setMediaToDelete] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_ITEMS);
   const [_isPending, startTransition] = useTransition();
@@ -466,6 +468,23 @@ export default function MediaGallery({
             {isAdmin && (
               <button
                 type="button"
+                onClick={() => setShowChangeOwnerModal(true)}
+                disabled={
+                  selectedItems.size === 0 ||
+                  downloading ||
+                  preparing ||
+                  deleting
+                }
+                className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-sm bg-yellow-600 hover:bg-yellow-700 disabled:bg-zinc-700 disabled:cursor-not-allowed rounded-lg transition flex items-center justify-center gap-2"
+              >
+                <HiUser className="w-5 h-5" />
+                <span className="hidden sm:inline">Change Owner</span>
+                <span className="sm:hidden">Owner</span>
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                type="button"
                 onClick={handleBulkDownload}
                 disabled={
                   selectedItems.size === 0 ||
@@ -677,6 +696,7 @@ export default function MediaGallery({
               : undefined)
           }
           currentUserId={currentUserId}
+          isGlobalAdmin={isAdmin}
           downloading={downloading}
           onClose={() => {
             setSelectedMedia(null);
@@ -731,6 +751,7 @@ export default function MediaGallery({
               : undefined)
           }
           currentUserId={currentUserId}
+          isGlobalAdmin={isAdmin}
           downloading={downloading}
           onClose={() => {
             setSelectedMedia(null);
@@ -848,6 +869,17 @@ export default function MediaGallery({
         cancelText="Cancel"
         danger={true}
         timerSeconds={3}
+      />
+
+      <ChangeOwnerModal
+        isOpen={showChangeOwnerModal}
+        onClose={() => setShowChangeOwnerModal(false)}
+        mediaIds={Array.from(selectedItems)}
+        onComplete={() => {
+          setLocalMedia((prev) => [...prev]);
+          setSelectedItems(new Set());
+          setSelectionMode(false);
+        }}
       />
     </div>
   );

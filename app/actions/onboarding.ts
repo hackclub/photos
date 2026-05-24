@@ -12,6 +12,7 @@ import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { claimPendingAdminGrantsForUser } from "@/lib/pending-admins";
+import { claimPendingOwnershipForUser } from "@/lib/pending-ownership";
 import { getUserContext } from "@/lib/policy";
 import { getUserDisplayName } from "@/lib/user-display";
 
@@ -88,6 +89,10 @@ export async function completeOnboarding(data: { handle: string }) {
         id: session.id,
         slackId: session.slackId,
       });
+      await claimPendingOwnershipForUser({
+        id: session.id,
+        slackId: session.slackId,
+      });
     } else if (onboardingSession) {
       const existingUser = await db.query.users.findFirst({
         where: eq(users.hackclubId, onboardingSession.hackclubId),
@@ -112,6 +117,10 @@ export async function completeOnboarding(data: { handle: string }) {
           slackId: existingUser.slackId,
         });
         await claimPendingAdminGrantsForUser({
+          id: existingUser.id,
+          slackId: existingUser.slackId,
+        });
+        await claimPendingOwnershipForUser({
           id: existingUser.id,
           slackId: existingUser.slackId,
         });
@@ -145,6 +154,10 @@ export async function completeOnboarding(data: { handle: string }) {
           slackId: newUser.slackId,
         });
         await claimPendingAdminGrantsForUser({
+          id: newUser.id,
+          slackId: newUser.slackId,
+        });
+        await claimPendingOwnershipForUser({
           id: newUser.id,
           slackId: newUser.slackId,
         });

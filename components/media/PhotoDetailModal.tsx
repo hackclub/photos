@@ -66,6 +66,7 @@ import {
   type BlurRect,
   buildBlurPreview,
 } from "./BlurEditorModal";
+import ChangeOwnerModal from "./ChangeOwnerModal";
 import ReportModal from "./ReportModal";
 
 const MiniMap = dynamic(() => import("@/components/map/MiniMap"), {
@@ -185,6 +186,7 @@ interface Props {
   thumbnailUrl?: string | null;
   event?: Event;
   currentUserId?: string;
+  isGlobalAdmin?: boolean;
   downloading: boolean;
   onClose: () => void;
   onDownload: () => void;
@@ -205,6 +207,7 @@ export default function PhotoDetailModal({
   thumbnailUrl = null,
   event,
   currentUserId,
+  isGlobalAdmin = false,
   downloading,
   onClose,
   onDownload,
@@ -304,6 +307,7 @@ export default function PhotoDetailModal({
   const [generatingLink, setGeneratingLink] = useState(false);
   const [copiedLink, setCopiedLink] = useState<"view" | "raw" | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showChangeOwnerModal, setShowChangeOwnerModal] = useState(false);
   const [commentsLoaded, setCommentsLoaded] = useState(false);
   const [showLocationMap, setShowLocationMap] = useState(false);
   const exif = (media.exifData || {}) as unknown as ExifData;
@@ -1588,6 +1592,17 @@ export default function PhotoDetailModal({
                 </button>
               )}
 
+              {isGlobalAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setShowChangeOwnerModal(true)}
+                  className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full border border-yellow-600 bg-yellow-600 px-4 text-sm transition-all hover:bg-yellow-700 sm:h-10 sm:gap-2 sm:rounded-lg"
+                  title="Change Owner"
+                >
+                  <HiUser className="w-5 h-5 text-white" />
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => {
@@ -2276,6 +2291,15 @@ export default function PhotoDetailModal({
             )}
         </div>
       )}
+
+      <ChangeOwnerModal
+        isOpen={showChangeOwnerModal}
+        onClose={() => setShowChangeOwnerModal(false)}
+        mediaIds={[media.id]}
+        onComplete={() => {
+          setShowChangeOwnerModal(false);
+        }}
+      />
     </div>
   );
 }

@@ -757,6 +757,7 @@ export default function SearchGallery({
           fullSizeUrl={fullSizeUrl}
           event={selectedMedia.event}
           currentUserId={currentUserId}
+          isGlobalAdmin={isAdmin}
           downloading={downloading}
           onClose={() => {
             updateUrl(null);

@@ -258,6 +258,25 @@ export const pendingEventAdmins = pgTable("pending_event_admins", {
   }),
   claimedAt: timestamp("claimed_at"),
 });
+export const pendingMediaOwnership = pgTable("pending_media_ownership", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  mediaId: uuid("media_id")
+    .notNull()
+    .references(() => media.id, { onDelete: "cascade" }),
+  slackId: text("slack_id").notNull(),
+  showPlaceholder: boolean("show_placeholder").notNull().default(false),
+  previousOwnerId: uuid("previous_owner_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdById: uuid("created_by_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedById: uuid("resolved_by_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+});
 export const mediaLikes = pgTable(
   "media_likes",
   {
@@ -472,6 +491,7 @@ export const mediaRelations = relations(media, ({ one, many }) => ({
     fields: [media.apiKeyId],
     references: [apiKeys.id],
   }),
+  pendingOwnerships: many(pendingMediaOwnership),
 }));
 export const eventParticipantsRelations = relations(
   eventParticipants,
@@ -541,6 +561,30 @@ export const pendingEventAdminsRelations = relations(
       fields: [pendingEventAdmins.claimedById],
       references: [users.id],
       relationName: "pending_event_admin_claimant",
+    }),
+  }),
+);
+export const pendingMediaOwnershipRelations = relations(
+  pendingMediaOwnership,
+  ({ one }) => ({
+    media: one(media, {
+      fields: [pendingMediaOwnership.mediaId],
+      references: [media.id],
+    }),
+    previousOwner: one(users, {
+      fields: [pendingMediaOwnership.previousOwnerId],
+      references: [users.id],
+      relationName: "pending_media_ownership_previous_owner",
+    }),
+    createdBy: one(users, {
+      fields: [pendingMediaOwnership.createdById],
+      references: [users.id],
+      relationName: "pending_media_ownership_creator",
+    }),
+    resolvedBy: one(users, {
+      fields: [pendingMediaOwnership.resolvedById],
+      references: [users.id],
+      relationName: "pending_media_ownership_resolver",
     }),
   }),
 );
@@ -687,6 +731,15 @@ export const usersRelations = relations(users, ({ many }) => ({
   }),
   claimedPendingEventAdminGrants: many(pendingEventAdmins, {
     relationName: "pending_event_admin_claimant",
+  }),
+  pendingMediaOwnershipGrants: many(pendingMediaOwnership, {
+    relationName: "pending_media_ownership_creator",
+  }),
+  pendingMediaOwnershipPrevOwners: many(pendingMediaOwnership, {
+    relationName: "pending_media_ownership_previous_owner",
+  }),
+  resolvedPendingMediaOwnerships: many(pendingMediaOwnership, {
+    relationName: "pending_media_ownership_resolver",
   }),
   mediaLikes: many(mediaLikes),
   mediaComments: many(mediaComments),
