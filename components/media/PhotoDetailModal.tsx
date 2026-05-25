@@ -1684,7 +1684,7 @@ export default function PhotoDetailModal({
                     <HiTag className="w-5 h-5" />
                     <span>Tags</span>
                   </div>
-                  <div className="flex overflow-x-auto gap-2 pb-2 -mx-2 px-2 scrollbar-hide">
+                  <div className="flex overflow-x-auto gap-2 pb-2 -mx-2 px-2 scrollbar-hide flex-nowrap">
                     {tags.map((tag) => {
                       const colorClass =
                         TAG_COLORS[tag.color || "blue"] || TAG_COLORS.blue;
@@ -1745,7 +1745,7 @@ export default function PhotoDetailModal({
                     <HiUserGroup className="w-5 h-5" />
                     <span>People</span>
                   </div>
-                  <div className="flex overflow-x-auto gap-3 pb-2 -mx-2 px-2 scrollbar-hide">
+                  <div className="flex overflow-x-auto gap-3 pb-2 -mx-2 px-2 scrollbar-hide flex-nowrap">
                     {displayedMentions.map((user) => (
                       <div
                         key={user.id}
