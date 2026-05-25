@@ -448,6 +448,14 @@ export default function PhotoDetailModal({
         );
         setSuggestions(filteredSuggestions);
         setShowSuggestions(filteredSuggestions.length > 0);
+        if (filteredSuggestions.length > 0 && tagInputRef.current) {
+          const r = tagInputRef.current.getBoundingClientRect();
+          setTagDropdownStyle({
+            position: "fixed",
+            left: r.left,
+            top: r.bottom + 4,
+          });
+        }
       }
     };
     const timeoutId = setTimeout(fetchSuggestions, 300);
@@ -469,6 +477,14 @@ export default function PhotoDetailModal({
         );
         setMentionSuggestions(filteredSuggestions);
         setShowMentionSuggestions(filteredSuggestions.length > 0);
+        if (filteredSuggestions.length > 0 && mentionInputRef.current) {
+          const r = mentionInputRef.current.getBoundingClientRect();
+          setMentionDropdownStyle({
+            position: "fixed",
+            left: r.left,
+            top: r.bottom + 4,
+          });
+        }
       }
     };
     const timeoutId = setTimeout(fetchMentionSuggestions, 300);
