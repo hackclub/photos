@@ -1,6 +1,7 @@
 "use client";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   HiArrowDownTray,
   HiArrowTopRightOnSquare,
@@ -283,6 +284,7 @@ export default function PhotoDetailModal({
   const [addingTag, setAddingTag] = useState(false);
   const [suggestions, setSuggestions] = useState<Tag[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const tagInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const [mentions, setMentions] = useState<MentionedUser[]>([]);
   const [newMention, setNewMention] = useState("");
@@ -290,6 +292,11 @@ export default function PhotoDetailModal({
     [],
   );
   const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+  const [tagDropdownStyle, setTagDropdownStyle] = useState<React.CSSProperties>(
+    {},
+  );
+  const [mentionDropdownStyle, setMentionDropdownStyle] =
+    useState<React.CSSProperties>({});
   const [addingMention, setAddingMention] = useState(false);
   const [_loadingMentions, setLoadingMentions] = useState(false);
   const mentionInputRef = useRef<HTMLInputElement>(null);
@@ -1688,13 +1695,23 @@ export default function PhotoDetailModal({
                       );
                     })}
                     {currentUserId && (
-                      <div className="relative inline-flex items-center shrink-0">
+                      <div className="inline-flex items-center shrink-0">
                         <form onSubmit={handleAddTag}>
                           <input
+                            ref={tagInputRef}
                             type="text"
                             value={newTag}
                             onChange={(e) => setNewTag(e.target.value)}
                             onFocus={() => {
+                              if (tagInputRef.current) {
+                                const r =
+                                  tagInputRef.current.getBoundingClientRect();
+                                setTagDropdownStyle({
+                                  position: "fixed",
+                                  left: r.left,
+                                  top: r.bottom + 4,
+                                });
+                              }
                               if (suggestions.length > 0)
                                 setShowSuggestions(true);
                             }}
@@ -1702,38 +1719,6 @@ export default function PhotoDetailModal({
                             className="w-24 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 placeholder-zinc-500 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600/20 transition-all"
                           />
                         </form>
-                        {showSuggestions && suggestions.length > 0 && (
-                          <div
-                            ref={suggestionsRef}
-                            className="absolute top-full left-0 mt-1 w-48 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto"
-                          >
-                            {suggestions.map((suggestion) => {
-                              const colorClass =
-                                TAG_COLORS[suggestion.color || "blue"] ||
-                                TAG_COLORS.blue;
-                              const textColorClass =
-                                colorClass.match(/text-\w+-\d+/)?.[0] ||
-                                "text-zinc-300";
-                              return (
-                                <button
-                                  key={suggestion.id}
-                                  type="button"
-                                  onClick={() => addTagLogic(suggestion.name)}
-                                  className="w-full text-left px-3 py-2 text-xs hover:bg-zinc-700 transition-colors flex items-center justify-between group"
-                                >
-                                  <span
-                                    className={`font-medium ${textColorClass}`}
-                                  >
-                                    #{suggestion.name}
-                                  </span>
-                                  <span className="text-zinc-500 group-hover:text-zinc-400">
-                                    Add
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
@@ -1796,44 +1781,21 @@ export default function PhotoDetailModal({
                           value={newMention}
                           onChange={(e) => setNewMention(e.target.value)}
                           onFocus={() => {
+                            if (mentionInputRef.current) {
+                              const r =
+                                mentionInputRef.current.getBoundingClientRect();
+                              setMentionDropdownStyle({
+                                position: "fixed",
+                                left: r.left,
+                                top: r.bottom + 4,
+                              });
+                            }
                             if (mentionSuggestions.length > 0)
                               setShowMentionSuggestions(true);
                           }}
                           placeholder="Tag person..."
                           className="w-32 pl-8 pr-3 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 placeholder-zinc-500 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600/20 transition-all"
                         />
-                        {showMentionSuggestions &&
-                          mentionSuggestions.length > 0 && (
-                            <div
-                              ref={mentionSuggestionsRef}
-                              className="absolute top-full left-0 mt-1 w-56 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto"
-                            >
-                              {mentionSuggestions.map((user) => (
-                                <button
-                                  key={user.id}
-                                  type="button"
-                                  onClick={() => handleAddMention(user)}
-                                  className="w-full text-left px-3 py-2 hover:bg-zinc-700 transition-colors flex items-center gap-2 group"
-                                >
-                                  <UserAvatar
-                                    user={user}
-                                    size="xs"
-                                    className="w-6 h-6"
-                                  />
-                                  <div className="flex flex-col min-w-0">
-                                    <span className="text-xs font-medium text-zinc-200 truncate">
-                                      {user.name}
-                                    </span>
-                                    {user.handle && (
-                                      <span className="text-[10px] text-zinc-500 truncate">
-                                        @{user.handle}
-                                      </span>
-                                    )}
-                                  </div>
-                                </button>
-                              ))}
-                            </div>
-                          )}
                       </div>
                     )}
                   </div>
@@ -2229,6 +2191,73 @@ export default function PhotoDetailModal({
           </div>
         </div>
       </div>
+
+      {showSuggestions &&
+        suggestions.length > 0 &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={suggestionsRef}
+            style={tagDropdownStyle}
+            className="fixed z-[60] w-48 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl max-h-48 overflow-y-auto"
+          >
+            {suggestions.map((suggestion) => {
+              const colorClass =
+                TAG_COLORS[suggestion.color || "blue"] || TAG_COLORS.blue;
+              const textColorClass =
+                colorClass.match(/text-\w+-\d+/)?.[0] || "text-zinc-300";
+              return (
+                <button
+                  key={suggestion.id}
+                  type="button"
+                  onClick={() => addTagLogic(suggestion.name)}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-zinc-700 transition-colors flex items-center justify-between group"
+                >
+                  <span className={`font-medium ${textColorClass}`}>
+                    #{suggestion.name}
+                  </span>
+                  <span className="text-zinc-500 group-hover:text-zinc-400">
+                    Add
+                  </span>
+                </button>
+              );
+            })}
+          </div>,
+          document.body,
+        )}
+
+      {showMentionSuggestions &&
+        mentionSuggestions.length > 0 &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={mentionSuggestionsRef}
+            style={mentionDropdownStyle}
+            className="fixed z-[60] w-56 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl max-h-48 overflow-y-auto"
+          >
+            {mentionSuggestions.map((user) => (
+              <button
+                key={user.id}
+                type="button"
+                onClick={() => handleAddMention(user)}
+                className="w-full text-left px-3 py-2 hover:bg-zinc-700 transition-colors flex items-center gap-2 group"
+              >
+                <UserAvatar user={user} size="xs" className="w-6 h-6" />
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-medium text-zinc-200 truncate">
+                    {user.name}
+                  </span>
+                  {user.handle && (
+                    <span className="text-[10px] text-zinc-500 truncate">
+                      @{user.handle}
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
 
       {hoveredMention && (
         <div
