@@ -26,7 +26,7 @@ export default async function ManageUsersPage() {
     })
     .from(users)
     .leftJoin(media, sql`${users.id} = ${media.uploadedById}`)
-    .where(sql`${users.deletedAt} IS NULL`)
+    .where(sql`${users.deletedAt} IS NULL AND ${users.migrationMode} IS NULL`)
     .groupBy(users.id)
     .orderBy(desc(users.createdAt));
   const usersWithBannedBy = await Promise.all(

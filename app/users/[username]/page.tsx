@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { HiExclamationCircle } from "react-icons/hi2";
 import { getSession } from "@/lib/auth";
 import { APP_URL } from "@/lib/constants";
@@ -26,9 +26,15 @@ export async function generateMetadata({
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
       username,
     );
-  const user = await db.query.users.findFirst({
+  let user = await db.query.users.findFirst({
     where: isUuid ? eq(users.id, username) : eq(users.handle, username),
   });
+  if (user?.migrationMode && user.migratedToUserId) {
+    const target = await db.query.users.findFirst({
+      where: eq(users.id, user.migratedToUserId),
+    });
+    if (target) user = target;
+  }
   if (!user) {
     return {
       title: "User Not Found",
@@ -104,8 +110,19 @@ export default async function UserProfilePage({
       slackId: true,
       storageLimit: true,
       isGlobalAdmin: true,
+      migratedToUserId: true,
+      migrationMode: true,
     },
   });
+  if (userData?.migrationMode && userData.migratedToUserId) {
+    const target = await db.query.users.findFirst({
+      where: eq(users.id, userData.migratedToUserId),
+      columns: { id: true, handle: true, deletedAt: true },
+    });
+    if (target && !target.deletedAt) {
+      redirect(`/users/${target.handle || target.id}`);
+    }
+  }
   const user = userData
     ? {
         ...userData,

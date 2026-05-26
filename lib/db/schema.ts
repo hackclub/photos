@@ -54,6 +54,11 @@ export const auditActionEnum = pgEnum("audit_action", [
   "impersonate",
   "join",
   "leave",
+  "merge",
+]);
+export const userMigrationModeEnum = pgEnum("user_migration_mode", [
+  "notify",
+  "alias",
 ]);
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -76,6 +81,12 @@ export const users = pgTable("users", {
   bannedAt: timestamp("banned_at"),
   bannedById: uuid("banned_by_id").references((): AnyPgColumn => users.id),
   banReason: text("ban_reason"),
+  migratedToUserId: uuid("migrated_to_user_id").references(
+    (): AnyPgColumn => users.id,
+    { onDelete: "set null" },
+  ),
+  migrationMode: userMigrationModeEnum("migration_mode"),
+  migrationMessage: text("migration_message"),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

@@ -34,10 +34,21 @@ export async function addMention(mediaId: string, userId: string) {
     if (!user) {
       return { success: false, error: "User not found" };
     }
+    const targetUserId =
+      user.migrationMode && user.migratedToUserId
+        ? user.migratedToUserId
+        : userId;
+    const targetUser =
+      targetUserId === userId
+        ? user
+        : await db.query.users.findFirst({ where: eq(users.id, targetUserId) });
+    if (!targetUser) {
+      return { success: false, error: "Migration target not found" };
+    }
     const existingMention = await db.query.mediaMentions.findFirst({
       where: and(
         eq(mediaMentions.mediaId, mediaId),
-        eq(mediaMentions.userId, userId),
+        eq(mediaMentions.userId, targetUserId),
       ),
     });
     if (existingMention) {
@@ -45,7 +56,7 @@ export async function addMention(mediaId: string, userId: string) {
     }
     await db.insert(mediaMentions).values({
       mediaId,
-      userId,
+      userId: targetUserId,
     });
     await auditLog(
       currentUser.id,
@@ -54,10 +65,10 @@ export async function addMention(mediaId: string, userId: string) {
       `${mediaId}:${userId}`,
       {
         mediaId,
-        mentionedUserId: userId,
+        mentionedUserId: targetUserId,
       },
     );
-    return { success: true, user };
+    return { success: true, user: targetUser };
   } catch (error) {
     logger.error("Failed to add mention:", error);
     return { success: false, error: "Failed to add mention" };

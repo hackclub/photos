@@ -36,6 +36,5 @@ yarn.lock
 pnpm-lock.yaml
 package-lock.json
 
-mobile
-
 app/api/v1/mobile
+mobile/*

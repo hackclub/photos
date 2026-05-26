@@ -58,7 +58,10 @@ export async function globalSearch(query: string): Promise<{
     let userResults: (typeof users.$inferSelect)[] = [];
     if (session) {
       userResults = await db.query.users.findMany({
-        where: or(ilike(users.handle, searchPattern)),
+        where: and(
+          sql`${users.migrationMode} IS NULL`,
+          or(ilike(users.handle, searchPattern)),
+        ),
         limit: 5,
         orderBy: [desc(users.createdAt)],
       });
@@ -120,7 +123,10 @@ export async function globalSearch(query: string): Promise<{
       .filter((e) => accessibleEventIds.has(e.id))
       .slice(0, 5);
     const matchingUsers = await db.query.users.findMany({
-      where: or(ilike(users.handle, searchPattern)),
+      where: and(
+        sql`${users.migrationMode} IS NULL`,
+        or(ilike(users.handle, searchPattern)),
+      ),
       columns: { id: true },
       limit: 10,
     });
@@ -214,6 +220,7 @@ export async function getSearchFilterOptions() {
       }),
       session
         ? db.query.users.findMany({
+            where: sql`${users.migrationMode} IS NULL`,
             orderBy: [desc(users.createdAt)],
             columns: {
               id: true,
@@ -281,7 +288,10 @@ export async function advancedSearch(
     let userResults: (typeof users.$inferSelect)[] = [];
     if (session && trimmedQuery.length >= 2) {
       userResults = await db.query.users.findMany({
-        where: or(ilike(users.handle, searchPattern)),
+        where: and(
+          sql`${users.migrationMode} IS NULL`,
+          or(ilike(users.handle, searchPattern)),
+        ),
         limit: 5,
         orderBy: [desc(users.createdAt)],
       });
@@ -318,7 +328,10 @@ export async function advancedSearch(
     const mediaConditions = [];
     if (trimmedQuery.length > 0) {
       const matchingUsers = await db.query.users.findMany({
-        where: or(ilike(users.handle, searchPattern)),
+        where: and(
+          sql`${users.migrationMode} IS NULL`,
+          or(ilike(users.handle, searchPattern)),
+        ),
         columns: { id: true },
         limit: 10,
       });

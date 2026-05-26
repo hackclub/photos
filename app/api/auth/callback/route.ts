@@ -46,6 +46,50 @@ export async function GET(request: NextRequest) {
       });
 
       if (existingUser) {
+        if (existingUser.migrationMode && existingUser.migratedToUserId) {
+          const migratedTo = await db.query.users.findFirst({
+            where: eq(users.id, existingUser.migratedToUserId),
+          });
+          if (!migratedTo || migratedTo.isBanned || migratedTo.deletedAt) {
+            await deleteSession();
+            return NextResponse.redirect(
+              new URL(
+                "/auth/error?error=migration_target_unavailable",
+                process.env.NEXTAUTH_URL,
+              ),
+            );
+          }
+          if (existingUser.migrationMode === "notify") {
+            await deleteSession();
+            const message =
+              existingUser.migrationMessage ||
+              `You have been migrated to ${migratedTo.name}${migratedTo.slackId ? ` / ${migratedTo.slackId}` : ""} / ${migratedTo.hackclubId}. Please log in with that account.`;
+            return NextResponse.redirect(
+              new URL(
+                `/auth/migrated?message=${encodeURIComponent(message)}`,
+                process.env.NEXTAUTH_URL,
+              ),
+            );
+          }
+          await createSession({
+            id: migratedTo.id,
+            email: migratedTo.email,
+            name: migratedTo.name,
+            handle: migratedTo.handle,
+            hackclubId: migratedTo.hackclubId,
+            isGlobalAdmin: migratedTo.isGlobalAdmin,
+            isBanned: migratedTo.isBanned,
+            slackId: migratedTo.slackId,
+          });
+          if (!migratedTo.handle) {
+            return NextResponse.redirect(
+              new URL("/onboarding", process.env.NEXTAUTH_URL),
+            );
+          }
+          return NextResponse.redirect(
+            new URL(state, process.env.NEXTAUTH_URL),
+          );
+        }
         const user = await createOrUpdateUser(
           hackclubUser,
           accessToken,

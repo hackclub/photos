@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  allowedDevOrigins: [
+    "192.168.0.32",
+    ...(process.env.NEXT_ALLOWED_DEV_ORIGINS?.split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean) ?? []),
+  ],
   outputFileTracingIncludes: {
     "/*": ["./otel-bootstrap.cjs", "./node_modules/@opentelemetry/**/*"],
   },
@@ -10,6 +16,12 @@ const nextConfig: NextConfig = {
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 31536000,
     localPatterns: [
+      {
+        pathname: "/hackclub-icon.png",
+      },
+      {
+        pathname: "/lost.png",
+      },
       {
         pathname: "/media/**",
       },

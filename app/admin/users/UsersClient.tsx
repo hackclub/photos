@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import {
+  HiArrowsRightLeft,
   HiCheck,
   HiCheckCircle,
   HiCloud,
@@ -35,6 +36,7 @@ import {
 import UserAvatar from "@/components/ui/UserAvatar";
 import { logger } from "@/lib/client-logger";
 import { formatBytes } from "@/lib/format";
+import MergeUserModal from "./MergeUserModal";
 
 interface User {
   id: string;
@@ -42,6 +44,7 @@ interface User {
   email: string;
   handle?: string | null;
   slackId: string | null;
+  hackclubId?: string;
   isGlobalAdmin: boolean;
   isBanned: boolean;
   bannedAt: Date | null;
@@ -85,6 +88,7 @@ export default function UsersClient({
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [adminToggleModalOpen, setAdminToggleModalOpen] = useState(false);
   const [impersonateModalOpen, setImpersonateModalOpen] = useState(false);
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithStats | null>(null);
   const [banReason, setBanReason] = useState("");
   const [banDeleteContent, setBanDeleteContent] = useState(true);
@@ -137,6 +141,10 @@ export default function UsersClient({
   const handleImpersonateClick = (userWithStats: UserWithStats) => {
     setSelectedUser(userWithStats);
     setImpersonateModalOpen(true);
+  };
+  const handleMergeClick = (userWithStats: UserWithStats) => {
+    setSelectedUser(userWithStats);
+    setMergeModalOpen(true);
   };
   const handleImpersonate = async () => {
     if (!selectedUser) return;
@@ -522,6 +530,22 @@ export default function UsersClient({
                         <button
                           type="button"
                           onClick={() =>
+                            handleMergeClick({
+                              user,
+                              photoCount,
+                              storageUsed,
+                              bannedByName,
+                            })
+                          }
+                          className="p-1.5 text-zinc-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-colors"
+                          title="Merge User"
+                        >
+                          <HiArrowsRightLeft className="w-4 h-4" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
                             handleAdminToggleClick({
                               user,
                               photoCount,
@@ -821,6 +845,19 @@ export default function UsersClient({
               ),
             );
           }}
+        />
+      )}
+
+      {mergeModalOpen && selectedUser && (
+        <MergeUserModal
+          initialUser={selectedUser.user}
+          onClose={() => {
+            if (!processing) {
+              setMergeModalOpen(false);
+              setSelectedUser(null);
+            }
+          }}
+          onMerged={() => window.location.reload()}
         />
       )}
     </>

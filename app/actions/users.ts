@@ -1,11 +1,31 @@
 "use server";
-import { and, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { dataExports, media, users } from "@/lib/db/schema";
+import {
+  apiKeys,
+  blurRequests,
+  commentLikes,
+  dataExports,
+  eventAdmins,
+  eventParticipants,
+  events,
+  media,
+  mediaComments,
+  mediaLikes,
+  mediaMentions,
+  pendingEventAdmins,
+  pendingMediaOwnership,
+  pendingSeriesAdmins,
+  reports,
+  series,
+  seriesAdmins,
+  shareLinks,
+  users,
+} from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { deleteFromS3 } from "@/lib/media/s3";
 import { deleteBatchMedia } from "@/lib/media/thumbnail";
@@ -22,7 +42,10 @@ export async function searchUsers(query: string) {
       return { success: true, users: [] };
     }
     const searchResults = await db.query.users.findMany({
-      where: or(ilike(users.handle, `%${query}%`)),
+      where: and(
+        sql`${users.migrationMode} IS NULL`,
+        or(ilike(users.handle, `%${query}%`)),
+      ),
       limit: 10,
       columns: {
         id: true,
@@ -39,6 +62,435 @@ export async function searchUsers(query: string) {
     return { success: false, error: "Failed to search users" };
   }
 }
+export async function adminSearchMergeUsers(
+  query: string,
+  excludeUserId?: string,
+) {
+  try {
+    const session = await getSession();
+    const user = await getUserContext(session?.id);
+    if (!user?.isGlobalAdmin) return { success: false, error: "Forbidden" };
+    if (!query || query.length < 2) return { success: true, users: [] };
+    const term = `%${query}%`;
+    const conditions = [
+      sql`${users.deletedAt} IS NULL`,
+      sql`${users.migrationMode} IS NULL`,
+      or(
+        ilike(users.name, term),
+        ilike(users.email, term),
+        ilike(users.handle, term),
+        ilike(users.slackId, term),
+        ilike(users.hackclubId, term),
+      ),
+    ];
+    if (excludeUserId) conditions.push(sql`${users.id} <> ${excludeUserId}`);
+    const searchResults = await db.query.users.findMany({
+      where: and(...conditions),
+      limit: 10,
+      columns: {
+        id: true,
+        name: true,
+        email: true,
+        handle: true,
+        slackId: true,
+        hackclubId: true,
+      },
+    });
+    return { success: true, users: searchResults };
+  } catch (error) {
+    logger.error("Error searching merge users:", error);
+    return { success: false, error: "Failed to search users" };
+  }
+}
+
+export async function getUserMergePreview(
+  sourceUserId: string,
+  targetUserId: string,
+) {
+  try {
+    const session = await getSession();
+    const admin = await getUserContext(session?.id);
+    if (!admin?.isGlobalAdmin) return { success: false, error: "Forbidden" };
+    if (sourceUserId === targetUserId) {
+      return { success: false, error: "Choose two different users" };
+    }
+    const [source, target] = await Promise.all([
+      db.query.users.findFirst({ where: eq(users.id, sourceUserId) }),
+      db.query.users.findFirst({ where: eq(users.id, targetUserId) }),
+    ]);
+    if (!source || !target) return { success: false, error: "User not found" };
+    const eventRows = await db
+      .select({
+        eventId: events.id,
+        eventName: events.name,
+        eventSlug: events.slug,
+        sourceUploads: sql<number>`count(distinct ${media.id}) filter (where ${media.uploadedById} = ${sourceUserId})`,
+        targetUploads: sql<number>`count(distinct ${media.id}) filter (where ${media.uploadedById} = ${targetUserId})`,
+        sourceMentions: sql<number>`count(distinct ${mediaMentions.mediaId}) filter (where ${mediaMentions.userId} = ${sourceUserId})`,
+        targetMentions: sql<number>`count(distinct ${mediaMentions.mediaId}) filter (where ${mediaMentions.userId} = ${targetUserId})`,
+        sourceAttendance: sql<number>`count(distinct ${eventParticipants.id}) filter (where ${eventParticipants.userId} = ${sourceUserId})`,
+        targetAttendance: sql<number>`count(distinct ${eventParticipants.id}) filter (where ${eventParticipants.userId} = ${targetUserId})`,
+      })
+      .from(events)
+      .leftJoin(media, eq(media.eventId, events.id))
+      .leftJoin(mediaMentions, eq(mediaMentions.mediaId, media.id))
+      .leftJoin(eventParticipants, eq(eventParticipants.eventId, events.id))
+      .groupBy(events.id)
+      .having(sql`
+        count(distinct ${media.id}) filter (where ${media.uploadedById} in (${sourceUserId}, ${targetUserId})) > 0
+        or count(distinct ${mediaMentions.mediaId}) filter (where ${mediaMentions.userId} in (${sourceUserId}, ${targetUserId})) > 0
+        or count(distinct ${eventParticipants.id}) filter (where ${eventParticipants.userId} in (${sourceUserId}, ${targetUserId})) > 0
+      `);
+    const [sourceLikes, sourceComments, sourceApiKeys, sourceExports] =
+      await Promise.all([
+        db.$count(mediaLikes, eq(mediaLikes.userId, sourceUserId)),
+        db.$count(mediaComments, eq(mediaComments.userId, sourceUserId)),
+        db.$count(apiKeys, eq(apiKeys.userId, sourceUserId)),
+        db.$count(dataExports, eq(dataExports.userId, sourceUserId)),
+      ]);
+    return {
+      success: true,
+      source,
+      target,
+      events: eventRows.map((row) => ({
+        ...row,
+        sourceUploads: Number(row.sourceUploads),
+        targetUploads: Number(row.targetUploads),
+        sourceMentions: Number(row.sourceMentions),
+        targetMentions: Number(row.targetMentions),
+        sourceAttendance: Number(row.sourceAttendance),
+        targetAttendance: Number(row.targetAttendance),
+      })),
+      totals: { sourceLikes, sourceComments, sourceApiKeys, sourceExports },
+    };
+  } catch (error) {
+    logger.error("Error building merge preview:", error);
+    return { success: false, error: "Failed to build merge preview" };
+  }
+}
+
+type MergeUserDataField =
+  | "name"
+  | "preferredName"
+  | "handle"
+  | "bio"
+  | "socialLinks"
+  | "storageLimit";
+
+export async function mergeUsers(options: {
+  sourceUserId: string;
+  targetUserId: string;
+  moveUploadsEventIds?: string[];
+  moveMentionEventIds?: string[];
+  moveAttendanceEventIds?: string[];
+  moveLikes?: boolean;
+  moveComments?: boolean;
+  moveCommentLikes?: boolean;
+  moveReports?: boolean;
+  moveBlurRequests?: boolean;
+  moveShareLinks?: boolean;
+  moveApiKeys?: boolean;
+  moveDataExports?: boolean;
+  moveAdminRoles?: boolean;
+  moveCreatedEvents?: boolean;
+  moveCreatedSeries?: boolean;
+  movePendingGrants?: boolean;
+  scrubSourceProfile?: boolean;
+  migrateLogin?: boolean;
+  aliasLogin?: boolean;
+  mergeDataFields?: MergeUserDataField[];
+}) {
+  try {
+    const session = await getSession();
+    const admin = await getUserContext(session?.id);
+    if (!admin?.isGlobalAdmin) return { success: false, error: "Forbidden" };
+    if (options.sourceUserId === options.targetUserId) {
+      return { success: false, error: "Choose two different users" };
+    }
+    const [source, target] = await Promise.all([
+      db.query.users.findFirst({ where: eq(users.id, options.sourceUserId) }),
+      db.query.users.findFirst({ where: eq(users.id, options.targetUserId) }),
+    ]);
+    if (!source || !target) return { success: false, error: "User not found" };
+    if (options.scrubSourceProfile && !options.aliasLogin) {
+      return {
+        success: false,
+        error:
+          "Source profile can only be scrubbed when alias login is enabled",
+      };
+    }
+    const dataUpdate: Partial<typeof users.$inferInsert> = {};
+    for (const field of options.mergeDataFields || []) {
+      if (field === "handle" && source.handle) {
+        const owner = await db.query.users.findFirst({
+          where: eq(users.handle, source.handle),
+          columns: { id: true },
+        });
+        if (owner && owner.id !== target.id) {
+          return { success: false, error: "Source handle is already owned" };
+        }
+      }
+      if (field === "name") dataUpdate.name = source.name;
+      if (field === "preferredName")
+        dataUpdate.preferredName = source.preferredName;
+      if (field === "handle") dataUpdate.handle = source.handle;
+      if (field === "bio") dataUpdate.bio = source.bio;
+      if (field === "socialLinks") dataUpdate.socialLinks = source.socialLinks;
+      if (field === "storageLimit")
+        dataUpdate.storageLimit = source.storageLimit;
+    }
+    const mentionMediaIds = options.moveMentionEventIds?.length
+      ? (
+          await db
+            .select({ id: media.id })
+            .from(media)
+            .where(inArray(media.eventId, options.moveMentionEventIds))
+        ).map((row) => row.id)
+      : [];
+    const attendanceEventIds = options.moveAttendanceEventIds || [];
+    await db.transaction(async (tx) => {
+      if (options.moveUploadsEventIds?.length) {
+        await tx
+          .update(media)
+          .set({ uploadedById: target.id })
+          .where(
+            and(
+              eq(media.uploadedById, source.id),
+              inArray(media.eventId, options.moveUploadsEventIds),
+            ),
+          );
+      }
+      if (mentionMediaIds.length) {
+        await tx
+          .delete(mediaMentions)
+          .where(
+            and(
+              eq(mediaMentions.userId, target.id),
+              inArray(mediaMentions.mediaId, mentionMediaIds),
+            ),
+          );
+        await tx
+          .update(mediaMentions)
+          .set({ userId: target.id })
+          .where(
+            and(
+              eq(mediaMentions.userId, source.id),
+              inArray(mediaMentions.mediaId, mentionMediaIds),
+            ),
+          );
+      }
+      if (attendanceEventIds.length) {
+        await tx
+          .delete(eventParticipants)
+          .where(
+            and(
+              eq(eventParticipants.userId, target.id),
+              inArray(eventParticipants.eventId, attendanceEventIds),
+            ),
+          );
+        await tx
+          .update(eventParticipants)
+          .set({ userId: target.id })
+          .where(
+            and(
+              eq(eventParticipants.userId, source.id),
+              inArray(eventParticipants.eventId, attendanceEventIds),
+            ),
+          );
+      }
+      if (options.moveLikes) {
+        await tx
+          .delete(mediaLikes)
+          .where(
+            and(
+              eq(mediaLikes.userId, target.id),
+              inArray(
+                mediaLikes.mediaId,
+                tx
+                  .select({ mediaId: mediaLikes.mediaId })
+                  .from(mediaLikes)
+                  .where(eq(mediaLikes.userId, source.id)),
+              ),
+            ),
+          );
+        await tx
+          .update(mediaLikes)
+          .set({ userId: target.id })
+          .where(eq(mediaLikes.userId, source.id));
+      }
+      if (options.moveComments) {
+        await tx
+          .update(mediaComments)
+          .set({ userId: target.id, updatedAt: new Date() })
+          .where(eq(mediaComments.userId, source.id));
+      }
+      if (options.moveCommentLikes) {
+        await tx
+          .update(commentLikes)
+          .set({ userId: target.id })
+          .where(eq(commentLikes.userId, source.id));
+      }
+      if (options.moveReports) {
+        await tx
+          .update(reports)
+          .set({ reporterId: target.id, updatedAt: new Date() })
+          .where(eq(reports.reporterId, source.id));
+        await tx
+          .update(reports)
+          .set({ resolvedById: target.id, updatedAt: new Date() })
+          .where(eq(reports.resolvedById, source.id));
+      }
+      if (options.moveBlurRequests) {
+        await tx
+          .update(blurRequests)
+          .set({ requesterId: target.id, updatedAt: new Date() })
+          .where(eq(blurRequests.requesterId, source.id));
+        await tx
+          .update(blurRequests)
+          .set({ resolvedById: target.id, updatedAt: new Date() })
+          .where(eq(blurRequests.resolvedById, source.id));
+      }
+      if (options.moveShareLinks) {
+        await tx
+          .update(shareLinks)
+          .set({ createdById: target.id })
+          .where(eq(shareLinks.createdById, source.id));
+      }
+      if (options.moveApiKeys) {
+        await tx
+          .update(apiKeys)
+          .set({ userId: target.id })
+          .where(eq(apiKeys.userId, source.id));
+      }
+      if (options.moveDataExports) {
+        await tx
+          .update(dataExports)
+          .set({ userId: target.id })
+          .where(eq(dataExports.userId, source.id));
+      }
+      if (options.moveAdminRoles) {
+        await tx
+          .update(eventAdmins)
+          .set({ userId: target.id })
+          .where(eq(eventAdmins.userId, source.id));
+        await tx
+          .update(seriesAdmins)
+          .set({ userId: target.id })
+          .where(eq(seriesAdmins.userId, source.id));
+      }
+      if (options.moveCreatedEvents) {
+        await tx
+          .update(events)
+          .set({ createdById: target.id, updatedAt: new Date() })
+          .where(eq(events.createdById, source.id));
+      }
+      if (options.moveCreatedSeries) {
+        await tx
+          .update(series)
+          .set({ createdById: target.id, updatedAt: new Date() })
+          .where(eq(series.createdById, source.id));
+      }
+      if (options.movePendingGrants) {
+        await tx
+          .update(pendingMediaOwnership)
+          .set({ previousOwnerId: target.id })
+          .where(eq(pendingMediaOwnership.previousOwnerId, source.id));
+        await tx
+          .update(pendingMediaOwnership)
+          .set({ createdById: target.id })
+          .where(eq(pendingMediaOwnership.createdById, source.id));
+        await tx
+          .update(pendingMediaOwnership)
+          .set({ resolvedById: target.id })
+          .where(eq(pendingMediaOwnership.resolvedById, source.id));
+        await tx
+          .update(pendingSeriesAdmins)
+          .set({ grantedById: target.id })
+          .where(eq(pendingSeriesAdmins.grantedById, source.id));
+        await tx
+          .update(pendingSeriesAdmins)
+          .set({ claimedById: target.id })
+          .where(eq(pendingSeriesAdmins.claimedById, source.id));
+        await tx
+          .update(pendingEventAdmins)
+          .set({ grantedById: target.id })
+          .where(eq(pendingEventAdmins.grantedById, source.id));
+        await tx
+          .update(pendingEventAdmins)
+          .set({ claimedById: target.id })
+          .where(eq(pendingEventAdmins.claimedById, source.id));
+      }
+      if (Object.keys(dataUpdate).length > 0) {
+        await tx
+          .update(users)
+          .set({ ...dataUpdate, updatedAt: new Date() })
+          .where(eq(users.id, target.id));
+      }
+      if (options.migrateLogin || options.aliasLogin) {
+        const label = `${target.name}${target.slackId ? ` / ${target.slackId}` : ""} / ${target.hackclubId}`;
+        await tx
+          .update(users)
+          .set({
+            ...(options.scrubSourceProfile
+              ? {
+                  name: "Migrated User",
+                  preferredName: null,
+                  bio: null,
+                  socialLinks: null,
+                }
+              : {}),
+            migratedToUserId: target.id,
+            migrationMode: options.aliasLogin ? "alias" : "notify",
+            migrationMessage: `You have been migrated to ${label}. Please log in with that account.`,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, source.id));
+      } else {
+        await tx
+          .update(users)
+          .set({
+            migratedToUserId: null,
+            migrationMode: null,
+            migrationMessage: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, source.id));
+      }
+    });
+    await auditLog(admin.id, "merge", "user", source.id, {
+      sourceUserId: source.id,
+      targetUserId: target.id,
+      moveUploadsEventIds: options.moveUploadsEventIds || [],
+      moveMentionEventIds: options.moveMentionEventIds || [],
+      moveAttendanceEventIds: options.moveAttendanceEventIds || [],
+      buckets: {
+        likes: !!options.moveLikes,
+        comments: !!options.moveComments,
+        commentLikes: !!options.moveCommentLikes,
+        reports: !!options.moveReports,
+        blurRequests: !!options.moveBlurRequests,
+        shareLinks: !!options.moveShareLinks,
+        apiKeys: !!options.moveApiKeys,
+        dataExports: !!options.moveDataExports,
+        adminRoles: !!options.moveAdminRoles,
+        createdEvents: !!options.moveCreatedEvents,
+        createdSeries: !!options.moveCreatedSeries,
+        pendingGrants: !!options.movePendingGrants,
+      },
+      scrubSourceProfile: !!options.scrubSourceProfile,
+      migrateLogin: !!options.migrateLogin,
+      aliasLogin: !!options.aliasLogin,
+      mergeDataFields: options.mergeDataFields || [],
+    });
+    revalidatePath("/admin/users");
+    revalidatePath(`/users/${source.handle || source.id}`);
+    revalidatePath(`/users/${target.handle || target.id}`);
+    return { success: true };
+  } catch (error) {
+    logger.error("Error merging users:", error);
+    return { success: false, error: "Failed to merge users" };
+  }
+}
 export async function getUsersBySlackIds(slackIds: string[]) {
   try {
     const session = await getSession();
@@ -50,7 +502,10 @@ export async function getUsersBySlackIds(slackIds: string[]) {
       return { success: true, users: [] };
     }
     const foundUsers = await db.query.users.findMany({
-      where: inArray(users.slackId, slackIds),
+      where: and(
+        sql`${users.migrationMode} IS NULL`,
+        inArray(users.slackId, slackIds),
+      ),
       columns: {
         id: true,
         slackId: true,
