@@ -26,18 +26,28 @@ export default async function ManageUsersPage() {
     })
     .from(users)
     .leftJoin(media, sql`${users.id} = ${media.uploadedById}`)
-    .where(sql`${users.deletedAt} IS NULL AND ${users.migrationMode} IS NULL`)
+    .where(sql`${users.deletedAt} IS NULL`)
     .groupBy(users.id)
     .orderBy(desc(users.createdAt));
   const usersWithBannedBy = await Promise.all(
     usersWithStats.map(async ({ user, photoCount, storageUsed }) => {
       let bannedByName: string | undefined;
+      let migratedToName: string | undefined;
       if (user.isBanned && user.bannedById) {
         const bannedByUser = await db.query.users.findFirst({
           where: eq(users.id, user.bannedById),
           columns: { name: true },
         });
         bannedByName = bannedByUser?.name;
+      }
+      if (user.migratedToUserId) {
+        const migratedToUser = await db.query.users.findFirst({
+          where: eq(users.id, user.migratedToUserId),
+          columns: { name: true, handle: true, slackId: true },
+        });
+        migratedToName = migratedToUser
+          ? `${migratedToUser.name}${migratedToUser.handle ? ` (@${migratedToUser.handle})` : ""}${migratedToUser.slackId ? ` / ${migratedToUser.slackId}` : ""}`
+          : "Missing target";
       }
       const typedUser = {
         ...user,
@@ -49,6 +59,7 @@ export default async function ManageUsersPage() {
         photoCount,
         storageUsed: Number(storageUsed || 0),
         bannedByName,
+        migratedToName,
       };
     }),
   );

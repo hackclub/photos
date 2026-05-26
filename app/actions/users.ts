@@ -74,7 +74,6 @@ export async function adminSearchMergeUsers(
     const term = `%${query}%`;
     const conditions = [
       sql`${users.deletedAt} IS NULL`,
-      sql`${users.migrationMode} IS NULL`,
       or(
         ilike(users.name, term),
         ilike(users.email, term),
@@ -489,6 +488,36 @@ export async function mergeUsers(options: {
   } catch (error) {
     logger.error("Error merging users:", error);
     return { success: false, error: "Failed to merge users" };
+  }
+}
+export async function clearUserMigration(userId: string) {
+  try {
+    const session = await getSession();
+    const admin = await getUserContext(session?.id);
+    if (!admin?.isGlobalAdmin) return { success: false, error: "Forbidden" };
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { id: true, handle: true, migrationMode: true },
+    });
+    if (!user) return { success: false, error: "User not found" };
+    await db
+      .update(users)
+      .set({
+        migratedToUserId: null,
+        migrationMode: null,
+        migrationMessage: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+    await auditLog(admin.id, "update", "user", userId, {
+      clearedMigrationMode: user.migrationMode,
+    });
+    revalidatePath("/admin/users");
+    revalidatePath(`/users/${user.handle || user.id}`);
+    return { success: true };
+  } catch (error) {
+    logger.error("Error clearing user migration:", error);
+    return { success: false, error: "Failed to clear migration" };
   }
 }
 export async function getUsersBySlackIds(slackIds: string[]) {

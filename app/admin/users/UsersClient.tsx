@@ -19,7 +19,7 @@ import {
   impersonateUser,
   toggleGlobalAdmin,
 } from "@/app/actions/admins";
-import { banUser, unbanUser } from "@/app/actions/users";
+import { banUser, clearUserMigration, unbanUser } from "@/app/actions/users";
 import EditUserModal from "@/components/admin/EditUserModal";
 import { AdminSearch, AdminToolbar } from "@/components/ui/AdminPageLayout";
 import ConfirmModal from "@/components/ui/ConfirmModal";
@@ -56,12 +56,16 @@ interface User {
   preferredName?: string | null;
   socialLinks?: Record<string, string> | null;
   storageLimit: number;
+  migratedToUserId?: string | null;
+  migrationMode?: "notify" | "alias" | null;
+  migrationMessage?: string | null;
 }
 interface UserWithStats {
   user: User;
   photoCount: number;
   storageUsed: number;
   bannedByName?: string;
+  migratedToName?: string;
 }
 interface UsersClientProps {
   usersWithStats: UserWithStats[];
@@ -89,6 +93,7 @@ export default function UsersClient({
   const [adminToggleModalOpen, setAdminToggleModalOpen] = useState(false);
   const [impersonateModalOpen, setImpersonateModalOpen] = useState(false);
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [clearMigrationModalOpen, setClearMigrationModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithStats | null>(null);
   const [banReason, setBanReason] = useState("");
   const [banDeleteContent, setBanDeleteContent] = useState(true);
@@ -100,7 +105,9 @@ export default function UsersClient({
     const matchesSearch =
       user.name.toLowerCase().includes(query) ||
       user.email.toLowerCase().includes(query) ||
-      user.slackId?.toLowerCase().includes(query);
+      user.slackId?.toLowerCase().includes(query) ||
+      user.migrationMode?.toLowerCase().includes(query) ||
+      user.migrationMessage?.toLowerCase().includes(query);
     let matchesStatus = true;
     if (statusFilter === "admin") matchesStatus = user.isGlobalAdmin;
     if (statusFilter === "verified")
@@ -145,6 +152,10 @@ export default function UsersClient({
   const handleMergeClick = (userWithStats: UserWithStats) => {
     setSelectedUser(userWithStats);
     setMergeModalOpen(true);
+  };
+  const handleClearMigrationClick = (userWithStats: UserWithStats) => {
+    setSelectedUser(userWithStats);
+    setClearMigrationModalOpen(true);
   };
   const handleImpersonate = async () => {
     if (!selectedUser) return;
@@ -274,6 +285,37 @@ export default function UsersClient({
       setProcessing(false);
     }
   };
+  const handleClearMigration = async () => {
+    if (!selectedUser) return;
+    setProcessing(true);
+    try {
+      const result = await clearUserMigration(selectedUser.user.id);
+      if (!result.success) throw new Error(result.error);
+      setUsers(
+        users.map((u) =>
+          u.user.id === selectedUser.user.id
+            ? {
+                ...u,
+                user: {
+                  ...u.user,
+                  migratedToUserId: null,
+                  migrationMode: null,
+                  migrationMessage: null,
+                },
+                migratedToName: undefined,
+              }
+            : u,
+        ),
+      );
+      setClearMigrationModalOpen(false);
+      setSelectedUser(null);
+    } catch (error) {
+      logger.error("Error clearing migration:", error);
+      alert("Failed to clear migration");
+    } finally {
+      setProcessing(false);
+    }
+  };
   return (
     <>
       <AdminToolbar>
@@ -364,7 +406,13 @@ export default function UsersClient({
               </TableRow>
             ) : (
               visibleUsers.map(
-                ({ user, photoCount, storageUsed, bannedByName }) => (
+                ({
+                  user,
+                  photoCount,
+                  storageUsed,
+                  bannedByName,
+                  migratedToName,
+                }) => (
                   <TableRow key={user.id}>
                     <TableCell>
                       <Link
@@ -418,6 +466,13 @@ export default function UsersClient({
                               </span>
                             )}
 
+                            {user.migrationMode && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-red-600/30 bg-red-600/5 text-red-400 rounded text-[10px] font-medium uppercase tracking-wide whitespace-nowrap">
+                                <HiArrowsRightLeft className="w-3 h-3" />
+                                Migrated {user.migrationMode}
+                              </span>
+                            )}
+
                             {user.verificationStatus === "verified" ? (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-green-500/30 bg-green-500/5 text-green-400 rounded text-[10px] font-medium uppercase tracking-wide whitespace-nowrap">
                                 <HiCheckCircle className="w-3 h-3" />
@@ -444,6 +499,16 @@ export default function UsersClient({
                       {user.isBanned && bannedByName && (
                         <div className="mt-1 text-xs text-zinc-500">
                           By: {bannedByName}
+                        </div>
+                      )}
+                      {user.migrationMode && migratedToName && (
+                        <div className="mt-1 text-xs text-red-300 line-clamp-2">
+                          To: {migratedToName}
+                        </div>
+                      )}
+                      {user.migrationMessage && (
+                        <div className="mt-1 text-xs text-zinc-500 line-clamp-2">
+                          {user.migrationMessage}
                         </div>
                       )}
                     </TableCell>
@@ -535,6 +600,7 @@ export default function UsersClient({
                               photoCount,
                               storageUsed,
                               bannedByName,
+                              migratedToName,
                             })
                           }
                           className="p-1.5 text-zinc-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-colors"
@@ -542,6 +608,25 @@ export default function UsersClient({
                         >
                           <HiArrowsRightLeft className="w-4 h-4" />
                         </button>
+
+                        {user.migrationMode && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleClearMigrationClick({
+                                user,
+                                photoCount,
+                                storageUsed,
+                                bannedByName,
+                                migratedToName,
+                              })
+                            }
+                            className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-700/10 rounded-lg transition-colors"
+                            title="Disable Migration"
+                          >
+                            <HiCheck className="w-4 h-4" />
+                          </button>
+                        )}
 
                         <button
                           type="button"
@@ -551,6 +636,7 @@ export default function UsersClient({
                               photoCount,
                               storageUsed,
                               bannedByName,
+                              migratedToName,
                             })
                           }
                           className={`p-1.5 rounded-lg transition-colors ${
@@ -823,6 +909,31 @@ export default function UsersClient({
             ? "bg-red-600 hover:bg-red-700"
             : "bg-blue-600 hover:bg-blue-700"
         }
+        disabled={processing}
+      />
+
+      <ConfirmModal
+        isOpen={clearMigrationModalOpen}
+        onClose={() => !processing && setClearMigrationModalOpen(false)}
+        onConfirm={handleClearMigration}
+        title="Disable Migration"
+        message={
+          <div className="space-y-4">
+            <p className="text-zinc-300">
+              Disable migration for{" "}
+              <strong className="text-white">{selectedUser?.user.name}</strong>?
+            </p>
+            <div className="bg-red-600/10 border border-red-600/20 rounded-lg p-4">
+              <p className="text-sm text-red-100">
+                This only clears alias/redirect/login migration fields. It does
+                not undo any moved photos, tags, attendance, profile fields, or
+                other data.
+              </p>
+            </div>
+          </div>
+        }
+        confirmText={processing ? "Disabling..." : "Disable Migration"}
+        confirmButtonClass="bg-red-600 hover:bg-red-700"
         disabled={processing}
       />
 
