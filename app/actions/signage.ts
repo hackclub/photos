@@ -168,9 +168,9 @@ export async function getSeriesAndEvents() {
     });
     const accessibleEventIds = await getAccessibleEventIdsForUser(user?.id);
     const accessibleEventIdsSet = new Set(accessibleEventIds);
-    const accessibleEvents = allEvents.filter((e) =>
-      accessibleEventIdsSet.has(e.id),
-    );
+    const accessibleEvents = allEvents
+      .filter((e) => accessibleEventIdsSet.has(e.id))
+      .map(({ inviteCode: _inviteCode, ...event }) => event);
     return { success: true, series: allSeries, events: accessibleEvents };
   } catch (error) {
     logger.error("Error fetching series and events:", error);

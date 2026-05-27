@@ -13,6 +13,7 @@ export async function GET() {
         isBanned: true,
         slackId: true,
         handle: true,
+        preferredName: true,
       },
       with: {
         seriesAdminRoles: { limit: 1 },
@@ -26,8 +27,10 @@ export async function GET() {
         user.eventAdminRoles.length > 0;
       const res = NextResponse.json({
         user: {
-          ...session,
           ...toPublicUser({ ...session, ...user }),
+          email: session.email,
+          hackclubId: session.hackclubId,
+          isGlobalAdmin: session.isGlobalAdmin,
           isBanned: user.isBanned,
           slackId: user.slackId,
           hasAdminAccess,
@@ -44,7 +47,10 @@ export async function GET() {
   if (onboardingSession) {
     const res = NextResponse.json({
       onboardingUser: {
-        ...onboardingSession,
+        hackclubId: onboardingSession.hackclubId,
+        email: onboardingSession.email,
+        slackId: onboardingSession.slackId,
+        verificationStatus: onboardingSession.verificationStatus,
         name: getUserDisplayName(),
       },
     });

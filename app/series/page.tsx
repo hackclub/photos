@@ -40,7 +40,9 @@ export default async function SeriesPage() {
     });
     series = series.map((s) => ({
       ...s,
-      events: s.events.filter((event) => event.visibility === "public"),
+      events: s.events
+        .filter((event) => event.visibility === "public")
+        .map(({ inviteCode: _inviteCode, ...event }) => event),
     }));
   }
   const adminSeriesIds = new Set<string>();

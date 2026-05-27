@@ -146,6 +146,7 @@ export async function addAdmin(
     }
     const targetUser = await db.query.users.findFirst({
       where: eq(users.id, userId),
+      columns: { id: true },
     });
     if (!targetUser) return { error: "User not found" };
     const existing =
@@ -522,6 +523,7 @@ export async function toggleGlobalAdmin(userId: string) {
     }
     const user = await db.query.users.findFirst({
       where: eq(users.id, userId),
+      columns: { id: true, isGlobalAdmin: true },
     });
     if (!user) {
       return { success: false, error: "User not found" };
@@ -562,6 +564,16 @@ export async function impersonateUser(userId: string) {
     }
     const targetUser = await db.query.users.findFirst({
       where: eq(users.id, userId),
+      columns: {
+        id: true,
+        email: true,
+        name: true,
+        handle: true,
+        hackclubId: true,
+        isGlobalAdmin: true,
+        isBanned: true,
+        slackId: true,
+      },
     });
     if (!targetUser) {
       return { success: false, error: "User not found" };

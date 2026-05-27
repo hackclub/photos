@@ -19,7 +19,16 @@ export default async function AuditLogsPage() {
     orderBy: [desc(auditLogs.createdAt)],
     limit: 50,
     with: {
-      user: true,
+      user: {
+        columns: {
+          id: true,
+          name: true,
+          email: true,
+          handle: true,
+          preferredName: true,
+          slackId: true,
+        },
+      },
     },
   });
   return (

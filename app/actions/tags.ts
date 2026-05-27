@@ -119,6 +119,19 @@ export async function getTagByName(name: string) {
 }
 export async function getMediaTags(mediaId: string) {
   try {
+    const session = await getSession();
+    const user = await getUserContext(session?.id);
+    const mediaItem = await db.query.media.findFirst({
+      where: eq(media.id, mediaId),
+      with: { event: true },
+    });
+    if (!mediaItem) {
+      return { success: false, error: "Media not found" };
+    }
+    if (!(await can(user, "view", "media", mediaItem))) {
+      if (!user) return { success: false, error: "Unauthorized" };
+      return { success: false, error: "Forbidden" };
+    }
     const results = await db.query.mediaTags.findMany({
       where: eq(mediaTags.mediaId, mediaId),
       with: {
@@ -155,7 +168,15 @@ export async function getAllTags(
         pagination: { page, limit, total: 0, totalPages: 0 },
       };
     }
-    const offset = (page - 1) * limit;
+    const safePage = Math.max(
+      1,
+      Number.isFinite(Number(page)) ? Number(page) : 1,
+    );
+    const safeLimit = Math.min(
+      100,
+      Math.max(1, Number.isFinite(Number(limit)) ? Number(limit) : 50),
+    );
+    const offset = (safePage - 1) * safeLimit;
     let orderByClause = "count DESC";
     if (sortBy === "name") orderByClause = "t.name ASC";
     if (sortBy === "created") orderByClause = "t.created_at DESC";
@@ -185,7 +206,7 @@ export async function getAllTags(
     ${searchFilter}
     GROUP BY t.id
     ORDER BY ${orderByClause}
-    LIMIT ${limit} OFFSET ${offset}
+    LIMIT ${safeLimit} OFFSET ${offset}
    `);
     const results = await db.execute(query);
     const countQuery = sql.raw(`
@@ -209,10 +230,10 @@ export async function getAllTags(
         previewMediaId: row.preview_media_id as string | null,
       })),
       pagination: {
-        page,
-        limit,
+        page: safePage,
+        limit: safeLimit,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / safeLimit),
       },
     };
   } catch (error) {

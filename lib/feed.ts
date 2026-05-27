@@ -142,6 +142,12 @@ export async function fetchFeedItems(
     userIds.length > 0
       ? db.query.users.findMany({
           where: inArray(users.id, userIds),
+          columns: {
+            id: true,
+            handle: true,
+            preferredName: true,
+            slackId: true,
+          },
         })
       : Promise.resolve([]),
     mediaIds.length > 0

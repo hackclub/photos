@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { unauthorizedResponse, validateApiKey } from "@/lib/auth-api";
 import { APP_URL } from "@/lib/constants";
@@ -21,7 +21,10 @@ export async function GET(req: NextRequest) {
     : Math.min(Math.max(limitParam, 1), 100);
   const offset = (page - 1) * limit;
   try {
-    const conditions = [eq(events.visibility, "public")];
+    const conditions = [
+      eq(events.visibility, "public"),
+      isNull(media.blurStatus),
+    ];
     if (eventSlug) {
       conditions.push(eq(events.slug, eventSlug));
     }

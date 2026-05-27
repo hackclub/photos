@@ -10,6 +10,7 @@ import { db } from "@/lib/db";
 import { events, series, users } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
+import { can } from "@/lib/policy";
 export const dynamic = "force-dynamic";
 
 export async function GET(
@@ -78,29 +79,29 @@ export async function GET(
       case "event-banner": {
         const event = await db.query.events.findFirst({
           where: eq(events.id, id),
-          columns: {
-            bannerS3Key: true,
-          },
         });
         if (!event || !event.bannerS3Key) {
           return new NextResponse("Not Found", { status: 404 });
         }
+        if (!(await can(user, "view", "event", event))) {
+          return new NextResponse("Not Found", { status: 404 });
+        }
         s3Key = event.bannerS3Key;
-        isPublic = true;
+        isPublic = event.visibility === "public";
         break;
       }
       case "series-banner": {
         const seriesItem = await db.query.series.findFirst({
           where: eq(series.id, id),
-          columns: {
-            bannerS3Key: true,
-          },
         });
         if (!seriesItem || !seriesItem.bannerS3Key) {
           return new NextResponse("Not Found", { status: 404 });
         }
+        if (!(await can(user, "view", "series", seriesItem))) {
+          return new NextResponse("Not Found", { status: 404 });
+        }
         s3Key = seriesItem.bannerS3Key;
-        isPublic = true;
+        isPublic = seriesItem.visibility === "public";
         break;
       }
       default:

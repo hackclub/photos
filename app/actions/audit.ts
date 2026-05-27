@@ -30,7 +30,16 @@ export async function searchAuditLogs(query: string, offset = 0, limit = 50) {
       limit,
       offset,
       with: {
-        user: true,
+        user: {
+          columns: {
+            id: true,
+            name: true,
+            email: true,
+            handle: true,
+            preferredName: true,
+            slackId: true,
+          },
+        },
       },
     });
     return { success: true, logs, totalCount: totalResult.count };

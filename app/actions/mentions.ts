@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { media, mediaMentions, users } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { can, getUserContext } from "@/lib/policy";
+import { toPublicUser } from "@/lib/user-display";
 export async function addMention(mediaId: string, userId: string) {
   const session = await getSession();
   const currentUser = await getUserContext(session?.id);
@@ -30,6 +31,14 @@ export async function addMention(mediaId: string, userId: string) {
     }
     const user = await db.query.users.findFirst({
       where: eq(users.id, userId),
+      columns: {
+        id: true,
+        handle: true,
+        preferredName: true,
+        slackId: true,
+        migrationMode: true,
+        migratedToUserId: true,
+      },
     });
     if (!user) {
       return { success: false, error: "User not found" };
@@ -41,7 +50,15 @@ export async function addMention(mediaId: string, userId: string) {
     const targetUser =
       targetUserId === userId
         ? user
-        : await db.query.users.findFirst({ where: eq(users.id, targetUserId) });
+        : await db.query.users.findFirst({
+            where: eq(users.id, targetUserId),
+            columns: {
+              id: true,
+              handle: true,
+              preferredName: true,
+              slackId: true,
+            },
+          });
     if (!targetUser) {
       return { success: false, error: "Migration target not found" };
     }
@@ -68,7 +85,7 @@ export async function addMention(mediaId: string, userId: string) {
         mentionedUserId: targetUserId,
       },
     );
-    return { success: true, user: targetUser };
+    return { success: true, user: toPublicUser(targetUser) };
   } catch (error) {
     logger.error("Failed to add mention:", error);
     return { success: false, error: "Failed to add mention" };
@@ -138,10 +155,20 @@ export async function getMediaMentions(mediaId: string) {
     const results = await db.query.mediaMentions.findMany({
       where: eq(mediaMentions.mediaId, mediaId),
       with: {
-        user: true,
+        user: {
+          columns: {
+            id: true,
+            handle: true,
+            preferredName: true,
+            slackId: true,
+          },
+        },
       },
     });
-    return { success: true, mentions: results.map((r) => r.user) };
+    return {
+      success: true,
+      mentions: results.map((r) => toPublicUser(r.user)),
+    };
   } catch (error) {
     logger.error("Failed to get media mentions:", error);
     return { success: false, error: "Failed to get media mentions" };

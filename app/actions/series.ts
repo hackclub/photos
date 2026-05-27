@@ -141,6 +141,9 @@ export async function createSeries(data: SeriesInput) {
   if (!(await can(user, "create", "series"))) {
     return { success: false, error: "Forbidden" };
   }
+  if (!user.isGlobalAdmin) {
+    return { success: false, error: "Forbidden" };
+  }
   const { name, description, visibility, slug } = data;
   if (!name.trim()) {
     return { success: false, error: "Series name is required" };

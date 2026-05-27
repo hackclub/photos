@@ -15,6 +15,19 @@ import { dataExports, users } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { deleteFromS3, uploadToS3 } from "@/lib/media/s3";
 import { getUserContext } from "@/lib/policy";
+import { safeFilename } from "@/lib/safe-filename";
+
+const DATA_EXPORT_REDACTED_KEYS = new Set([
+  "hcaAccessToken",
+  "hcaRefreshToken",
+  "inviteCode",
+]);
+
+function redactDataExportValue(key: string, value: unknown) {
+  if (DATA_EXPORT_REDACTED_KEYS.has(key)) return undefined;
+  return value;
+}
+
 export async function requestDataExport() {
   try {
     const session = await getSession();
@@ -85,6 +98,30 @@ async function processDataExport(exportId: string, userId: string) {
       .where(eq(dataExports.id, exportId));
     const userData = await db.query.users.findFirst({
       where: eq(users.id, userId),
+      columns: {
+        id: true,
+        hackclubId: true,
+        email: true,
+        name: true,
+        preferredName: true,
+        handle: true,
+        slackId: true,
+        verificationStatus: true,
+        bio: true,
+        socialLinks: true,
+        isGlobalAdmin: true,
+        storageLimit: true,
+        isBanned: true,
+        bannedAt: true,
+        bannedById: true,
+        banReason: true,
+        migratedToUserId: true,
+        migrationMode: true,
+        migrationMessage: true,
+        deletedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       with: {
         createdSeries: true,
         createdEvents: true,
@@ -115,14 +152,18 @@ async function processDataExport(exportId: string, userId: string) {
     if (!userData) {
       throw new Error("User not found");
     }
-    const safeUserData = {
-      ...userData,
-      hcaAccessToken: undefined,
-      apiKeys: userData.apiKeys.map((key) => ({
-        ...key,
-        key: `${key.key.substring(0, 8)}...`,
-      })),
-    };
+    const safeUserData = JSON.parse(
+      JSON.stringify(
+        {
+          ...userData,
+          apiKeys: userData.apiKeys.map((key) => ({
+            ...key,
+            key: `${key.key.substring(0, 8)}...`,
+          })),
+        },
+        redactDataExportValue,
+      ),
+    );
     const downloadId = randomBytes(16).toString("hex");
     const tempPath = join(tmpdir(), `data-export-${downloadId}.zip`);
     const output = createWriteStream(tempPath);
@@ -156,7 +197,7 @@ async function processDataExport(exportId: string, userId: string) {
           const folder = item.mimeType.startsWith("image/")
             ? "photos"
             : "videos";
-          const zipPath = `media/${folder}/${item.filename}`;
+          const zipPath = `media/${folder}/${safeFilename(item.filename)}`;
           archive.append(Buffer.from(bytes), {
             name: zipPath,
             date:

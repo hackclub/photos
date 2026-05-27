@@ -7,6 +7,7 @@ import { getSharedMedia } from "@/app/actions/sharing";
 import { logger } from "@/lib/logger";
 import { convertHeicToJpeg } from "@/lib/media/heic";
 import { s3Client } from "@/lib/media/s3";
+import { contentDispositionFilename } from "@/lib/safe-filename";
 export async function GET(
   request: NextRequest,
   {
@@ -85,7 +86,10 @@ export async function GET(
       "Cloudflare-CDN-Cache-Control",
       "public, max-age=31536000, stale-while-revalidate=604800",
     );
-    headers.set("Content-Disposition", `inline; filename="${media.filename}"`);
+    headers.set(
+      "Content-Disposition",
+      `inline; filename="${contentDispositionFilename(media.filename)}"`,
+    );
     return new NextResponse(s3Response.Body as ReadableStream, {
       status: 200,
       headers,

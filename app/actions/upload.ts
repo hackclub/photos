@@ -28,6 +28,7 @@ import {
 import { validateMediaFile } from "@/lib/media/validation";
 import { extractVideoMetadata } from "@/lib/media/video-metadata";
 import { can, getUserContext } from "@/lib/policy";
+import { publicMedia } from "@/lib/public-data";
 import { checkStorageLimit } from "@/lib/storage";
 import {
   failedUploadsTotal,
@@ -40,6 +41,11 @@ const UUID_PATTERN = /^[0-9a-f-]{36}$/i;
 
 function getMediaIdFromKey(s3Key: string) {
   return MEDIA_KEY_PATTERN.exec(s3Key)?.[1] ?? null;
+}
+
+function safeFileExtension(filename: string) {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "bin";
+  return /^[a-z0-9]{1,12}$/.test(ext) ? ext : "bin";
 }
 
 async function objectExists(key: string) {
@@ -99,7 +105,7 @@ export async function getPresignedUrl(
       };
     }
     const mediaId = randomUUID();
-    const fileExtension = filename.split(".").pop() || "bin";
+    const fileExtension = safeFileExtension(filename);
     const s3Key = `media/${mediaId}/original.${fileExtension}`;
     const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
     const [uploadUrl, thumbnailUploadUrl] = await Promise.all([
@@ -135,12 +141,19 @@ export async function initiateMultipartUpload(
     if (!(await can(user, "upload", "event", eventId))) {
       return { success: false, error: "Forbidden" };
     }
+    const validation = validateMediaFile({
+      type: fileType,
+      size: fileSize,
+    } as File);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
     const storageCheck = await checkStorageLimit(user.id, fileSize, user);
     if (!storageCheck.allowed) {
       return { success: false, error: "Storage limit exceeded" };
     }
     const mediaId = randomUUID();
-    const fileExtension = filename.split(".").pop() || "bin";
+    const fileExtension = safeFileExtension(filename);
     const s3Key = `media/${mediaId}/original.${fileExtension}`;
     const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
     const uploadId = await createMultipartUpload(s3Key, fileType);
@@ -456,7 +469,7 @@ export async function finalizeUpload(
           }
         }
         photoUploadsTotal.add(1, { status: "success", source: "web" });
-        return { success: true, media: insertedMedia };
+        return { success: true, media: publicMedia(insertedMedia) };
       } catch (error) {
         failedUploadsTotal.add(1, { status: "error", source: "web" });
         logger.error("Error finalizing upload:", error);

@@ -252,6 +252,12 @@ export async function GET(request: Request) {
         );
       const user = await db.query.users.findFirst({
         where: isUuid ? eq(users.id, id) : eq(users.handle, id),
+        columns: {
+          handle: true,
+          preferredName: true,
+          slackId: true,
+          bio: true,
+        },
       });
       if (!user) return baseCard("Hack Club Photos", "User not found");
       const avatarUrl = getSlackAvatarUrl(user.slackId);

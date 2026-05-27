@@ -12,6 +12,7 @@ import {
 } from "@/lib/media/thumbnail";
 import { claimPendingAdminGrantsForUser } from "@/lib/pending-admins";
 import { can, getUserContext } from "@/lib/policy";
+import { publicEvent } from "@/lib/public-data";
 export async function joinEvent(eventId: string, inviteCode?: string) {
   const session = await getSession();
   const user = await getUserContext(session?.id);
@@ -178,6 +179,10 @@ export async function updateEvent(eventId: string, data: EventInput) {
     slug,
     seriesId,
   } = data;
+  const nextSeriesId = seriesId || null;
+  if (nextSeriesId !== event.seriesId && !user.isGlobalAdmin) {
+    return { success: false, error: "Only global admins can move events" };
+  }
   let inviteCode = event.inviteCode;
   if (requiresInvite && !inviteCode) {
     const { randomBytes } = await import("node:crypto");
@@ -195,7 +200,7 @@ export async function updateEvent(eventId: string, data: EventInput) {
         visibility,
         requiresInvite,
         inviteCode,
-        seriesId: seriesId || null,
+        seriesId: nextSeriesId,
         eventDate: eventDate ? new Date(eventDate) : null,
         location: location || null,
         locationCity: locationCity || null,
@@ -212,7 +217,7 @@ export async function updateEvent(eventId: string, data: EventInput) {
     revalidatePath(`/events/${updatedEvent.slug}`);
     revalidatePath("/events");
     revalidatePath("/admin/events");
-    return { success: true, event: updatedEvent };
+    return { success: true, event: publicEvent(updatedEvent) };
   } catch (error: any) {
     logger.error("Update event error:", error);
     if (error?.code === "23505") {
@@ -288,7 +293,10 @@ export async function getEvent(eventId: string) {
   if (!(await can(user, "view", "event", event))) {
     return { success: false, error: "Unauthorized" };
   }
-  return { success: true, event };
+  if (await can(user, "manage", "event", event)) {
+    return { success: true, event };
+  }
+  return { success: true, event: publicEvent(event) };
 }
 export async function createEvent(data: EventInput) {
   const session = await getSession();
@@ -313,6 +321,17 @@ export async function createEvent(data: EventInput) {
     slug,
     seriesId,
   } = data;
+  if (!user.isGlobalAdmin) {
+    if (!seriesId) {
+      return { success: false, error: "Series is required" };
+    }
+    const canCreateInSeries = user.seriesAdmins.some(
+      (admin) => admin.seriesId === seriesId,
+    );
+    if (!canCreateInSeries) {
+      return { success: false, error: "Forbidden" };
+    }
+  }
   if (!name.trim()) {
     return { success: false, error: "Event name is required" };
   }
@@ -355,7 +374,7 @@ export async function createEvent(data: EventInput) {
     });
     revalidatePath("/events");
     revalidatePath("/admin/events");
-    return { success: true, event: newEvent };
+    return { success: true, event: publicEvent(newEvent) };
   } catch (error: any) {
     logger.error("Create event error:", error);
     if (error?.code === "23505") {

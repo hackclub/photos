@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { events } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { can, getUserContext } from "@/lib/policy";
+import { publicEvent } from "@/lib/public-data";
 export async function GET(
   req: NextRequest,
   {
@@ -31,7 +32,11 @@ export async function GET(
       }
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    return NextResponse.json({ event });
+    const canManage = await can(user, "manage", "event", event);
+    if (canManage) {
+      return NextResponse.json({ event });
+    }
+    return NextResponse.json({ event: publicEvent(event) });
   } catch (error) {
     logger.error("Get event error:", error);
     return NextResponse.json(

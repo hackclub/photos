@@ -81,6 +81,11 @@ export async function revokeApiKey(id: string) {
     }
     const apiKey = await db.query.apiKeys.findFirst({
       where: eq(apiKeys.id, id),
+      columns: {
+        id: true,
+        userId: true,
+        name: true,
+      },
     });
     if (!apiKey) {
       return { success: false, error: "Not found" };

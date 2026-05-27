@@ -1,4 +1,4 @@
-import { and, desc, eq, like, not } from "drizzle-orm";
+import { and, desc, eq, isNull, like, not } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { unauthorizedResponse, validateApiKey } from "@/lib/auth-api";
 import { APP_URL } from "@/lib/constants";
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     const conditions = [
       eq(events.visibility, "public"),
       not(like(media.mimeType, "video/%")),
-      not(eq(media.blurStatus, "pending")),
+      isNull(media.blurStatus),
     ];
     if (eventSlug) {
       conditions.push(eq(events.slug, eventSlug));

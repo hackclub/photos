@@ -17,6 +17,16 @@ export async function listAllApiKeys() {
     }
     const keys = await db.query.apiKeys.findMany({
       orderBy: [desc(apiKeys.createdAt)],
+      columns: {
+        id: true,
+        userId: true,
+        name: true,
+        note: true,
+        canUpload: true,
+        isRevoked: true,
+        lastUsedAt: true,
+        createdAt: true,
+      },
       with: {
         user: {
           columns: {
@@ -46,8 +56,19 @@ export async function revokeApiKeyAdmin(id: string) {
     }
     const apiKey = await db.query.apiKeys.findFirst({
       where: eq(apiKeys.id, id),
+      columns: {
+        id: true,
+        userId: true,
+        name: true,
+      },
       with: {
-        user: true,
+        user: {
+          columns: {
+            id: true,
+            handle: true,
+            preferredName: true,
+          },
+        },
       },
     });
     if (!apiKey) {

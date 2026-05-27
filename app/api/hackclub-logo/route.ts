@@ -11,7 +11,7 @@ export async function GET() {
       },
     );
     const fetched = (await res.text()).trim();
-    if (fetched) url = fetched;
+    if (fetched.startsWith("/") && !fetched.startsWith("//")) url = fetched;
   } catch (_error) {
     url = "/hackclub-icon.png";
   }

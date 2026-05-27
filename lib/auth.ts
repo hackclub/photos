@@ -1,5 +1,6 @@
+import { createHash, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { jwtVerify, SignJWT } from "jose";
+import { EncryptJWT, jwtDecrypt, jwtVerify, SignJWT } from "jose";
 import { cookies, headers } from "next/headers";
 import { HACK_CLUB_AUTH_URL } from "@/lib/constants";
 import { logger, serializeError } from "@/lib/logger";
@@ -21,6 +22,9 @@ if (!nextAuthSecret) {
 }
 
 const JWT_SECRET = new TextEncoder().encode(nextAuthSecret || "dev-insecure");
+const JWE_SECRET = createHash("sha256")
+  .update(nextAuthSecret || "dev-insecure")
+  .digest();
 export interface SessionUser {
   id: string;
   email: string;
@@ -42,6 +46,60 @@ export interface OnboardingUser {
   hcaAccessToken: string;
   hcaRefreshToken?: string;
 }
+
+const SESSION_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+};
+
+export function normalizeCallbackUrl(callbackUrl: string | null): string {
+  if (!callbackUrl) return "/";
+
+  try {
+    const parsed = new URL(callbackUrl, "http://callback.local");
+    if (parsed.origin !== "http://callback.local") return "/";
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return "/";
+  }
+}
+
+export async function createOAuthState(callbackUrl: string | null) {
+  const nonce = randomUUID();
+  const token = await new SignJWT({
+    nonce,
+    callbackUrl: normalizeCallbackUrl(callbackUrl),
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime("10m")
+    .sign(JWT_SECRET);
+  const cookieStore = await cookies();
+  cookieStore.set("oauth_state", token, {
+    ...SESSION_COOKIE_OPTIONS,
+    maxAge: 60 * 10,
+  });
+  return nonce;
+}
+
+export async function consumeOAuthState(state: string | null) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("oauth_state")?.value;
+  cookieStore.delete("oauth_state");
+  if (!state || !token) return null;
+
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    if (payload.nonce !== state) return null;
+    return normalizeCallbackUrl(
+      typeof payload.callbackUrl === "string" ? payload.callbackUrl : null,
+    );
+  } catch (_error) {
+    return null;
+  }
+}
+
 export async function createSession(user: SessionUser) {
   const token = await new SignJWT({ user })
     .setProtectedHeader({ alg: "HS256" })
@@ -49,25 +107,19 @@ export async function createSession(user: SessionUser) {
     .sign(JWT_SECRET);
   const cookieStore = await cookies();
   cookieStore.set("session", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
+    ...SESSION_COOKIE_OPTIONS,
     maxAge: 60 * 60 * 24 * 7,
   });
   return token;
 }
 export async function createOnboardingSession(user: OnboardingUser) {
-  const token = await new SignJWT({ onboardingUser: user })
-    .setProtectedHeader({ alg: "HS256" })
+  const token = await new EncryptJWT({ onboardingUser: user })
+    .setProtectedHeader({ alg: "dir", enc: "A256GCM" })
     .setExpirationTime("1h")
-    .sign(JWT_SECRET);
+    .encrypt(JWE_SECRET);
   const cookieStore = await cookies();
   cookieStore.set("onboarding_session", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
+    ...SESSION_COOKIE_OPTIONS,
     maxAge: 60 * 60,
   });
   return token;
@@ -112,7 +164,7 @@ export async function getOnboardingSession(): Promise<OnboardingUser | null> {
   const token = cookieStore.get("onboarding_session")?.value;
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtDecrypt(token, JWE_SECRET);
     return payload.onboardingUser as OnboardingUser;
   } catch (_error) {
     return null;
@@ -147,9 +199,7 @@ export async function exchangeCodeForToken(code: string, redirectUri: string) {
   const responseText = await response.text();
   if (!response.ok) {
     logger.error({ status: response.status }, "token exchange failed");
-    throw new Error(
-      `Failed to exchange code for token: ${response.status} - ${responseText}`,
-    );
+    throw new Error(`Failed to exchange code for token: ${response.status}`);
   }
 
   const data = JSON.parse(responseText) as {
@@ -183,9 +233,7 @@ async function refreshAccessToken(refreshToken: string) {
   const responseText = await response.text();
   if (!response.ok) {
     logger.error({ status: response.status }, "token refresh failed");
-    throw new Error(
-      `Failed to refresh access token: ${response.status} - ${responseText}`,
-    );
+    throw new Error(`Failed to refresh access token: ${response.status}`);
   }
 
   const data = JSON.parse(responseText) as {

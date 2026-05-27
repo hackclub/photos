@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import {
+  consumeOAuthState,
   createOnboardingSession,
   createOrUpdateUser,
   createSession,
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
   return await traceAsync("auth.callback", {}, async () => {
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get("code");
-    const state = searchParams.get("state") || "/";
+    const state = searchParams.get("state");
     const error = searchParams.get("error");
     if (error) {
       logger.error({ error }, "OAuth error");
@@ -29,6 +30,13 @@ export async function GET(request: NextRequest) {
       logger.error("No code provided");
       return NextResponse.redirect(
         new URL("/auth/error?error=no_code", process.env.NEXTAUTH_URL),
+      );
+    }
+    const callbackUrl = await consumeOAuthState(state);
+    if (!callbackUrl) {
+      logger.error("Invalid OAuth state");
+      return NextResponse.redirect(
+        new URL("/auth/error?error=invalid_state", process.env.NEXTAUTH_URL),
       );
     }
     try {
@@ -87,7 +95,7 @@ export async function GET(request: NextRequest) {
             );
           }
           return NextResponse.redirect(
-            new URL(state, process.env.NEXTAUTH_URL),
+            new URL(callbackUrl, process.env.NEXTAUTH_URL),
           );
         }
         const user = await createOrUpdateUser(
@@ -107,7 +115,9 @@ export async function GET(request: NextRequest) {
             new URL("/onboarding", process.env.NEXTAUTH_URL),
           );
         }
-        return NextResponse.redirect(new URL(state, process.env.NEXTAUTH_URL));
+        return NextResponse.redirect(
+          new URL(callbackUrl, process.env.NEXTAUTH_URL),
+        );
       } else {
         const onboardingUser = parseHackClubUser(
           hackclubUser,
@@ -122,10 +132,7 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       logger.error("Authentication error:", error);
       return NextResponse.redirect(
-        new URL(
-          `/auth/error?error=auth_failed&message=${encodeURIComponent(error instanceof Error ? error.message : "Unknown error")}`,
-          process.env.NEXTAUTH_URL,
-        ),
+        new URL("/auth/error?error=auth_failed", process.env.NEXTAUTH_URL),
       );
     }
   });

@@ -14,7 +14,10 @@ export const maxDuration = 300;
 export async function GET(req: NextRequest) {
   const startedAt = Date.now();
   const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (
+    !process.env.CRON_SECRET ||
+    authHeader !== `Bearer ${process.env.CRON_SECRET}`
+  ) {
     recordCronJob("cleanup_ghost_files", "unauthorized", startedAt);
     return new NextResponse("Unauthorized", { status: 401 });
   }

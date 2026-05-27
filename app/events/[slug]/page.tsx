@@ -109,7 +109,6 @@ export default async function EventPage({
               slackId: true,
             },
           },
-          apiKey: true,
         },
         orderBy: (media, { desc }) => [desc(media.uploadedAt)],
       },
@@ -208,6 +207,7 @@ export default async function EventPage({
               src={bannerUrl}
               alt={event.name}
               fill
+              sizes="(max-width: 768px) 100vw, 50vw"
               className="object-cover"
               priority
             />

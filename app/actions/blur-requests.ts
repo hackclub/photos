@@ -18,6 +18,10 @@ type BlurSubmission = {
   previewDataUrl?: string;
 };
 
+const MAX_BLUR_SUBMISSIONS = 25;
+const MAX_BLUR_REGIONS = 100;
+const MAX_PREVIEW_BYTES = 10 * 1024 * 1024;
+
 async function renderBlurredPhoto(
   sourceKey: string,
   regions: BlurRegion[],
@@ -90,6 +94,8 @@ async function renderBlurredPhoto(
 function decodeDataUrl(dataUrl: string) {
   const match = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
   if (!match) throw new Error("Invalid preview image");
+  const estimatedBytes = Math.floor((match[2].length * 3) / 4);
+  if (estimatedBytes > MAX_PREVIEW_BYTES) throw new Error("Preview too large");
   return { mimeType: match[1], buffer: Buffer.from(match[2], "base64") };
 }
 
@@ -99,6 +105,12 @@ export async function submitBlurRequests(submissions: BlurSubmission[]) {
   if (!user) return { success: false, error: "Unauthorized" };
   if (submissions.length === 0) {
     return { success: false, error: "No blur requests selected" };
+  }
+  if (submissions.length > MAX_BLUR_SUBMISSIONS) {
+    return { success: false, error: "Too many blur requests" };
+  }
+  if (submissions.some((item) => item.regions.length > MAX_BLUR_REGIONS)) {
+    return { success: false, error: "Too many blur regions" };
   }
   try {
     const mediaIds = submissions.map((item) => item.mediaId);
@@ -195,8 +207,29 @@ export async function getBlurRequests() {
   }
   const requests = await db.query.blurRequests.findMany({
     with: {
-      media: { with: { event: true, uploadedBy: true } },
-      requester: true,
+      media: {
+        with: {
+          event: true,
+          uploadedBy: {
+            columns: {
+              id: true,
+              name: true,
+              handle: true,
+              preferredName: true,
+              slackId: true,
+            },
+          },
+        },
+      },
+      requester: {
+        columns: {
+          id: true,
+          name: true,
+          handle: true,
+          preferredName: true,
+          slackId: true,
+        },
+      },
     },
     orderBy: [desc(blurRequests.createdAt)],
   });

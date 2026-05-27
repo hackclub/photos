@@ -38,7 +38,20 @@ export async function validateApiKey(requireUpload: boolean = false) {
     const apiKey = await db.query.apiKeys.findFirst({
       where: and(eq(apiKeys.key, key), eq(apiKeys.isRevoked, false)),
       with: {
-        user: true,
+        user: {
+          columns: {
+            id: true,
+            email: true,
+            name: true,
+            preferredName: true,
+            handle: true,
+            hackclubId: true,
+            slackId: true,
+            isGlobalAdmin: true,
+            isBanned: true,
+            storageLimit: true,
+          },
+        },
       },
     });
     if (!apiKey) {

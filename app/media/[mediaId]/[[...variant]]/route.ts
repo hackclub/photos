@@ -5,13 +5,15 @@ import {
 import { eq } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 import { type NextRequest, NextResponse } from "next/server";
+import { verifySessionToken } from "@/lib/auth";
 import { getUserContext } from "@/lib/auth-api";
 import { db } from "@/lib/db";
-import { media } from "@/lib/db/schema";
+import { media, users } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { convertHeicToJpeg } from "@/lib/media/heic";
 import { S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
 import { can } from "@/lib/policy";
+import { contentDispositionFilename } from "@/lib/safe-filename";
 
 const getCachedMedia = unstable_cache(
   async (mediaId: string) => {
@@ -65,7 +67,38 @@ export async function GET(
   if (mediaItem.event.visibility === "public") {
     isAllowed = true;
   } else {
-    const { user } = await getUserContext();
+    let { user } = await getUserContext();
+    if (!user) {
+      const mobileToken = searchParams.get("mobileToken");
+      const sessionUser = mobileToken
+        ? await verifySessionToken(mobileToken)
+        : null;
+      if (sessionUser) {
+        const dbUser = await db.query.users.findFirst({
+          where: eq(users.id, sessionUser.id),
+          columns: {
+            id: true,
+            slackId: true,
+            isGlobalAdmin: true,
+            isBanned: true,
+          },
+          with: {
+            seriesAdminRoles: { columns: { seriesId: true } },
+            eventAdminRoles: { columns: { eventId: true } },
+          },
+        });
+        if (dbUser && !dbUser.isBanned) {
+          user = {
+            id: dbUser.id,
+            slackId: dbUser.slackId,
+            isGlobalAdmin: dbUser.isGlobalAdmin,
+            isBanned: dbUser.isBanned || false,
+            seriesAdmins: dbUser.seriesAdminRoles,
+            eventAdmins: dbUser.eventAdminRoles,
+          };
+        }
+      }
+    }
     if (user) {
       isAllowed = await can(user, "view", "media", mediaItem);
     }
@@ -87,7 +120,9 @@ export async function GET(
       } else {
         headers.set("Cache-Control", "private, max-age=3600");
       }
-      const jpgFilename = mediaItem.filename.replace(/\.(heic|heif)$/i, ".jpg");
+      const jpgFilename = contentDispositionFilename(
+        mediaItem.filename.replace(/\.(heic|heif)$/i, ".jpg"),
+      );
       headers.set("Content-Disposition", `inline; filename="${jpgFilename}"`);
       return new NextResponse(jpegBuffer as unknown as BodyInit, {
         status: 200,
@@ -98,7 +133,7 @@ export async function GET(
     }
   }
   let s3Key = mediaItem.s3Key;
-  let filename = mediaItem.filename;
+  let filename = contentDispositionFilename(mediaItem.filename);
   if (variant === "thumbnail") {
     if (mediaItem.thumbnailS3Key) {
       s3Key = mediaItem.thumbnailS3Key;

@@ -17,7 +17,14 @@ import {
 import { validateMediaFile } from "@/lib/media/validation";
 import { extractVideoMetadata } from "@/lib/media/video-metadata";
 import { can, getUserContext } from "@/lib/policy";
+import { publicMedia } from "@/lib/public-data";
 import { checkStorageLimit } from "@/lib/storage";
+
+function safeFileExtension(filename: string) {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "bin";
+  return /^[a-z0-9]{1,12}$/.test(ext) ? ext : "bin";
+}
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await validateApiKey(true);
@@ -95,7 +102,7 @@ export async function POST(req: NextRequest) {
     const originalBuffer = Buffer.from(bytes);
     const mimeType = file.type;
     const mediaId = randomUUID();
-    const fileExtension = file.name.split(".").pop() || "bin";
+    const fileExtension = safeFileExtension(file.name);
     const s3Key = `media/${mediaId}/original.${fileExtension}`;
     const tags = {
       eventId,
@@ -214,7 +221,7 @@ export async function POST(req: NextRequest) {
       apiKeyName,
     });
     revalidatePath(`/events/${eventId}`);
-    return NextResponse.json({ success: true, media: inserted });
+    return NextResponse.json({ success: true, media: publicMedia(inserted) });
   } catch (error) {
     logger.error("API upload error:", error);
     return NextResponse.json(

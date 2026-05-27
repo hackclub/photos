@@ -295,6 +295,12 @@ export async function broadcastBulkUpload(
     });
     const user = await db.query.users.findFirst({
       where: eq(users.id, userId),
+      columns: {
+        id: true,
+        handle: true,
+        preferredName: true,
+        slackId: true,
+      },
     });
     if (!event || !user) return;
     notifyFeedUpdate({

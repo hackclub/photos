@@ -66,7 +66,15 @@ export default async function AdminDashboard() {
       orderBy: [desc(media.uploadedAt)],
       limit: 12,
       with: {
-        uploadedBy: true,
+        uploadedBy: {
+          columns: {
+            id: true,
+            name: true,
+            handle: true,
+            preferredName: true,
+            slackId: true,
+          },
+        },
         event: true,
       },
     }),

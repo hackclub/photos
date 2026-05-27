@@ -19,16 +19,29 @@ import {
   getUserContext,
 } from "@/lib/policy";
 import { type PublicUser, toPublicUser } from "@/lib/user-display";
+
+type PublicUserRow = {
+  id: string;
+  handle: string | null;
+  preferredName: string | null;
+  slackId: string | null;
+};
+
 export type SearchResults = {
   users: PublicUser[];
-  events: (typeof events.$inferSelect)[];
+  events: Omit<typeof events.$inferSelect, "inviteCode">[];
   series: (typeof series.$inferSelect)[];
   media: (typeof media.$inferSelect & {
     event: typeof events.$inferSelect;
-    uploadedBy: typeof users.$inferSelect;
+    uploadedBy: PublicUser;
   })[];
   tags: (typeof tags.$inferSelect)[];
 };
+
+function withoutInviteCode(event: typeof events.$inferSelect) {
+  const { inviteCode: _inviteCode, ...safeEvent } = event;
+  return safeEvent;
+}
 export async function globalSearch(query: string): Promise<{
   success: boolean;
   results?: SearchResults;
@@ -55,7 +68,7 @@ export async function globalSearch(query: string): Promise<{
       where: ilike(tags.name, searchPattern),
       limit: 5,
     });
-    let userResults: (typeof users.$inferSelect)[] = [];
+    let userResults: PublicUserRow[] = [];
     if (session) {
       userResults = await db.query.users.findMany({
         where: and(
@@ -64,6 +77,12 @@ export async function globalSearch(query: string): Promise<{
         ),
         limit: 5,
         orderBy: [desc(users.createdAt)],
+        columns: {
+          id: true,
+          handle: true,
+          preferredName: true,
+          slackId: true,
+        },
       });
     }
     const seriesConditions = [
@@ -121,7 +140,8 @@ export async function globalSearch(query: string): Promise<{
     );
     const eventResults = rawEventResults
       .filter((e) => accessibleEventIds.has(e.id))
-      .slice(0, 5);
+      .slice(0, 5)
+      .map(withoutInviteCode);
     const matchingUsers = await db.query.users.findMany({
       where: and(
         sql`${users.migrationMode} IS NULL`,
@@ -148,7 +168,14 @@ export async function globalSearch(query: string): Promise<{
       limit: 20,
       with: {
         event: true,
-        uploadedBy: true,
+        uploadedBy: {
+          columns: {
+            id: true,
+            handle: true,
+            preferredName: true,
+            slackId: true,
+          },
+        },
       },
       orderBy: [desc(media.uploadedAt)],
     });
@@ -174,7 +201,10 @@ export async function globalSearch(query: string): Promise<{
         users: userResults.map(toPublicUser),
         events: eventResults,
         series: seriesResults,
-        media: finalMedia,
+        media: finalMedia.map((item) => ({
+          ...item,
+          uploadedBy: toPublicUser(item.uploadedBy),
+        })),
         tags: tagResults,
       },
     };
@@ -285,7 +315,7 @@ export async function advancedSearch(
         limit: 10,
       });
     }
-    let userResults: (typeof users.$inferSelect)[] = [];
+    let userResults: PublicUserRow[] = [];
     if (session && trimmedQuery.length >= 2) {
       userResults = await db.query.users.findMany({
         where: and(
@@ -294,9 +324,15 @@ export async function advancedSearch(
         ),
         limit: 5,
         orderBy: [desc(users.createdAt)],
+        columns: {
+          id: true,
+          handle: true,
+          preferredName: true,
+          slackId: true,
+        },
       });
     }
-    let eventResults: (typeof events.$inferSelect)[] = [];
+    let eventResults: Omit<typeof events.$inferSelect, "inviteCode">[] = [];
     if (trimmedQuery.length >= 2) {
       const eventConditions = [
         or(
@@ -323,7 +359,8 @@ export async function advancedSearch(
       );
       eventResults = rawEventResults
         .filter((e) => accessibleEventIds.has(e.id))
-        .slice(0, 5);
+        .slice(0, 5)
+        .map(withoutInviteCode);
     }
     const mediaConditions = [];
     if (trimmedQuery.length > 0) {
@@ -415,7 +452,14 @@ export async function advancedSearch(
       limit: 500,
       with: {
         event: true,
-        uploadedBy: true,
+        uploadedBy: {
+          columns: {
+            id: true,
+            handle: true,
+            preferredName: true,
+            slackId: true,
+          },
+        },
       },
       orderBy: [
         sql`${media.takenAt} DESC NULLS LAST`,
@@ -444,7 +488,10 @@ export async function advancedSearch(
         users: userResults.map(toPublicUser),
         events: eventResults,
         series: [],
-        media: finalMedia,
+        media: finalMedia.map((item) => ({
+          ...item,
+          uploadedBy: toPublicUser(item.uploadedBy),
+        })),
         tags: tagResults,
       },
     };

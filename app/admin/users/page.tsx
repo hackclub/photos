@@ -20,7 +20,30 @@ export default async function ManageUsersPage() {
   }
   const usersWithStats = await db
     .select({
-      user: users,
+      user: {
+        id: users.id,
+        hackclubId: users.hackclubId,
+        email: users.email,
+        name: users.name,
+        preferredName: users.preferredName,
+        handle: users.handle,
+        slackId: users.slackId,
+        verificationStatus: users.verificationStatus,
+        bio: users.bio,
+        socialLinks: users.socialLinks,
+        isGlobalAdmin: users.isGlobalAdmin,
+        storageLimit: users.storageLimit,
+        isBanned: users.isBanned,
+        bannedAt: users.bannedAt,
+        bannedById: users.bannedById,
+        banReason: users.banReason,
+        migratedToUserId: users.migratedToUserId,
+        migrationMode: users.migrationMode,
+        migrationMessage: users.migrationMessage,
+        deletedAt: users.deletedAt,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      },
       photoCount: count(media.id),
       storageUsed: sum(media.fileSize),
     })

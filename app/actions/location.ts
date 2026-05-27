@@ -4,7 +4,8 @@ import { NOMINATIM_API_URL } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { getUserContext } from "@/lib/policy";
 export async function searchLocation(query: string) {
-  if (!query.trim()) return { success: true, locations: [] };
+  const normalizedQuery = query.trim().slice(0, 200);
+  if (!normalizedQuery) return { success: true, locations: [] };
   try {
     const session = await getSession();
     const user = await getUserContext(session?.id);
@@ -12,7 +13,7 @@ export async function searchLocation(query: string) {
       return { success: true, locations: [] };
     }
     const response = await fetch(
-      `${NOMINATIM_API_URL}/search?format=json&q=${encodeURIComponent(query)}&limit=1&addressdetails=1`,
+      `${NOMINATIM_API_URL}/search?format=json&q=${encodeURIComponent(normalizedQuery)}&limit=1&addressdetails=1`,
       {
         headers: {
           "User-Agent": "Hack Club Photos App",

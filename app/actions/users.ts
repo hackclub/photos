@@ -114,8 +114,60 @@ export async function getUserMergePreview(
       return { success: false, error: "Choose two different users" };
     }
     const [source, target] = await Promise.all([
-      db.query.users.findFirst({ where: eq(users.id, sourceUserId) }),
-      db.query.users.findFirst({ where: eq(users.id, targetUserId) }),
+      db.query.users.findFirst({
+        where: eq(users.id, sourceUserId),
+        columns: {
+          id: true,
+          hackclubId: true,
+          email: true,
+          name: true,
+          preferredName: true,
+          handle: true,
+          slackId: true,
+          verificationStatus: true,
+          bio: true,
+          socialLinks: true,
+          isGlobalAdmin: true,
+          storageLimit: true,
+          isBanned: true,
+          bannedAt: true,
+          bannedById: true,
+          banReason: true,
+          migratedToUserId: true,
+          migrationMode: true,
+          migrationMessage: true,
+          deletedAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      db.query.users.findFirst({
+        where: eq(users.id, targetUserId),
+        columns: {
+          id: true,
+          hackclubId: true,
+          email: true,
+          name: true,
+          preferredName: true,
+          handle: true,
+          slackId: true,
+          verificationStatus: true,
+          bio: true,
+          socialLinks: true,
+          isGlobalAdmin: true,
+          storageLimit: true,
+          isBanned: true,
+          bannedAt: true,
+          bannedById: true,
+          banReason: true,
+          migratedToUserId: true,
+          migrationMode: true,
+          migrationMessage: true,
+          deletedAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
     ]);
     if (!source || !target) return { success: false, error: "User not found" };
     const eventRows = await db
@@ -207,8 +259,30 @@ export async function mergeUsers(options: {
       return { success: false, error: "Choose two different users" };
     }
     const [source, target] = await Promise.all([
-      db.query.users.findFirst({ where: eq(users.id, options.sourceUserId) }),
-      db.query.users.findFirst({ where: eq(users.id, options.targetUserId) }),
+      db.query.users.findFirst({
+        where: eq(users.id, options.sourceUserId),
+        columns: {
+          id: true,
+          hackclubId: true,
+          name: true,
+          preferredName: true,
+          handle: true,
+          slackId: true,
+          bio: true,
+          socialLinks: true,
+          storageLimit: true,
+        },
+      }),
+      db.query.users.findFirst({
+        where: eq(users.id, options.targetUserId),
+        columns: {
+          id: true,
+          hackclubId: true,
+          name: true,
+          handle: true,
+          slackId: true,
+        },
+      }),
     ]);
     if (!source || !target) return { success: false, error: "User not found" };
     if (options.scrubSourceProfile && !options.aliasLogin) {
@@ -808,8 +882,11 @@ export async function deleteAccount() {
 }
 export async function checkSlackAvatar(slackId: string) {
   try {
+    const { isValidSlackId, normalizeSlackId } = await import("@/lib/slack-id");
+    const normalizedSlackId = normalizeSlackId(slackId);
+    if (!isValidSlackId(normalizedSlackId)) return { success: false };
     const { getCachetUser } = await import("@/lib/cachet");
-    const user = await getCachetUser(slackId);
+    const user = await getCachetUser(normalizedSlackId);
     return { success: !!user, user };
   } catch (error) {
     logger.error("Error checking Slack avatar:", error);

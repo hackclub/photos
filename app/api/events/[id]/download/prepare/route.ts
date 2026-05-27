@@ -15,10 +15,12 @@ import { logger } from "@/lib/logger";
 import { s3Client } from "@/lib/media/s3";
 import { can, getUserContext } from "@/lib/policy";
 import { rateLimit } from "@/lib/rate-limit";
+import { safeFilename } from "@/lib/safe-filename";
 export const runtime = "nodejs";
 export const maxDuration = 600;
 export const dynamic = "force-dynamic";
 const MAX_FILES_PER_DOWNLOAD = 10000;
+const UUID_PATTERN = /^[0-9a-f-]{36}$/i;
 async function cleanupOldZipFiles() {
   const TMP_DIR = tmpdir();
   const MAX_AGE_MS = 60 * 60 * 1000;
@@ -59,8 +61,19 @@ export async function POST(
     });
     const session = await getSession();
     const { id: eventId } = await params;
+    if (!UUID_PATTERN.test(eventId)) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
     const body = await req.json();
     const { mediaIds } = body;
+    if (
+      mediaIds !== undefined &&
+      (!Array.isArray(mediaIds) ||
+        mediaIds.length > MAX_FILES_PER_DOWNLOAD ||
+        mediaIds.some((id) => typeof id !== "string" || !UUID_PATTERN.test(id)))
+    ) {
+      return NextResponse.json({ error: "Invalid media IDs" }, { status: 400 });
+    }
     const identifier =
       session?.id ?? getClientIpFromHeaders(req.headers, "anonymous");
     const rateLimitResult = await rateLimit(`download:${identifier}`, {
@@ -137,7 +150,7 @@ export async function POST(
         const folder = mediaItem.mimeType.startsWith("image/")
           ? "photos"
           : "videos";
-        const zipPath = `${folder}/${mediaItem.filename}`;
+        const zipPath = `${folder}/${safeFilename(mediaItem.filename)}`;
         const bytes = await s3Response.Body.transformToByteArray();
         archive.append(Buffer.from(bytes), {
           name: zipPath,

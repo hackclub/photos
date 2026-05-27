@@ -54,7 +54,11 @@ export default async function EditEventPage({
   }
   return (
     <EditEventClient
-      event={event}
+      event={
+        event as unknown as React.ComponentProps<
+          typeof EditEventClient
+        >["event"]
+      }
       series={series}
       initialAdmins={initialAdmins}
       initialPendingAdmins={initialPendingAdmins}

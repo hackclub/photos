@@ -49,11 +49,32 @@ export async function getReports() {
       with: {
         media: {
           with: {
-            uploadedBy: true,
+            uploadedBy: {
+              columns: {
+                id: true,
+                handle: true,
+                preferredName: true,
+                slackId: true,
+              },
+            },
           },
         },
-        reporter: true,
-        resolvedBy: true,
+        reporter: {
+          columns: {
+            id: true,
+            handle: true,
+            preferredName: true,
+            slackId: true,
+          },
+        },
+        resolvedBy: {
+          columns: {
+            id: true,
+            handle: true,
+            preferredName: true,
+            slackId: true,
+          },
+        },
       },
       orderBy: [desc(reports.createdAt)],
     });

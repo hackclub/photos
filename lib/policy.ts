@@ -162,7 +162,7 @@ async function checkSeriesPermission(
   resource?: any,
 ): Promise<boolean> {
   if (!resource) {
-    if (action === "create") return true;
+    if (action === "create") return user.isGlobalAdmin;
     return false;
   }
   const seriesId = typeof resource === "string" ? resource : resource.id;
@@ -190,7 +190,8 @@ async function checkEventPermission(
   resource?: any,
 ): Promise<boolean> {
   if (!resource) {
-    if (action === "create") return !!user;
+    if (action === "create")
+      return !!(user && (user.isGlobalAdmin || user.seriesAdmins.length > 0));
     return false;
   }
   const eventId = typeof resource === "string" ? resource : resource.id;

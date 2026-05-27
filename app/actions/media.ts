@@ -18,6 +18,7 @@ import {
 import { validateBannerFile, validateMediaFile } from "@/lib/media/validation";
 import { extractVideoMetadata } from "@/lib/media/video-metadata";
 import { can, getUserContext } from "@/lib/policy";
+import { publicMedia } from "@/lib/public-data";
 import { checkStorageLimit } from "@/lib/storage";
 export async function uploadBanner(
   entityType: "event" | "series",
@@ -425,7 +426,7 @@ export async function uploadMedia(formData: FormData) {
       filename: file.name,
     });
     revalidatePath(`/events/${eventId}`);
-    return { success: true, media: inserted };
+    return { success: true, media: publicMedia(inserted) };
   } catch (error) {
     logger.error("Upload error:", error);
     return { success: false, error: "Upload failed" };

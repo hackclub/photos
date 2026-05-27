@@ -102,7 +102,7 @@ export default async function SeriesDetailPage({
     accessibleEventIds.has(event.id),
   );
   const seriesEvents = accessibleEvents.map((event) => ({
-    ...event,
+    ...(({ inviteCode: _inviteCode, ...safeEvent }) => safeEvent)(event),
     isAdmin:
       canEdit || !!ctx?.eventAdmins.some((admin) => admin.eventId === event.id),
   }));

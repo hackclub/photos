@@ -19,6 +19,12 @@ export async function GET(
 ) {
   try {
     const { downloadId } = await params;
+    if (!/^[a-f0-9]{32}$/i.test(downloadId)) {
+      return NextResponse.json(
+        { error: "Download not found" },
+        { status: 404 },
+      );
+    }
     const tempPath = join(tmpdir(), `hackclub-photos-${downloadId}.zip`);
     try {
       await stat(tempPath);
