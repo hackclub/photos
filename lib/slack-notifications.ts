@@ -78,6 +78,7 @@ type QueueMetadata = {
   eventName?: string;
   eventSlug?: string;
   actorName?: string;
+  actorHandle?: string | null;
   actorSlackId?: string | null;
   recipientSlackId?: string | null;
   mediaFilename?: string;
@@ -117,11 +118,16 @@ function slackUser(slackId?: string | null) {
 }
 
 function linked(text: string, url: string) {
-  return `<${url}|${escapeSlack(text)}>`;
+  return `<${url}|${sanitizeSlackText(text)}>`;
 }
 
-function escapeSlack(text: string) {
-  return text
+function sanitizeSlackText(text: string) {
+  return [...text]
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return code >= 32 && code !== 127;
+    })
+    .join("")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
@@ -130,8 +136,11 @@ function escapeSlack(text: string) {
 function actorLabel(row: QueueRow, mention: boolean) {
   const name = row.metadata?.actorName || "Someone";
   if (mention && row.metadata?.actorSlackId)
-    return slackUser(row.metadata.actorSlackId) || name;
-  return linked(name, profileUrl({ id: row.actorUserId }));
+    return slackUser(row.metadata.actorSlackId) || sanitizeSlackText(name);
+  return linked(
+    name,
+    profileUrl({ handle: row.metadata?.actorHandle, id: row.actorUserId }),
+  );
 }
 
 function unique<T>(items: T[]) {
@@ -165,7 +174,7 @@ function isFeedRow(row: QueueRow) {
 
 function quoteCommentPreview(text?: string) {
   const preview = text?.trim();
-  return preview ? `: “${escapeSlack(preview)}”` : "";
+  return preview ? `: “${sanitizeSlackText(preview)}”` : "";
 }
 
 function canPostToSlackFeed(event: { visibility: string }) {
@@ -286,6 +295,7 @@ export async function notifyMention(
       eventName: item.event.name,
       eventSlug: item.event.slug,
       actorName: getUserDisplayName(actor),
+      actorHandle: actor.handle,
       actorSlackId: actor.slackId,
       recipientSlackId: recipient.slackId,
       mediaFilename: item.filename,
@@ -354,6 +364,7 @@ export async function notifyComment(commentId: string) {
         eventName: item.event.name,
         eventSlug: item.event.slug,
         actorName: getUserDisplayName(actor),
+        actorHandle: actor.handle,
         actorSlackId: actor.slackId,
         recipientSlackId: recipient.slackId,
         mediaFilename: item.filename,
@@ -411,6 +422,7 @@ export async function notifyMediaLike(mediaId: string, actorUserId: string) {
         eventName: item.event.name,
         eventSlug: item.event.slug,
         actorName: getUserDisplayName(actor),
+        actorHandle: actor.handle,
         actorSlackId: actor.slackId,
         recipientSlackId: recipient.slackId,
         mediaFilename: item.filename,
@@ -449,6 +461,7 @@ export async function notifyCommentLike(
         eventName: comment.media.event.name,
         eventSlug: comment.media.event.slug,
         actorName: getUserDisplayName(actor),
+        actorHandle: actor.handle,
         actorSlackId: actor.slackId,
         recipientSlackId: comment.user.slackId,
         mediaFilename: comment.media.filename,
@@ -476,6 +489,7 @@ export async function notifyUploadForFeed(mediaId: string) {
       eventName: item.event.name,
       eventSlug: item.event.slug,
       actorName: getUserDisplayName(item.uploadedBy),
+      actorHandle: item.uploadedBy.handle,
       actorSlackId: item.uploadedBy.slackId,
       uploadCount: 1,
     },
@@ -500,6 +514,7 @@ async function notifyCommentForFeed(commentId: string) {
       eventName: comment.media.event.name,
       eventSlug: comment.media.event.slug,
       actorName: getUserDisplayName(comment.user),
+      actorHandle: comment.user.handle,
       actorSlackId: comment.user.slackId,
       mediaFilename: comment.media.filename,
       commentPreview: comment.content.slice(0, 140),
@@ -532,6 +547,7 @@ async function notifyMentionForFeed(
       eventName: item.event.name,
       eventSlug: item.event.slug,
       actorName: getUserDisplayName(actor),
+      actorHandle: actor.handle,
       actorSlackId: actor.slackId,
       mediaFilename: item.filename,
       commentPreview: getUserDisplayName(mentioned),
@@ -559,6 +575,7 @@ async function notifyMediaLikeForFeed(mediaId: string, actorUserId: string) {
       eventName: item.event.name,
       eventSlug: item.event.slug,
       actorName: getUserDisplayName(actor),
+      actorHandle: actor.handle,
       actorSlackId: actor.slackId,
       mediaFilename: item.filename,
     },
@@ -589,6 +606,7 @@ async function notifyCommentLikeForFeed(
       eventName: comment.media.event.name,
       eventSlug: comment.media.event.slug,
       actorName: getUserDisplayName(actor),
+      actorHandle: actor.handle,
       actorSlackId: actor.slackId,
       mediaFilename: comment.media.filename,
       commentPreview: comment.content.slice(0, 140),
