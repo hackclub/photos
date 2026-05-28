@@ -650,7 +650,7 @@ function personalBlocks(rows: QueueRow[]): SlackBlock[] {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `:camera_with_flash: ${actorText} ${verb} ${photoText} in ${event}`,
+        text: `:ms-camera: ${actorText} ${verb} ${photoText} in ${event}`,
       },
     },
     {
@@ -686,7 +686,7 @@ function feedBlocks(rows: QueueRow[]): SlackBlock[] {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `:frame_with_picture: ${textByCategory[first.category] || `${actor} did ${count} things in ${event}`}`,
+        text: `:ms-camera: ${textByCategory[first.category] || `${actor} did ${count} things in ${event}`}`,
       },
     },
   ];

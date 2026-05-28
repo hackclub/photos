@@ -147,6 +147,7 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
                 src={logoUrl}
                 alt="Hack Club Logo"
                 fill
+                sizes="40px"
                 className="object-cover"
               />
             </div>

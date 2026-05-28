@@ -1,5 +1,5 @@
 "use client";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { HiBars3 } from "react-icons/hi2";
 import Sidebar from "@/components/layout/Sidebar";
@@ -20,12 +20,15 @@ export default function ClientLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const handleCloseSidebar = useCallback(() => setSidebarOpen(false), []);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const isSignMode = pathname?.startsWith("/sign");
+  const isMobileShell = searchParams?.get("mobile") === "1";
+  const showShell = !isSignMode && !isMobileShell;
   return (
     <AuthProvider initialSession={initialSession}>
       <UploadProvider>
         <div className="flex min-h-dvh overflow-x-clip">
-          {!isSignMode && (
+          {showShell && (
             <Sidebar
               isOpen={sidebarOpen}
               onClose={handleCloseSidebar}
@@ -34,7 +37,7 @@ export default function ClientLayout({
           )}
 
           <div className="flex min-w-0 flex-1 flex-col">
-            {!isSignMode && (
+            {showShell && (
               <div className="sticky top-0 z-30 flex items-center justify-between border-b border-zinc-800 bg-zinc-900/95 px-3 py-2.5 pt-[calc(env(safe-area-inset-top)+0.625rem)] backdrop-blur lg:hidden">
                 <button
                   type="button"
@@ -56,7 +59,7 @@ export default function ClientLayout({
             <main className="flex-1">{children}</main>
           </div>
         </div>
-        {!isSignMode && <GlobalUploader />}
+        {showShell && <GlobalUploader />}
       </UploadProvider>
     </AuthProvider>
   );
