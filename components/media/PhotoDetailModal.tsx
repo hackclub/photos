@@ -820,7 +820,7 @@ export default function PhotoDetailModal({
 
     if (tags.some((t) => t.name === normalizedTag)) {
       setNewTag("");
-      setShowSuggestions(false);
+      requestAnimationFrame(() => setShowSuggestions(false));
       return;
     }
 
@@ -834,7 +834,7 @@ export default function PhotoDetailModal({
       if (tag) {
         setTags((prev) => [...prev, tag]);
         setNewTag("");
-        setShowSuggestions(false);
+        requestAnimationFrame(() => setShowSuggestions(false));
       }
     } catch (error) {
       logger.error("Error adding tag:", error);
@@ -865,7 +865,7 @@ export default function PhotoDetailModal({
       user.id === media.uploadedBy.id
     ) {
       setNewMention("");
-      setShowMentionSuggestions(false);
+      requestAnimationFrame(() => setShowMentionSuggestions(false));
       return;
     }
 
@@ -875,7 +875,7 @@ export default function PhotoDetailModal({
       if (result.success) {
         setMentions((prev) => [...prev, user]);
         setNewMention("");
-        setShowMentionSuggestions(false);
+        requestAnimationFrame(() => setShowMentionSuggestions(false));
       }
     } catch (error) {
       logger.error("Error adding mention:", error);
@@ -2226,7 +2226,11 @@ export default function PhotoDetailModal({
                 <button
                   key={suggestion.id}
                   type="button"
-                  onClick={() => addTagLogic(suggestion.name)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    addTagLogic(suggestion.name);
+                  }}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-zinc-700 transition-colors flex items-center justify-between group"
                 >
                   <span className={`font-medium ${textColorClass}`}>
@@ -2255,7 +2259,11 @@ export default function PhotoDetailModal({
               <button
                 key={user.id}
                 type="button"
-                onClick={() => handleAddMention(user)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  handleAddMention(user);
+                }}
                 className="w-full text-left px-3 py-2 hover:bg-zinc-700 transition-colors flex items-center gap-2 group"
               >
                 <UserAvatar user={user} size="xs" className="w-6 h-6" />
