@@ -22,8 +22,8 @@ export const SLACK_NOTIFICATION_CATEGORIES = [
   {
     key: "mention",
     label: "Tagged in photos",
-    description: "When someone tags you in photos.",
-    defaultEnabled: true,
+    description: "When someone tags you in photos. Off by default.",
+    defaultEnabled: false,
   },
   {
     key: "comment_on_upload",
