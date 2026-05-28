@@ -653,7 +653,9 @@ function personalBlocks(rows: QueueRow[]): SlackBlock[] {
     : first.category.includes("comment") ||
         first.category === "reply_to_comment"
       ? ":ms-speech-bubble:"
-      : ":ms-camera:";
+      : first.category === "mention"
+        ? ":ms-2-busts-in-silhouette:"
+        : ":ms-camera:";
   return [
     {
       type: "section",
@@ -687,7 +689,9 @@ function feedBlocks(rows: QueueRow[]): SlackBlock[] {
     ? ":blahaj-heart:"
     : first.category === "feed_comment"
       ? ":ms-speech-bubble:"
-      : ":ms-camera:";
+      : first.category === "feed_mention"
+        ? ":ms-2-busts-in-silhouette:"
+        : ":ms-camera:";
   const textByCategory: Record<string, string> = {
     feed_upload: `${actor} just uploaded ${count} new ${count === 1 ? "photo" : "photos"} to ${event}`,
     feed_comment: `${actor} commented on ${describeCount(count, "photo", "photos")} in ${event}${count === 1 ? commentPreview : ""}`,
