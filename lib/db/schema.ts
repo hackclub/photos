@@ -99,7 +99,7 @@ export const users = pgTable("users", {
   isGlobalAdmin: boolean("is_global_admin").notNull().default(false),
   storageLimit: bigint("storage_limit", { mode: "number" })
     .notNull()
-    .default(21474836480),
+    .default(53687091200),
   isBanned: boolean("is_banned").notNull().default(false),
   bannedAt: timestamp("banned_at"),
   bannedById: uuid("banned_by_id").references((): AnyPgColumn => users.id),

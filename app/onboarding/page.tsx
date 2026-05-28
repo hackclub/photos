@@ -351,7 +351,7 @@ export default function OnboardingPage() {
                       Storage Limits
                     </h3>
                     <p className="text-xs text-zinc-400 leading-relaxed">
-                      Accounts start with a default quota to prevent abuse.
+                      Accounts start with 50GB by default to prevent abuse.
                     </p>
                   </div>
                 </div>

@@ -183,7 +183,7 @@ export default function UserProfileClient({
   const videoCount = uploads.filter((m) =>
     m.mimeType.startsWith("video/"),
   ).length;
-  const storageLimit = user.storageLimit || 20 * 1024 * 1024 * 1024;
+  const storageLimit = user.storageLimit || 50 * 1024 * 1024 * 1024;
   const isUnlimited = user.storageLimit === -1 || user.isGlobalAdmin;
   const storagePercentage = isUnlimited
     ? 0
@@ -316,7 +316,7 @@ export default function UserProfileClient({
                             Storage Policy
                           </p>
                           <p>
-                            The default limit is 20GB to prevent abuse. If you
+                            The default limit is 50GB to prevent abuse. If you
                             need more space for legitimate use, just ask an
                             admin! We'd love to upgrade you! :)
                           </p>

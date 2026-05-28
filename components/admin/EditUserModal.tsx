@@ -69,7 +69,7 @@ export default function EditUserModal({
   });
   const [storageMode, setStorageMode] = useState<"preset" | "custom">(() => {
     const val = user.storageLimit.toString();
-    return ["21474836480", "107374182400", "-1"].includes(val)
+    return ["53687091200", "107374182400", "-1"].includes(val)
       ? "preset"
       : "custom";
   });
@@ -173,9 +173,9 @@ export default function EditUserModal({
                           if (formData.storageLimit === "-1") {
                             setFormData({
                               ...formData,
-                              storageLimit: "21474836480",
+                              storageLimit: "53687091200",
                             });
-                            setCustomGb("20");
+                            setCustomGb("50");
                           } else {
                             const currentBytes = parseInt(
                               formData.storageLimit,
@@ -198,7 +198,7 @@ export default function EditUserModal({
                       }}
                       className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-white focus:outline-none  focus:border-red-600 transition-all"
                     >
-                      <option value="21474836480">Default (20GB)</option>
+                      <option value="53687091200">Default (50GB)</option>
                       <option value="107374182400">100GB</option>
                       <option value="-1">Unlimited</option>
                       <option value="custom">Custom</option>
