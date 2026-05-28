@@ -38,6 +38,29 @@ export const blurRequestStatusEnum = pgEnum("blur_request_status", [
   "approved",
   "rejected",
 ]);
+export const slackNotificationCategoryEnum = pgEnum(
+  "slack_notification_category",
+  [
+    "mention",
+    "comment_on_upload",
+    "comment_on_mention",
+    "reply_to_comment",
+    "like_on_upload",
+    "like_on_mention",
+    "comment_like",
+    "feed_upload",
+    "feed_comment",
+    "feed_mention",
+    "feed_like",
+    "feed_comment_like",
+  ],
+);
+export const slackNotificationStatusEnum = pgEnum("slack_notification_status", [
+  "pending",
+  "sending",
+  "sent",
+  "failed",
+]);
 export const auditActionEnum = pgEnum("audit_action", [
   "create",
   "update",
@@ -91,6 +114,20 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+export const slackNotificationPreferences = pgTable(
+  "slack_notification_preferences",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    category: slackNotificationCategoryEnum("category").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.userId, t.category] }),
+  }),
+);
 export const series = pgTable("series", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
@@ -326,6 +363,55 @@ export const mediaComments = pgTable(
     mediaCreatedAtIdx: index("media_comments_media_created_at_idx").on(
       t.mediaId,
       t.createdAt.desc(),
+    ),
+  }),
+);
+export const slackNotificationQueue = pgTable(
+  "slack_notification_queue",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    recipientUserId: uuid("recipient_user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    channelId: text("channel_id"),
+    category: slackNotificationCategoryEnum("category").notNull(),
+    actionKey: text("action_key").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    eventId: uuid("event_id").references(() => events.id, {
+      onDelete: "cascade",
+    }),
+    mediaId: uuid("media_id").references(() => media.id, {
+      onDelete: "cascade",
+    }),
+    commentId: uuid("comment_id").references(() => mediaComments.id, {
+      onDelete: "cascade",
+    }),
+    metadata: jsonb("metadata"),
+    status: slackNotificationStatusEnum("status").notNull().default("pending"),
+    scheduledFor: timestamp("scheduled_for").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    sentAt: timestamp("sent_at"),
+    error: text("error"),
+  },
+  (t) => ({
+    dueIdx: index("slack_notification_queue_due_idx").on(
+      t.status,
+      t.scheduledFor,
+    ),
+    recipientBatchIdx: index("slack_notification_queue_recipient_batch_idx").on(
+      t.recipientUserId,
+      t.category,
+      t.actionKey,
+      t.status,
+    ),
+    channelBatchIdx: index("slack_notification_queue_channel_batch_idx").on(
+      t.channelId,
+      t.category,
+      t.actionKey,
+      t.status,
     ),
   }),
 );

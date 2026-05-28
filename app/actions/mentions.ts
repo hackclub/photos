@@ -85,6 +85,14 @@ export async function addMention(mediaId: string, userId: string) {
         mentionedUserId: targetUserId,
       },
     );
+    try {
+      const { notifyMention } = await import("@/lib/slack-notifications");
+      notifyMention(mediaId, targetUserId, currentUser.id).catch((error) => {
+        logger.error("Failed to enqueue Slack mention notification:", error);
+      });
+    } catch (error) {
+      logger.error("Failed to load Slack mention notification:", error);
+    }
     return { success: true, user: toPublicUser(targetUser) };
   } catch (error) {
     logger.error("Failed to add mention:", error);

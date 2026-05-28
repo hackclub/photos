@@ -460,6 +460,16 @@ export async function finalizeUpload(
         } catch (error) {
           logger.error("Failed to broadcast new photo:", error);
         }
+        try {
+          const { notifyUploadForFeed } = await import(
+            "@/lib/slack-notifications"
+          );
+          notifyUploadForFeed(insertedMedia.id).catch((error) => {
+            logger.error("Failed to enqueue Slack feed notification:", error);
+          });
+        } catch (error) {
+          logger.error("Failed to load Slack feed notification:", error);
+        }
         if (!skipRevalidation) {
           try {
             const { revalidatePath } = await import("next/cache");

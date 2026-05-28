@@ -62,6 +62,17 @@ export async function toggleMediaLike(mediaId: string) {
       } catch (error) {
         logger.error("Failed to broadcast new like:", error);
       }
+      try {
+        const { notifyMediaLike } = await import("@/lib/slack-notifications");
+        notifyMediaLike(mediaId, user.id).catch((error) => {
+          logger.error(
+            "Failed to enqueue Slack media like notification:",
+            error,
+          );
+        });
+      } catch (error) {
+        logger.error("Failed to load Slack media like notification:", error);
+      }
     }
     return {
       success: true,
@@ -284,6 +295,14 @@ export async function createComment(
     } catch (error) {
       logger.error("Failed to broadcast new comment:", error);
     }
+    try {
+      const { notifyComment } = await import("@/lib/slack-notifications");
+      notifyComment(comment.id).catch((error) => {
+        logger.error("Failed to enqueue Slack comment notification:", error);
+      });
+    } catch (error) {
+      logger.error("Failed to load Slack comment notification:", error);
+    }
     return { success: true, comment: commentWithLikes };
   } catch (error) {
     logger.error("Error creating comment:", error);
@@ -375,6 +394,17 @@ export async function toggleCommentLike(commentId: string) {
         commentId,
         userId: user.id,
       });
+      try {
+        const { notifyCommentLike } = await import("@/lib/slack-notifications");
+        notifyCommentLike(commentId, user.id).catch((error) => {
+          logger.error(
+            "Failed to enqueue Slack comment like notification:",
+            error,
+          );
+        });
+      } catch (error) {
+        logger.error("Failed to load Slack comment like notification:", error);
+      }
     }
     const likeCountResult = await db
       .select({ count: count() })
