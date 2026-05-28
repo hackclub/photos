@@ -104,7 +104,10 @@ function eventUrl(slug?: string | null, id?: string | null) {
 
 function mediaUrl(row: QueueRow) {
   const url = new URL(eventUrl(row.metadata?.eventSlug, row.eventId));
-  if (row.mediaId) url.searchParams.set("media", row.mediaId);
+  if (row.mediaId) {
+    url.searchParams.set("media", row.mediaId);
+    url.searchParams.set("photo", row.mediaId);
+  }
   return url.toString();
 }
 
@@ -645,12 +648,18 @@ function personalBlocks(rows: QueueRow[]): SlackBlock[] {
     feed_upload: "uploaded",
   };
   const verb = verbByCategory[first.category] || "did something with";
+  const emoji = first.category.includes("like")
+    ? ":blahaj-heart:"
+    : first.category.includes("comment") ||
+        first.category === "reply_to_comment"
+      ? ":ms-speech-bubble:"
+      : ":ms-camera:";
   return [
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `:ms-camera: ${actorText} ${verb} ${photoText} in ${event}`,
+        text: `${emoji} ${actorText} ${verb} ${photoText} in ${event}`,
       },
     },
     {
@@ -674,6 +683,11 @@ function feedBlocks(rows: QueueRow[]): SlackBlock[] {
     eventUrl(first.metadata?.eventSlug, first.eventId),
   );
   const commentPreview = quoteCommentPreview(rows[0]?.metadata?.commentPreview);
+  const emoji = first.category.includes("like")
+    ? ":blahaj-heart:"
+    : first.category === "feed_comment"
+      ? ":ms-speech-bubble:"
+      : ":ms-camera:";
   const textByCategory: Record<string, string> = {
     feed_upload: `${actor} just uploaded ${count} new ${count === 1 ? "photo" : "photos"} to ${event}`,
     feed_comment: `${actor} commented on ${describeCount(count, "photo", "photos")} in ${event}${count === 1 ? commentPreview : ""}`,
@@ -686,7 +700,7 @@ function feedBlocks(rows: QueueRow[]): SlackBlock[] {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `:ms-camera: ${textByCategory[first.category] || `${actor} did ${count} things in ${event}`}`,
+        text: `${emoji} ${textByCategory[first.category] || `${actor} did ${count} things in ${event}`}`,
       },
     },
   ];
