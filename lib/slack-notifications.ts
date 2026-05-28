@@ -155,6 +155,19 @@ function describeCount(count: number, singular: string, plural: string) {
   return `several ${plural}`;
 }
 
+function isFeedCategory(category: string) {
+  return category.startsWith("feed_");
+}
+
+function isFeedRow(row: QueueRow) {
+  return Boolean(row.channelId) || isFeedCategory(row.category);
+}
+
+function quoteCommentPreview(text?: string) {
+  const preview = text?.trim();
+  return preview ? `: “${escapeSlack(preview)}”` : "";
+}
+
 function canPostToSlackFeed(event: { visibility: string }) {
   return event.visibility === "public" || event.visibility === "auth_required";
 }
@@ -607,8 +620,13 @@ function personalBlocks(rows: QueueRow[]): SlackBlock[] {
     like_on_upload: "liked",
     like_on_mention: "liked",
     comment_like: "liked your comment on",
+    feed_comment: "commented on",
+    feed_mention: "tagged people in",
+    feed_like: "liked",
+    feed_comment_like: "liked a comment on",
+    feed_upload: "uploaded",
   };
-  const verb = verbByCategory[first.category] || "updated";
+  const verb = verbByCategory[first.category] || "did something with";
   return [
     {
       type: "section",
@@ -637,12 +655,13 @@ function feedBlocks(rows: QueueRow[]): SlackBlock[] {
     first.metadata?.eventName || "event",
     eventUrl(first.metadata?.eventSlug, first.eventId),
   );
+  const commentPreview = quoteCommentPreview(rows[0]?.metadata?.commentPreview);
   const textByCategory: Record<string, string> = {
     feed_upload: `${actor} just uploaded ${count} new ${count === 1 ? "photo" : "photos"} to ${event}`,
-    feed_comment: `${actor} commented on ${describeCount(count, "photo", "photos")} in ${event}`,
+    feed_comment: `${actor} commented on ${describeCount(count, "photo", "photos")} in ${event}${count === 1 ? commentPreview : ""}`,
     feed_mention: `${actor} tagged people in ${describeCount(count, "photo", "photos")} from ${event}`,
     feed_like: `${actor} liked ${describeCount(count, "photo", "photos")} from ${event}`,
-    feed_comment_like: `${actor} liked ${describeCount(count, "comment", "comments")} in ${event}`,
+    feed_comment_like: `${actor} liked ${describeCount(count, "comment", "comments")} in ${event}${count === 1 ? commentPreview : ""}`,
   };
   return [
     {
@@ -710,16 +729,10 @@ export async function flushSlackNotificationBatches(limit = 50) {
       if (!channel) throw new Error("No Slack destination for batch");
       await slackApi("chat.postMessage", {
         channel,
-        text:
-          rows[0].category === "feed_upload"
-            ? "Photos feed update"
-            : "Photos notification",
+        text: isFeedRow(rows[0]) ? "Photos feed update" : "Photos notification",
         unfurl_links: false,
         unfurl_media: false,
-        blocks:
-          rows[0].category === "feed_upload"
-            ? feedBlocks(rows)
-            : personalBlocks(rows),
+        blocks: isFeedRow(rows[0]) ? feedBlocks(rows) : personalBlocks(rows),
       });
       await db
         .update(slackNotificationQueue)
