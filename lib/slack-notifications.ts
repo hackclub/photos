@@ -696,8 +696,19 @@ function feedBlocks(rows: QueueRow[]): SlackBlock[] {
       : first.category === "feed_mention"
         ? ":ms-2-busts-in-silhouette:"
         : ":ms-camera:";
+  const photoLinks = unique(
+    rows.map((row) =>
+      linked(row.metadata?.mediaFilename || "photo", mediaUrl(row)),
+    ),
+  ).slice(0, MAX_LINKED_ITEMS_IN_MESSAGE);
+  const uploadedPhotos = describeLinkedItems(
+    count,
+    "photo",
+    "photos",
+    photoLinks,
+  );
   const textByCategory: Record<string, string> = {
-    feed_upload: `${actor} just uploaded ${count} new ${count === 1 ? "photo" : "photos"} to ${event}`,
+    feed_upload: `${actor} just uploaded ${uploadedPhotos} to ${event}`,
     feed_comment: `${actor} commented on ${describeCount(count, "photo", "photos")} in ${event}${count === 1 ? commentPreview : ""}`,
     feed_mention: `${actor} tagged people in ${describeCount(count, "photo", "photos")} from ${event}`,
     feed_like: `${actor} liked ${describeCount(count, "photo", "photos")} from ${event}`,
