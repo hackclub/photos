@@ -131,9 +131,13 @@ function sanitizeSlackText(text: string) {
       return code >= 32 && code !== 127;
     })
     .join("")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/<![^>]+>/g, "[redacted]")
+    .replace(/<@[A-Z0-9]+>/gi, "[redacted]")
+    .replace(/<#[A-Z0-9]+(?:\|[^>]+)?>/gi, "[redacted]")
+    .replace(/<!subteam\^[A-Z0-9]+(?:\|[^>]+)?>/gi, "[redacted]")
+    .replace(/@(?:here|channel|everyone)\b/gi, "[redacted]")
+    .replace(/[<>@]/g, "")
+    .replace(/&/g, "&amp;");
 }
 
 function actorLabel(row: QueueRow, mention: boolean) {
