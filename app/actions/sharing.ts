@@ -96,6 +96,18 @@ export async function getSharedMedia(token: string) {
       where: and(eq(shareLinks.token, token), eq(shareLinks.isRevoked, false)),
       with: {
         media: {
+          columns: {
+            id: true,
+            filename: true,
+            mimeType: true,
+            caption: true,
+            width: true,
+            height: true,
+            blurStatus: true,
+            uploadedAt: true,
+            s3Key: true,
+            exifData: true,
+          },
           with: {
             uploadedBy: {
               columns: {
@@ -105,7 +117,14 @@ export async function getSharedMedia(token: string) {
                 slackId: true,
               },
             },
-            event: true,
+            event: {
+              columns: {
+                id: true,
+                name: true,
+                slug: true,
+                allowPublicSharing: true,
+              },
+            },
           },
         },
         createdBy: {

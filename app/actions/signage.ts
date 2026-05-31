@@ -5,7 +5,12 @@ import { db } from "@/lib/db";
 import { events, media, series } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { getMediaProxyUrl } from "@/lib/media/s3";
-import { getAccessibleEventIdsForUser, getUserContext } from "@/lib/policy";
+import {
+  can,
+  getAccessibleEventIdsForUser,
+  getUserContext,
+} from "@/lib/policy";
+import { publicSeries } from "@/lib/public-data";
 import { toPublicUser } from "@/lib/user-display";
 
 function toSignageMedia(item: any, url: string) {
@@ -180,17 +185,15 @@ export async function getSeriesAndEvents() {
     const accessibleEvents = allEvents
       .filter((e) => accessibleEventIdsSet.has(e.id))
       .map(({ inviteCode: _inviteCode, ...event }) => event);
-    const accessibleSeriesIds = new Set(
-      accessibleEvents
-        .map((event) => event.seriesId)
-        .filter((seriesId): seriesId is string => Boolean(seriesId)),
-    );
-    const accessibleSeries = allSeries.filter(
-      (s) => s.visibility === "public" || accessibleSeriesIds.has(s.id),
-    );
+    const accessibleSeries = [];
+    for (const s of allSeries) {
+      if (await can(user, "view", "series", s)) {
+        accessibleSeries.push(s);
+      }
+    }
     return {
       success: true,
-      series: accessibleSeries,
+      series: accessibleSeries.map(publicSeries),
       events: accessibleEvents,
     };
   } catch (error) {

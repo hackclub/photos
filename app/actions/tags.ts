@@ -75,7 +75,7 @@ export async function removeTag(mediaId: string, tagId: string) {
       return { success: false, error: "Media not found" };
     }
     const isUploader = mediaItem.uploadedById === user.id;
-    const canManage = await can(user, "update", "media", mediaItem);
+    const canManage = await can(user, "manage", "event", mediaItem.eventId);
     if (!isUploader && !canManage) {
       return { success: false, error: "Unauthorized" };
     }

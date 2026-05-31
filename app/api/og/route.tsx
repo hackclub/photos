@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { ImageResponse } from "next/og";
 import {
   HiCalendar,
@@ -263,7 +263,11 @@ export async function GET(request: Request) {
           id,
         );
       const user = await db.query.users.findFirst({
-        where: isUuid ? eq(users.id, id) : eq(users.handle, id),
+        where: and(
+          isUuid ? eq(users.id, id) : eq(users.handle, id),
+          eq(users.isBanned, false),
+          sql`${users.deletedAt} IS NULL`,
+        ),
         columns: {
           handle: true,
           preferredName: true,

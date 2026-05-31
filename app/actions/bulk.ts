@@ -38,11 +38,20 @@ export async function getBulkMediaUrls(s3Keys?: string[], mediaIds?: string[]) {
         }
       }
       for (const key of uniqueKeys) {
-        const mediaId =
-          mediaByThumbnailKey.get(key) ??
-          key.match(/^media\/([^/]+)\/thumbnail\.jpg$/)?.[1];
-        if (mediaId) {
-          urls[key] = getMediaProxyUrl(mediaId, "thumbnail");
+        const matched = mediaByThumbnailKey.get(key);
+        if (matched) {
+          urls[key] = getMediaProxyUrl(matched, "thumbnail");
+          continue;
+        }
+        const extractedId = key.match(/^media\/([^/]+)\/thumbnail\.jpg$/)?.[1];
+        if (extractedId) {
+          const orphanMedia = await db.query.media.findFirst({
+            where: eq(media.id, extractedId),
+            with: { event: true },
+          });
+          if (orphanMedia && (await can(user, "view", "media", orphanMedia))) {
+            urls[key] = getMediaProxyUrl(extractedId, "thumbnail");
+          }
         }
       }
     }

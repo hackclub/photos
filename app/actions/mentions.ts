@@ -113,10 +113,22 @@ export async function removeMention(mediaId: string, userId: string) {
     if (!mediaItem) {
       return { success: false, error: "Media not found" };
     }
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: {
+        id: true,
+        migrationMode: true,
+        migratedToUserId: true,
+      },
+    });
+    const resolvedUserId =
+      user?.migrationMode && user?.migratedToUserId
+        ? user.migratedToUserId
+        : userId;
     if (
       !(await can(currentUser, "delete", "mention", {
         media: mediaItem,
-        targetUserId: userId,
+        targetUserId: resolvedUserId,
       }))
     ) {
       return { success: false, error: "Unauthorized" };
@@ -126,7 +138,7 @@ export async function removeMention(mediaId: string, userId: string) {
       .where(
         and(
           eq(mediaMentions.mediaId, mediaId),
-          eq(mediaMentions.userId, userId),
+          eq(mediaMentions.userId, resolvedUserId),
         ),
       );
     await auditLog(

@@ -105,9 +105,17 @@ async function checkShareLinkPermission(
   if (!resource) return false;
   if (action === "create") {
     const mediaItem = resource.media || resource;
-    if (mediaItem.event && mediaItem.event.allowPublicSharing === false) {
-      if (!user.isGlobalAdmin) return false;
+    let allowPublicSharing = true;
+    if (mediaItem.event) {
+      allowPublicSharing = mediaItem.event.allowPublicSharing !== false;
+    } else if (mediaItem.eventId) {
+      const event = await db.query.events.findFirst({
+        where: eq(events.id, mediaItem.eventId),
+        columns: { allowPublicSharing: true },
+      });
+      if (event) allowPublicSharing = event.allowPublicSharing !== false;
     }
+    if (!allowPublicSharing && !user.isGlobalAdmin) return false;
     return checkEventPermission(user, "view", mediaItem.eventId);
   }
   if (action === "delete") {
@@ -240,6 +248,9 @@ async function checkEventPermission(
     return isEventAdmin;
   }
   if (action === "join") {
+    return !!user;
+  }
+  if (action === "leave") {
     return !!user;
   }
   if (action === "upload") {

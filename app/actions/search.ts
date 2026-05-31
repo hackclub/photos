@@ -37,6 +37,7 @@ function toSafeMedia(item: any) {
   } = item;
   return {
     ...safe,
+    event: safe.event ? withoutInviteCode(safe.event) : undefined,
     url: getMediaProxyUrl(item.id),
     thumbnailUrl: getMediaProxyUrl(item.id, "thumbnail"),
     uploadedBy: item.uploadedBy ? toPublicUser(item.uploadedBy) : undefined,

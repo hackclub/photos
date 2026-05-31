@@ -493,14 +493,12 @@ export async function finalizeUpload(
             error: "Upload verification failed: File not found in storage",
           };
         }
-        const finalExifData = serverExifData || data.exifData;
+        const finalExifData = serverExifData ?? null;
         const takenAt = serverExifData?.dateTimeOriginal
           ? new Date(serverExifData.dateTimeOriginal)
-          : data.takenAt
-            ? new Date(data.takenAt)
-            : null;
-        const latitude = finalExifData?.gpsLatitude ?? null;
-        const longitude = finalExifData?.gpsLongitude ?? null;
+          : null;
+        const latitude = serverExifData?.gpsLatitude ?? null;
+        const longitude = serverExifData?.gpsLongitude ?? null;
         const [insertedMedia] = await db
           .insert(media)
           .values({

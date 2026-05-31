@@ -32,7 +32,7 @@ async function renderBlurredPhoto(
   const response = await fetch(sourceUrl);
   if (!response.ok) throw new Error("Failed to fetch source photo");
   const input = Buffer.from(await response.arrayBuffer());
-  const base = await sharp(input).rotate().keepMetadata().toBuffer();
+  const base = await sharp(input).rotate().withMetadata({}).toBuffer();
   const metadata = await sharp(base).metadata();
   const width = metadata.width ?? 0;
   const height = metadata.height ?? 0;

@@ -887,6 +887,8 @@ export async function deleteAccount() {
 }
 export async function checkSlackAvatar(slackId: string) {
   try {
+    const session = await getSession();
+    if (!session?.id) return { success: false };
     const { isValidSlackId, normalizeSlackId } = await import("@/lib/slack-id");
     const normalizedSlackId = normalizeSlackId(slackId);
     if (!isValidSlackId(normalizedSlackId)) return { success: false };
