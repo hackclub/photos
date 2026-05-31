@@ -4,7 +4,16 @@ import { HiClipboard, HiClipboardDocumentCheck, HiPlay } from "react-icons/hi2";
 import FormInput from "@/components/ui/FormInput";
 import { APP_URL } from "@/lib/constants";
 
-type Endpoint = "photos" | "videos" | "media" | "events" | "series" | "upload";
+type Endpoint =
+  | "photos"
+  | "videos"
+  | "media"
+  | "events"
+  | "event-detail"
+  | "series"
+  | "series-detail"
+  | "upload";
+
 const ENDPOINTS: {
   id: Endpoint;
   label: string;
@@ -14,9 +23,20 @@ const ENDPOINTS: {
   { id: "videos", label: "Videos", description: "Get all the public videos" },
   { id: "media", label: "Media", description: "Everything mixed together" },
   { id: "events", label: "Events", description: "See what's happening" },
+  {
+    id: "event-detail",
+    label: "Event Detail",
+    description: "Get details about one event",
+  },
   { id: "series", label: "Series", description: "Collections of events" },
+  {
+    id: "series-detail",
+    label: "Series Detail",
+    description: "Get details about one series",
+  },
   { id: "upload", label: "Upload", description: "Upload media to an event" },
 ];
+
 const EXAMPLE_RESPONSES: Record<Endpoint, object> = {
   photos: {
     data: [
@@ -92,14 +112,53 @@ const EXAMPLE_RESPONSES: Record<Endpoint, object> = {
         description:
           "Game jam for high schoolers in Toronto. Organized by high schoolers.",
         location: "Toronto, ON",
+        locationCity: "Toronto",
+        latitude: 43.6532,
+        longitude: -79.3832,
         eventDate: "2025-07-15T00:00:00.000Z",
         bannerUrl:
           "https://photos.hackclub.com/api/v1/download/event-uuid?type=event",
+        detailUrl: "https://photos.hackclub.com/api/v1/events/daydream-toronto",
+        mediaUrl:
+          "https://photos.hackclub.com/api/v1/media?event=daydream-toronto",
       },
     ],
     pagination: {
       page: 1,
       limit: 20,
+    },
+  },
+  "event-detail": {
+    data: {
+      id: "event-uuid",
+      name: "Daydream Toronto",
+      slug: "daydream-toronto",
+      description:
+        "Game jam for high schoolers in Toronto. Organized by high schoolers.",
+      eventDate: "2025-07-15T00:00:00.000Z",
+      location: "Toronto, ON",
+      locationCity: "Toronto",
+      latitude: 43.6532,
+      longitude: -79.3832,
+      bannerUrl:
+        "https://photos.hackclub.com/api/v1/download/event-uuid?type=event",
+      createdAt: "2025-06-01T00:00:00.000Z",
+      photoCount: 142,
+      videoCount: 8,
+      totalMedia: 150,
+      participantCount: 23,
+      series: {
+        id: "series-uuid",
+        name: "Daydream 2025",
+        slug: "daydream-2025",
+        detailUrl: "https://photos.hackclub.com/api/v1/series/daydream-2025",
+      },
+      mediaUrl:
+        "https://photos.hackclub.com/api/v1/media?event=daydream-toronto",
+      photosUrl:
+        "https://photos.hackclub.com/api/v1/photos?event=daydream-toronto",
+      videosUrl:
+        "https://photos.hackclub.com/api/v1/videos?event=daydream-toronto",
     },
   },
   series: {
@@ -115,6 +174,33 @@ const EXAMPLE_RESPONSES: Record<Endpoint, object> = {
     pagination: {
       page: 1,
       limit: 20,
+    },
+  },
+  "series-detail": {
+    data: {
+      id: "series-uuid",
+      name: "Daydream 2025",
+      slug: "daydream-2025",
+      description:
+        "Game jam for high schoolers. Organized by high schoolers in 100 cities worldwide.",
+      bannerUrl:
+        "https://photos.hackclub.com/api/v1/download/series-uuid?type=series",
+      createdAt: "2025-01-01T00:00:00.000Z",
+      totalPhotos: 4820,
+      eventCount: 42,
+      events: [
+        {
+          id: "event-uuid",
+          name: "Daydream Toronto",
+          slug: "daydream-toronto",
+          description: "Game jam for high schoolers in Toronto.",
+          eventDate: "2025-07-15T00:00:00.000Z",
+          location: "Toronto, ON",
+          photoCount: 150,
+          detailUrl:
+            "https://photos.hackclub.com/api/v1/events/daydream-toronto",
+        },
+      ],
     },
   },
   upload: {
@@ -135,6 +221,7 @@ const EXAMPLE_RESPONSES: Record<Endpoint, object> = {
     },
   },
 };
+
 export default function ApiPlayground() {
   const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint>("photos");
   const [params, setParams] = useState({
@@ -143,31 +230,48 @@ export default function ApiPlayground() {
     event: "",
     page: "1",
     limit: "20",
+    search: "",
+    slug: "",
   });
   const [copied, setCopied] = useState(false);
   const [origin, setOrigin] = useState(APP_URL);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       setOrigin(window.location.origin);
     }
   }, []);
+
   const handleParamChange = (key: string, value: string | boolean) => {
     setParams((prev) => ({ ...prev, [key]: value }));
   };
+
   const isLimitInvalid = (limit: string) => {
     const val = parseInt(limit, 10);
     return Number.isNaN(val) || val < 1 || val > 100;
   };
+
   const isCountInvalid = (count: string) => {
     const val = parseInt(count, 10);
     return Number.isNaN(val) || val < 1 || val > 100;
   };
+
   const buildUrl = () => {
+    if (selectedEndpoint === "upload") {
+      return `${origin}/api/v1/upload`;
+    }
+    if (selectedEndpoint === "event-detail") {
+      const s = params.slug || "daydream-toronto";
+      return `${origin}/api/v1/events/${s}`;
+    }
+    if (selectedEndpoint === "series-detail") {
+      const s = params.slug || "daydream-2025";
+      return `${origin}/api/v1/series/${s}`;
+    }
+
     const baseUrl = `${origin}/api/v1/${selectedEndpoint}`;
     const queryParams = new URLSearchParams();
-    if (selectedEndpoint === "upload") {
-      return baseUrl;
-    }
+
     if (["photos", "videos", "media"].includes(selectedEndpoint)) {
       if (params.random) {
         queryParams.append("random", "true");
@@ -185,29 +289,39 @@ export default function ApiPlayground() {
         queryParams.append("page", params.page);
       if (params.limit && params.limit !== "20")
         queryParams.append("limit", params.limit);
+      if (params.search) queryParams.append("search", params.search);
     }
+
     const queryString = queryParams.toString();
     return queryString ? `${baseUrl}?${queryString}` : baseUrl;
   };
+
   const getCurlCommand = () => {
     if (selectedEndpoint === "upload") {
       return `curl -X POST "${buildUrl()}" \\
- -H "Authorization: Bearer YOUR_API_KEY" \\
- -F "file=@/path/to/photo.jpg" \\
- -F "eventId=${params.event || "event-uuid"}"`;
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -F "file=@/path/to/photo.jpg" \\
+  -F "eventId=${params.event || "event-uuid"}"`;
     }
     return `curl "${buildUrl()}" \\
- -H "Authorization: Bearer YOUR_API_KEY"`;
+  -H "Authorization: Bearer YOUR_API_KEY"`;
   };
+
   const copyToClipboard = () => {
     navigator.clipboard.writeText(getCurlCommand());
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
   const showMediaParams = ["photos", "videos", "media"].includes(
     selectedEndpoint,
   );
+  const isListEndpoint = ["events", "series"].includes(selectedEndpoint);
+  const isDetailEndpoint = ["event-detail", "series-detail"].includes(
+    selectedEndpoint,
+  );
   const isUpload = selectedEndpoint === "upload";
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2">
@@ -235,6 +349,24 @@ export default function ApiPlayground() {
             </h3>
 
             <div className="space-y-4">
+              {isDetailEndpoint && (
+                <FormInput
+                  label={
+                    selectedEndpoint === "event-detail"
+                      ? "Event Slug"
+                      : "Series Slug"
+                  }
+                  placeholder={
+                    selectedEndpoint === "event-detail"
+                      ? "e.g. daydream-toronto"
+                      : "e.g. daydream-2025"
+                  }
+                  value={params.slug}
+                  onChange={(e) => handleParamChange("slug", e.target.value)}
+                  className="mb-0"
+                />
+              )}
+
               {showMediaParams && (
                 <>
                   <div className="flex items-center gap-3">
@@ -316,36 +448,49 @@ export default function ApiPlayground() {
                 </>
               )}
 
-              {!showMediaParams && !isUpload && (
-                <div className="grid grid-cols-2 gap-4">
-                  <FormInput
-                    label="Page"
-                    type="number"
-                    min="1"
-                    value={params.page}
-                    onChange={(e) => handleParamChange("page", e.target.value)}
-                    className="mb-0"
-                  />
-                  <div>
+              {isListEndpoint && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
                     <FormInput
-                      label="Limit (1-50)"
+                      label="Page"
                       type="number"
                       min="1"
-                      max="50"
-                      value={params.limit}
+                      value={params.page}
                       onChange={(e) =>
-                        handleParamChange("limit", e.target.value)
+                        handleParamChange("page", e.target.value)
                       }
-                      className={`mb-0 ${parseInt(params.limit, 10) > 50 ? "border-red-600 focus:ring-red-600" : ""}`}
+                      className="mb-0"
                     />
-                    {parseInt(params.limit, 10) > 50 && (
-                      <p className="text-xs text-red-600 mt-1">
-                        Must be between 1 and 50. API will default to 50 if
-                        exceeded.
-                      </p>
-                    )}
+                    <div>
+                      <FormInput
+                        label="Limit (1-50)"
+                        type="number"
+                        min="1"
+                        max="50"
+                        value={params.limit}
+                        onChange={(e) =>
+                          handleParamChange("limit", e.target.value)
+                        }
+                        className={`mb-0 ${parseInt(params.limit, 10) > 50 ? "border-red-600 focus:ring-red-600" : ""}`}
+                      />
+                      {parseInt(params.limit, 10) > 50 && (
+                        <p className="text-xs text-red-600 mt-1">
+                          Must be between 1 and 50. API will default to 50 if
+                          exceeded.
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
+                  <FormInput
+                    label="Search (Optional)"
+                    placeholder="e.g. toronto"
+                    value={params.search}
+                    onChange={(e) =>
+                      handleParamChange("search", e.target.value)
+                    }
+                    className="mb-0"
+                  />
+                </>
               )}
 
               {isUpload && (

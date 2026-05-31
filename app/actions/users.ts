@@ -815,10 +815,15 @@ export async function updateUserProfile(
         }
       }
     }
-    const updateData = {
-      ...data,
+    const updateData: Record<string, unknown> = {
       updatedAt: new Date(),
     };
+    if (data.handle !== undefined) updateData.handle = data.handle;
+    if (data.preferredName !== undefined)
+      updateData.preferredName = data.preferredName;
+    if (data.bio !== undefined) updateData.bio = data.bio;
+    if (data.socialLinks !== undefined)
+      updateData.socialLinks = data.socialLinks;
     await db.update(users).set(updateData).where(eq(users.id, userId));
     await auditLog(user.id, "update", "user", userId, {
       changes: Object.keys(data),

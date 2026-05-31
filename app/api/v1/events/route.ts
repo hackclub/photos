@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, ilike, or } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { unauthorizedResponse, validateApiKey } from "@/lib/auth-api";
 import { APP_URL } from "@/lib/constants";
@@ -14,7 +14,18 @@ export async function GET(req: NextRequest) {
   const page = parseInt(searchParams.get("page") || "1", 10);
   const limit = Math.min(parseInt(searchParams.get("limit") || "20", 10), 50);
   const offset = (page - 1) * limit;
+  const search = searchParams.get("search");
   try {
+    const conditions = [eq(events.visibility, "public")];
+    if (search) {
+      conditions.push(
+        or(
+          ilike(events.name, `%${search}%`),
+          ilike(events.description, `%${search}%`),
+          ilike(events.location, `%${search}%`),
+        )!,
+      );
+    }
     const publicEvents = await db
       .select({
         id: events.id,
@@ -24,10 +35,13 @@ export async function GET(req: NextRequest) {
         bannerS3Key: events.bannerS3Key,
         eventDate: events.eventDate,
         location: events.location,
+        locationCity: events.locationCity,
+        latitude: events.latitude,
+        longitude: events.longitude,
         createdAt: events.createdAt,
       })
       .from(events)
-      .where(eq(events.visibility, "public"))
+      .where(and(...conditions))
       .orderBy(desc(events.eventDate))
       .limit(limit)
       .offset(offset);
@@ -41,6 +55,11 @@ export async function GET(req: NextRequest) {
         bannerUrl: event.bannerS3Key ? `${baseUrl}?type=event` : null,
         eventDate: event.eventDate,
         location: event.location,
+        locationCity: event.locationCity,
+        latitude: event.latitude,
+        longitude: event.longitude,
+        detailUrl: `${APP_URL}/api/v1/events/${event.slug}`,
+        mediaUrl: `${APP_URL}/api/v1/media?event=${event.slug}`,
         createdAt: event.createdAt,
       };
     });

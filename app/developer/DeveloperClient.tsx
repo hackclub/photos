@@ -283,7 +283,7 @@ export default function DeveloperDashboard({
               </p>
               <p>
                 <span className="text-red-400 font-medium">
-                  Uploads are strictly limited to 100 requests per hour.
+                  Uploads are strictly limited to 2,000 requests per hour.
                 </span>
               </p>
               <p>

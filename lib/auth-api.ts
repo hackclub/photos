@@ -24,7 +24,7 @@ export function getClientIpFromHeaders(
 }
 
 const RATE_LIMIT_MAX_REQUESTS = 1000;
-const RATE_LIMIT_UPLOAD_MAX_REQUESTS = 100;
+const RATE_LIMIT_UPLOAD_MAX_REQUESTS = 2000;
 const RATE_LIMIT_WINDOW_SECONDS = 60 * 60; // 1 hour
 
 export async function validateApiKey(requireUpload: boolean = false) {
