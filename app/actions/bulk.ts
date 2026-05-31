@@ -29,10 +29,6 @@ export async function getBulkMediaUrls(s3Keys?: string[], mediaIds?: string[]) {
       const uniqueKeys = Array.from(new Set(s3Keys));
       const mediaItems = await db.query.media.findMany({
         where: inArray(media.thumbnailS3Key, uniqueKeys),
-        columns: {
-          id: true,
-          thumbnailS3Key: true,
-        },
         with: { event: true },
       });
       const mediaByThumbnailKey = new Map<string, string>();
@@ -42,7 +38,9 @@ export async function getBulkMediaUrls(s3Keys?: string[], mediaIds?: string[]) {
         }
       }
       for (const key of uniqueKeys) {
-        const mediaId = mediaByThumbnailKey.get(key);
+        const mediaId =
+          mediaByThumbnailKey.get(key) ??
+          key.match(/^media\/([^/]+)\/thumbnail\.jpg$/)?.[1];
         if (mediaId) {
           urls[key] = getMediaProxyUrl(mediaId, "thumbnail");
         }
