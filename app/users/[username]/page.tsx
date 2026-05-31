@@ -152,7 +152,7 @@ export default async function UserProfilePage({
           <p className="text-zinc-400 mb-8">
             This user has been banned from Hack Club Photos.
           </p>
-          {user.banReason && (
+          {isAdmin && user.banReason && (
             <div className="bg-black/50 rounded-lg p-4 text-sm text-zinc-300 border border-zinc-800">
               <span className="font-medium text-zinc-500 block mb-1 uppercase text-xs tracking-wider">
                 Reason

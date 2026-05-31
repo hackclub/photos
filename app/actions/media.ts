@@ -20,6 +20,8 @@ import { extractVideoMetadata } from "@/lib/media/video-metadata";
 import { can, getUserContext } from "@/lib/policy";
 import { publicMedia } from "@/lib/public-data";
 import { checkStorageLimit } from "@/lib/storage";
+
+const MAX_DIRECT_ACTION_UPLOAD_BYTES = 100 * 1024 * 1024;
 export async function uploadBanner(
   entityType: "event" | "series",
   entityId: string,
@@ -290,6 +292,13 @@ export async function uploadMedia(formData: FormData) {
     const validation = validateMediaFile(file);
     if (!validation.valid) {
       return { success: false, error: validation.error };
+    }
+    if (file.size > MAX_DIRECT_ACTION_UPLOAD_BYTES) {
+      return {
+        success: false,
+        error:
+          "Direct uploads are limited to 100MB. Use the normal uploader for larger files.",
+      };
     }
     const event = await db.query.events.findFirst({
       where: eq(events.id, eventId),

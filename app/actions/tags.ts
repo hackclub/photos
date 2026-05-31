@@ -1,5 +1,5 @@
 "use server";
-import { and, eq, ilike, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -26,10 +26,9 @@ export async function addTag(mediaId: string, tagName: string) {
     if (!mediaItem) {
       return { success: false, error: "Media not found" };
     }
-    if (
-      mediaItem.event &&
-      !(await can(user, "view", "event", mediaItem.event))
-    ) {
+    const isUploader = mediaItem.uploadedById === user.id;
+    const canManage = await can(user, "manage", "event", mediaItem.eventId);
+    if (!isUploader && !canManage) {
       return { success: false, error: "Unauthorized" };
     }
     let tagId: string;
@@ -92,12 +91,29 @@ export async function removeTag(mediaId: string, tagId: string) {
 }
 export async function searchByTag(query: string) {
   try {
+    const session = await getSession();
+    const user = await getUserContext(session?.id);
+    if (user?.isBanned) return { success: true, tags: [] };
+    const accessibleEventIds = await getAccessibleEventIdsForUser(user?.id);
+    if (accessibleEventIds.length === 0) return { success: true, tags: [] };
     const normalizedQuery = query.toLowerCase().trim();
     if (!normalizedQuery) return { success: true, tags: [] };
-    const results = await db.query.tags.findMany({
-      where: ilike(tags.name, `%${normalizedQuery}%`),
-      limit: 10,
-    });
+    const escapedEventIds = accessibleEventIds
+      .map((id) => `'${id.replace(/'/g, "''")}'`)
+      .join(",");
+    const escapedQuery = normalizedQuery.replace(/'/g, "''");
+    const results = (await db.execute(
+      sql.raw(`
+      SELECT DISTINCT t.*
+      FROM tags t
+      JOIN media_tags mt ON t.id = mt.tag_id
+      JOIN media m ON mt.media_id = m.id
+      WHERE m.event_id IN (${escapedEventIds})
+      AND t.name ILIKE '%${escapedQuery}%'
+      ORDER BY t.name ASC
+      LIMIT 10
+    `),
+    )) as (typeof tags.$inferSelect)[];
     return { success: true, tags: results };
   } catch (error) {
     logger.error("Failed to search tags:", error);
@@ -106,10 +122,29 @@ export async function searchByTag(query: string) {
 }
 export async function getTagByName(name: string) {
   try {
+    const session = await getSession();
+    const user = await getUserContext(session?.id);
+    if (user?.isBanned) return { success: false, error: "Tag not found" };
+    const accessibleEventIds = await getAccessibleEventIdsForUser(user?.id);
+    if (accessibleEventIds.length === 0) {
+      return { success: false, error: "Tag not found" };
+    }
     const normalizedName = name.toLowerCase().trim();
-    const tag = await db.query.tags.findFirst({
-      where: eq(tags.name, normalizedName),
-    });
+    const escapedEventIds = accessibleEventIds
+      .map((id) => `'${id.replace(/'/g, "''")}'`)
+      .join(",");
+    const escapedName = normalizedName.replace(/'/g, "''");
+    const [tag] = (await db.execute(
+      sql.raw(`
+      SELECT DISTINCT t.*
+      FROM tags t
+      JOIN media_tags mt ON t.id = mt.tag_id
+      JOIN media m ON mt.media_id = m.id
+      WHERE m.event_id IN (${escapedEventIds})
+      AND t.name = '${escapedName}'
+      LIMIT 1
+    `),
+    )) as (typeof tags.$inferSelect)[];
     if (!tag) return { success: false, error: "Tag not found" };
     return { success: true, tag };
   } catch (error) {

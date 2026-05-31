@@ -40,10 +40,12 @@ export async function generateMetadata({
 }) {
   const { slug } = await params;
   const { photo } = await searchParams;
+  const session = await getSession();
+  const ctx = await getUserContext(session?.id);
   const event = await db.query.events.findFirst({
     where: eq(events.slug, slug),
   });
-  if (!event) {
+  if (!event || !(await can(ctx, "view", "event", event))) {
     return {
       title: "Event Not Found",
     };
@@ -54,7 +56,10 @@ export async function generateMetadata({
     const photoMedia = await db.query.media.findFirst({
       where: eq(media.id, photo),
     });
-    if (photoMedia?.eventId === event.id) {
+    if (
+      photoMedia?.eventId === event.id &&
+      (await can(ctx, "view", "media", photoMedia))
+    ) {
       const imagePath =
         photoMedia.mimeType === "image/heic" ||
         photoMedia.mimeType === "image/heif"

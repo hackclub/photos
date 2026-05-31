@@ -400,6 +400,11 @@ export async function createEvent(data: EventInput) {
   }
 }
 export async function checkSlugAvailability(slug: string) {
+  const session = await getSession();
+  const user = await getUserContext(session?.id);
+  if (!user || !(await can(user, "create", "event", null))) {
+    return { available: true };
+  }
   const existingEvent = await db.query.events.findFirst({
     where: eq(events.slug, slug),
   });

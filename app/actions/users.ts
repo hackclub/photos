@@ -901,10 +901,11 @@ export async function checkSlackAvatar(slackId: string) {
 export async function getUserStorageUsage(userId: string) {
   try {
     const session = await getSession();
-    if (!session?.id) {
+    const user = await getUserContext(session?.id);
+    if (!user) {
       return 0;
     }
-    if (session.id !== userId && !session.isGlobalAdmin) {
+    if (user.id !== userId && !user.isGlobalAdmin) {
       return 0;
     }
     const { getUserStorageUsage: getUsage } = await import("@/lib/storage");

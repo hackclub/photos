@@ -11,10 +11,12 @@ import {
   HiTag,
   HiUser,
 } from "react-icons/hi2";
+import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { events, series, tags, users } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
+import { can, getUserContext } from "@/lib/policy";
 import { getSlackAvatarUrl, getUserDisplayName } from "@/lib/user-display";
 
 export const runtime = "nodejs";
@@ -214,10 +216,15 @@ export async function GET(request: Request) {
       );
     }
     if (type === "event" && id) {
+      const session = await getSession();
+      const user = await getUserContext(session?.id);
       const event = await db.query.events.findFirst({
         where: eq(events.slug, id),
       });
       if (!event) return baseCard("Hack Club Photos", "Event not found");
+      if (!(await can(user, "view", "event", event))) {
+        return baseCard("Hack Club Photos", "Event not found");
+      }
       const bannerUrl = event.bannerS3Key
         ? absoluteUrl(getAssetProxyUrl("event-banner", event.id))
         : undefined;
@@ -230,10 +237,15 @@ export async function GET(request: Request) {
       );
     }
     if (type === "series" && id) {
+      const session = await getSession();
+      const user = await getUserContext(session?.id);
       const seriesData = await db.query.series.findFirst({
         where: eq(series.slug, id),
       });
       if (!seriesData) return baseCard("Hack Club Photos", "Series not found");
+      if (!(await can(user, "view", "series", seriesData))) {
+        return baseCard("Hack Club Photos", "Series not found");
+      }
       const bannerUrl = seriesData.bannerS3Key
         ? absoluteUrl(getAssetProxyUrl("series-banner", seriesData.id))
         : undefined;

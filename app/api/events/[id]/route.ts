@@ -36,7 +36,8 @@ export async function GET(
     if (canManage) {
       return NextResponse.json({ event });
     }
-    return NextResponse.json({ event: publicEvent(event) });
+    const { bannerS3Key: _bannerS3Key, ...safeEvent } = publicEvent(event);
+    return NextResponse.json({ event: safeEvent });
   } catch (error) {
     logger.error("Get event error:", error);
     return NextResponse.json(

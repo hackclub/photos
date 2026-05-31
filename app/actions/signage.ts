@@ -7,6 +7,23 @@ import { logger } from "@/lib/logger";
 import { getMediaProxyUrl } from "@/lib/media/s3";
 import { getAccessibleEventIdsForUser, getUserContext } from "@/lib/policy";
 import { toPublicUser } from "@/lib/user-display";
+
+function toSignageMedia(item: any, url: string) {
+  return {
+    id: item.id,
+    eventId: item.eventId,
+    filename: item.filename,
+    mimeType: item.mimeType,
+    width: item.width,
+    height: item.height,
+    caption: item.caption,
+    uploadedAt: item.uploadedAt,
+    event: item.event,
+    uploadedBy: toPublicUser(item.uploadedBy),
+    url,
+    thumbnailUrl: getMediaProxyUrl(item.id, "thumbnail"),
+  };
+}
 export type SignageFilter = {
   seriesId?: string;
   eventId?: string;
@@ -65,11 +82,7 @@ export async function getRandomMedia(filter: SignageFilter = {}, limit = 50) {
         } else {
           url = getMediaProxyUrl(item.id);
         }
-        return {
-          ...item,
-          uploadedBy: toPublicUser(item.uploadedBy),
-          url,
-        };
+        return toSignageMedia(item, url);
       }),
     );
     return { success: true, media: mediaWithUrls };
@@ -116,11 +129,7 @@ export async function getLatestMedia(limit = 1) {
         } else {
           url = getMediaProxyUrl(item.id);
         }
-        return {
-          ...item,
-          uploadedBy: toPublicUser(item.uploadedBy),
-          url,
-        };
+        return toSignageMedia(item, url);
       }),
     );
     return { success: true, media: mediaWithUrls };
@@ -171,7 +180,19 @@ export async function getSeriesAndEvents() {
     const accessibleEvents = allEvents
       .filter((e) => accessibleEventIdsSet.has(e.id))
       .map(({ inviteCode: _inviteCode, ...event }) => event);
-    return { success: true, series: allSeries, events: accessibleEvents };
+    const accessibleSeriesIds = new Set(
+      accessibleEvents
+        .map((event) => event.seriesId)
+        .filter((seriesId): seriesId is string => Boolean(seriesId)),
+    );
+    const accessibleSeries = allSeries.filter(
+      (s) => s.visibility === "public" || accessibleSeriesIds.has(s.id),
+    );
+    return {
+      success: true,
+      series: accessibleSeries,
+      events: accessibleEvents,
+    };
   } catch (error) {
     logger.error("Error fetching series and events:", error);
     return { success: false, error: "Failed to fetch data" };

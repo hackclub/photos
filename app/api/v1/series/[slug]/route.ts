@@ -42,7 +42,10 @@ export async function GET(
     if (seriesData.visibility !== "public") {
       return Response.json({ error: "Series not found" }, { status: 404 });
     }
-    const eventIds = seriesData.events.map((e) => e.id);
+    const publicEvents = seriesData.events.filter(
+      (event) => event.visibility === "public",
+    );
+    const eventIds = publicEvents.map((e) => e.id);
     const mediaCounts =
       eventIds.length > 0
         ? await db
@@ -66,8 +69,8 @@ export async function GET(
           : null,
         createdAt: seriesData.createdAt,
         totalPhotos,
-        eventCount: seriesData.events.length,
-        events: seriesData.events.map((event) => ({
+        eventCount: publicEvents.length,
+        events: publicEvents.map((event) => ({
           id: event.id,
           name: event.name,
           slug: event.slug,

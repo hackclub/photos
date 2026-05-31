@@ -1,7 +1,7 @@
 "use server";
 import { randomBytes } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { readFile, unlink } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ZipArchive } from "archiver";
@@ -22,6 +22,8 @@ const DATA_EXPORT_REDACTED_KEYS = new Set([
   "hcaRefreshToken",
   "inviteCode",
 ]);
+const MAX_EXPORT_MEDIA_FILES = 5000;
+const MAX_EXPORT_MEDIA_BYTES = 20 * 1024 * 1024 * 1024;
 
 function redactDataExportValue(key: string, value: unknown) {
   if (DATA_EXPORT_REDACTED_KEYS.has(key)) return undefined;
@@ -172,6 +174,18 @@ async function processDataExport(exportId: string, userId: string) {
     const jsonContent = JSON.stringify(safeUserData, null, 2);
     archive.append(jsonContent, { name: "user-data.json" });
     const mediaItems = userData.uploadedMedia || [];
+    const totalMediaBytes = mediaItems.reduce(
+      (sum, item) => sum + (item.fileSize || 0),
+      0,
+    );
+    if (
+      mediaItems.length > MAX_EXPORT_MEDIA_FILES ||
+      totalMediaBytes > MAX_EXPORT_MEDIA_BYTES
+    ) {
+      archive.abort();
+      await unlink(tempPath).catch(() => {});
+      throw new Error("Data export too large");
+    }
     for (const [index, item] of mediaItems.entries()) {
       if (index % 5 === 0) {
         const currentExport = await db.query.dataExports.findFirst({
@@ -193,12 +207,11 @@ async function processDataExport(exportId: string, userId: string) {
         });
         const response = await s3Client.send(command);
         if (response.Body) {
-          const bytes = await response.Body.transformToByteArray();
           const folder = item.mimeType.startsWith("image/")
             ? "photos"
             : "videos";
           const zipPath = `media/${folder}/${safeFilename(item.filename)}`;
-          archive.append(Buffer.from(bytes), {
+          archive.append(response.Body as NodeJS.ReadableStream & any, {
             name: zipPath,
             date:
               item.uploadedAt instanceof Date
@@ -217,14 +230,14 @@ async function processDataExport(exportId: string, userId: string) {
       archive.on("error", reject);
     });
     const s3Key = `exports/${exportId}/archive.zip`;
-    const fileBuffer = await readFile(tempPath);
+    const fileStats = await stat(tempPath);
     await uploadToS3(
-      fileBuffer,
+      createReadStream(tempPath),
       s3Key,
       "application/zip",
       undefined,
       undefined,
-      fileBuffer.length,
+      fileStats.size,
     );
     try {
       await db

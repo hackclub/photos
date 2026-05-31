@@ -12,6 +12,7 @@ import {
   users,
 } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
+import { getMediaProxyUrl } from "@/lib/media/s3";
 import {
   augmentMediaWithPermissions,
   can,
@@ -19,6 +20,28 @@ import {
   getUserContext,
 } from "@/lib/policy";
 import { type PublicUser, toPublicUser } from "@/lib/user-display";
+
+function toSafeMedia(item: any) {
+  const {
+    s3Key: _s3Key,
+    s3Url: _s3Url,
+    thumbnailS3Key: _thumbnailS3Key,
+    originalS3Key: _originalS3Key,
+    originalThumbnailS3Key: _originalThumbnailS3Key,
+    blurredS3Key: _blurredS3Key,
+    blurredThumbnailS3Key: _blurredThumbnailS3Key,
+    exifData: _exifData,
+    latitude: _latitude,
+    longitude: _longitude,
+    ...safe
+  } = item;
+  return {
+    ...safe,
+    url: getMediaProxyUrl(item.id),
+    thumbnailUrl: getMediaProxyUrl(item.id, "thumbnail"),
+    uploadedBy: item.uploadedBy ? toPublicUser(item.uploadedBy) : undefined,
+  };
+}
 
 type PublicUserRow = {
   id: string;
@@ -201,10 +224,7 @@ export async function globalSearch(query: string): Promise<{
         users: userResults.map(toPublicUser),
         events: eventResults,
         series: seriesResults,
-        media: finalMedia.map((item) => ({
-          ...item,
-          uploadedBy: toPublicUser(item.uploadedBy),
-        })),
+        media: finalMedia.map(toSafeMedia),
         tags: tagResults,
       },
     };
@@ -488,10 +508,7 @@ export async function advancedSearch(
         users: userResults.map(toPublicUser),
         events: eventResults,
         series: [],
-        media: finalMedia.map((item) => ({
-          ...item,
-          uploadedBy: toPublicUser(item.uploadedBy),
-        })),
+        media: finalMedia.map(toSafeMedia),
         tags: tagResults,
       },
     };

@@ -6,8 +6,17 @@ import {
   verifySlackRequest,
 } from "@/lib/slack-notifications";
 
+const MAX_SLACK_BODY_BYTES = 1024 * 1024;
+
 export async function POST(req: Request) {
+  const contentLength = Number(req.headers.get("content-length") || 0);
+  if (!contentLength || contentLength > MAX_SLACK_BODY_BYTES) {
+    return new NextResponse("Payload Too Large", { status: 413 });
+  }
   const rawBody = await req.text();
+  if (Buffer.byteLength(rawBody) > MAX_SLACK_BODY_BYTES) {
+    return new NextResponse("Payload Too Large", { status: 413 });
+  }
   if (!(await verifySlackRequest(req, rawBody))) {
     return new NextResponse("Unauthorized", { status: 401 });
   }

@@ -13,7 +13,6 @@ import {
 import { getSharedMedia } from "@/app/actions/sharing";
 import SharedPageMapWrapper from "@/components/map/SharedPageMapWrapper";
 import { APP_URL } from "@/lib/constants";
-import { db } from "@/lib/db";
 import {
   type ExifData,
   formatAperture,
@@ -21,32 +20,6 @@ import {
   formatFocalLength,
   formatISO,
 } from "@/lib/media/exif";
-
-async function getSharedMediaForOg(token: string) {
-  return await db.query.shareLinks.findFirst({
-    where: (links, { and, eq }) =>
-      and(eq(links.token, token), eq(links.isRevoked, false)),
-    with: {
-      media: {
-        with: {
-          uploadedBy: {
-            columns: {
-              preferredName: true,
-              handle: true,
-            },
-          },
-          event: true,
-        },
-      },
-      createdBy: {
-        columns: {
-          preferredName: true,
-          handle: true,
-        },
-      },
-    },
-  });
-}
 
 export async function generateMetadata({
   params,
@@ -56,17 +29,17 @@ export async function generateMetadata({
   }>;
 }): Promise<Metadata> {
   const { token } = await params;
-  const link = await getSharedMediaForOg(token);
-  if (!link?.media) {
+  const result = await getSharedMedia(token);
+  if (!result.success || !result.link?.media) {
     return {
       title: "Shared Photo Not Found",
     };
   }
 
+  const { link } = result;
   const { media } = link;
   const title = media.caption || media.filename;
-  const sharerName =
-    link.createdBy.preferredName || link.createdBy.handle || "someone";
+  const sharerName = link.createdBy.name || link.createdBy.handle || "someone";
   const description = media.event
     ? `Shared from ${media.event.name} on Hack Club Photos`
     : `Shared by ${sharerName} on Hack Club Photos`;
@@ -123,8 +96,7 @@ export default async function SharedMediaPage({
     exif.fNumber !== undefined ||
     exif.exposureTime !== undefined ||
     exif.iso !== undefined;
-  const hasLocation =
-    exif.gpsLatitude !== undefined && exif.gpsLongitude !== undefined;
+  const hasLocation = false;
   const hasTakenDate = exif.dateTimeOriginal;
   const rawUrl = `/share/${token}/raw`;
   const displayUrl =

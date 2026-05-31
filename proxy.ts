@@ -37,17 +37,6 @@ function redirectToSignin(request: NextRequest) {
   return NextResponse.redirect(url);
 }
 
-function forbidden(request: NextRequest) {
-  if (isApiPath(request.nextUrl.pathname)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const url = request.nextUrl.clone();
-  url.pathname = "/unauthorized";
-  url.search = "";
-  return NextResponse.redirect(url);
-}
-
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (matchesPath(pathname, MEDIA_BYPASS_PATHS)) {
@@ -67,12 +56,10 @@ export async function proxy(request: NextRequest) {
 
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET);
-    const session = payload.user as
-      | { isGlobalAdmin?: boolean; isBanned?: boolean }
-      | undefined;
+    const session = payload.user as { id?: string } | undefined;
 
-    if (!session || session.isBanned) {
-      return forbidden(request);
+    if (!session) {
+      return redirectToSignin(request);
     }
 
     return NextResponse.next();

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { readdir, stat, unlink } from "node:fs/promises";
+import { readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
@@ -115,13 +115,14 @@ export async function POST(
         { status: 404 },
       );
     }
-    let mediaToDownload = event.media;
+    let mediaToDownload = event.media.filter((m) => m.blurStatus !== "pending");
     if (mediaIds && mediaIds.length > 0) {
-      mediaToDownload = event.media.filter((m) => mediaIds.includes(m.id));
+      mediaToDownload = mediaToDownload.filter((m) => mediaIds.includes(m.id));
     }
     mediaToDownload = mediaToDownload.slice(0, MAX_FILES_PER_DOWNLOAD);
     const downloadId = randomBytes(16).toString("hex");
     const tempPath = join(tmpdir(), `hackclub-photos-${downloadId}.zip`);
+    const metadataPath = join(tmpdir(), `hackclub-photos-${downloadId}.json`);
     const output = createWriteStream(tempPath);
     const archive = new ZipArchive({ zlib: { level: 6 } });
     archive.pipe(output);
@@ -173,8 +174,17 @@ export async function POST(
     setTimeout(
       () => {
         unlink(tempPath).catch(() => {});
+        unlink(metadataPath).catch(() => {});
       },
       60 * 60 * 1000,
+    );
+    await writeFile(
+      metadataPath,
+      JSON.stringify({
+        eventId,
+        userId: session?.id ?? null,
+        createdAt: Date.now(),
+      }),
     );
     return NextResponse.json({
       success: true,

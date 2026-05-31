@@ -3,7 +3,6 @@ import {
   type GetObjectCommandOutput,
 } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
-import { unstable_cache } from "next/cache";
 import { type NextRequest, NextResponse } from "next/server";
 import { verifySessionToken } from "@/lib/auth";
 import { getUserContext } from "@/lib/auth-api";
@@ -14,19 +13,6 @@ import { convertHeicToJpeg } from "@/lib/media/heic";
 import { S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
 import { can } from "@/lib/policy";
 import { contentDispositionFilename } from "@/lib/safe-filename";
-
-const getCachedMedia = unstable_cache(
-  async (mediaId: string) => {
-    return await db.query.media.findFirst({
-      where: eq(media.id, mediaId),
-      with: {
-        event: true,
-      },
-    });
-  },
-  ["media-lookup"],
-  { revalidate: 3600, tags: ["media"] },
-);
 
 export async function GET(
   request: NextRequest,
@@ -53,7 +39,12 @@ export async function GET(
   if (requestRange && !/^bytes=\d*-\d*(,\d*-\d*)?$/.test(requestRange)) {
     return new NextResponse("Invalid range", { status: 416 });
   }
-  const mediaItem = await getCachedMedia(mediaId);
+  const mediaItem = await db.query.media.findFirst({
+    where: eq(media.id, mediaId),
+    with: {
+      event: true,
+    },
+  });
   if (!mediaItem) {
     return new NextResponse("Media not found", { status: 404 });
   }

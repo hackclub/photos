@@ -20,6 +20,8 @@ import { can, getUserContext } from "@/lib/policy";
 import { publicMedia } from "@/lib/public-data";
 import { checkStorageLimit } from "@/lib/storage";
 
+const MAX_DIRECT_API_UPLOAD_BYTES = 100 * 1024 * 1024;
+
 function safeFileExtension(filename: string) {
   const ext = filename.split(".").pop()?.toLowerCase() ?? "bin";
   return /^[a-z0-9]{1,12}$/.test(ext) ? ext : "bin";
@@ -30,6 +32,19 @@ export async function POST(req: NextRequest) {
     const auth = await validateApiKey(true);
     if (!auth) {
       return unauthorizedResponse();
+    }
+    const contentLength = Number(req.headers.get("content-length") || 0);
+    if (!contentLength) {
+      return NextResponse.json(
+        { error: "Content-Length is required" },
+        { status: 411 },
+      );
+    }
+    if (contentLength > MAX_DIRECT_API_UPLOAD_BYTES) {
+      return NextResponse.json(
+        { error: "Direct API uploads are limited to 100MB" },
+        { status: 413 },
+      );
     }
     const { user, apiKeyId, apiKeyName } = auth;
     if (!user) {
@@ -82,6 +97,12 @@ export async function POST(req: NextRequest) {
     const validation = validateMediaFile(file);
     if (!validation.valid) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+    if (file.size > MAX_DIRECT_API_UPLOAD_BYTES) {
+      return NextResponse.json(
+        { error: "Direct API uploads are limited to 100MB" },
+        { status: 413 },
+      );
     }
     const ctx = await getUserContext(user.id);
     const canUpload = await can(ctx, "upload", "event", eventId);

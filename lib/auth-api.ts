@@ -11,11 +11,8 @@ export function getClientIpFromHeaders(
   headersList: Headers,
   fallback: string = "anonymous",
 ): string {
-  const xff = headersList.get("x-forwarded-for");
-  if (xff) {
-    const first = xff.split(",")[0]?.trim();
-    if (first) return first;
-  }
+  const cfConnectingIp = headersList.get("cf-connecting-ip")?.trim();
+  if (cfConnectingIp) return cfConnectingIp;
 
   const xRealIp = headersList.get("x-real-ip")?.trim();
   if (xRealIp) return xRealIp;

@@ -19,6 +19,12 @@ import { parseSlackIds } from "@/lib/slack-id";
 export async function getBulkMediaUrls(s3Keys?: string[], mediaIds?: string[]) {
   try {
     const urls: Record<string, string> = {};
+    const session = await getSession();
+    const user = await getUserContext(session?.id);
+    if (!user) return { success: false, error: "Unauthorized" };
+    if ((s3Keys?.length ?? 0) > 500 || (mediaIds?.length ?? 0) > 500) {
+      return { success: false, error: "Too many media requested" };
+    }
     if (s3Keys && s3Keys.length > 0) {
       const uniqueKeys = Array.from(new Set(s3Keys));
       const mediaItems = await db.query.media.findMany({
@@ -27,24 +33,22 @@ export async function getBulkMediaUrls(s3Keys?: string[], mediaIds?: string[]) {
           id: true,
           thumbnailS3Key: true,
         },
+        with: { event: true },
       });
-      const mediaByThumbnailKey = new Map(
-        mediaItems
-          .filter((item) => item.thumbnailS3Key)
-          .map((item) => [item.thumbnailS3Key!, item.id]),
-      );
+      const mediaByThumbnailKey = new Map<string, string>();
+      for (const item of mediaItems) {
+        if (item.thumbnailS3Key && (await can(user, "view", "media", item))) {
+          mediaByThumbnailKey.set(item.thumbnailS3Key, item.id);
+        }
+      }
       for (const key of uniqueKeys) {
-        const mediaId =
-          mediaByThumbnailKey.get(key) ??
-          key.match(/^media\/([^/]+)\/thumbnail\.jpg$/)?.[1];
+        const mediaId = mediaByThumbnailKey.get(key);
         if (mediaId) {
           urls[key] = getMediaProxyUrl(mediaId, "thumbnail");
         }
       }
     }
     if (mediaIds && mediaIds.length > 0) {
-      const session = await getSession();
-      const user = await getUserContext(session?.id);
       const mediaItems = await db.query.media.findMany({
         where: inArray(media.id, mediaIds),
         with: {

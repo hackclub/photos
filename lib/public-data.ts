@@ -18,7 +18,12 @@ export function publicEvent(event: typeof events.$inferSelect): PublicEvent {
 }
 
 export function publicSeries(item: typeof series.$inferSelect) {
-  return item;
+  const {
+    bannerS3Key: _bannerS3Key,
+    createdById: _createdById,
+    ...safe
+  } = item;
+  return safe;
 }
 
 export function publicMedia(item: typeof media.$inferSelect) {
@@ -31,9 +36,6 @@ export function publicMedia(item: typeof media.$inferSelect) {
     fileSize: item.fileSize,
     width: item.width,
     height: item.height,
-    latitude: item.latitude,
-    longitude: item.longitude,
-    exifData: item.exifData,
     takenAt: item.takenAt,
     caption: item.caption,
     uploadedAt: item.uploadedAt,

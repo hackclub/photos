@@ -172,17 +172,6 @@ export async function submitBlurRequests(submissions: BlurSubmission[]) {
         blurredS3Key,
         blurredThumbnailS3Key: thumbnailS3Key,
       });
-      await db
-        .update(media)
-        .set({
-          blurStatus: "pending",
-          originalS3Key: item.originalS3Key ?? item.s3Key,
-          originalThumbnailS3Key:
-            item.originalThumbnailS3Key ?? item.thumbnailS3Key,
-          blurredS3Key,
-          blurredThumbnailS3Key: thumbnailS3Key,
-        })
-        .where(eq(media.id, item.id));
       await auditLog(user.id, "create", "blur_request", requestId, {
         mediaId: item.id,
       });

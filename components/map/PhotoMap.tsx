@@ -29,8 +29,7 @@ interface Photo {
   id: string;
   filename: string;
   mimeType: string;
-  thumbnailS3Key: string | null;
-  s3Key: string;
+  thumbnailUrl: string | null;
   lat: number;
   lng: number;
   uploadedAt: Date;
@@ -44,8 +43,7 @@ interface SimplePhoto {
   id: string;
   filename: string;
   mimeType: string;
-  thumbnailS3Key: string | null;
-  s3Key: string;
+  thumbnailUrl: string | null;
   uploadedAt: Date;
 }
 interface EventLocation {
@@ -280,26 +278,13 @@ export default function PhotoMap() {
       }
     });
     if (allVisiblePhotos.length === 0) return;
-    const missingPhotos = allVisiblePhotos.filter(
-      (p) => p.thumbnailS3Key && !photoUrls[p.thumbnailS3Key],
+    const urls = Object.fromEntries(
+      allVisiblePhotos
+        .filter((p) => p.thumbnailUrl)
+        .map((p) => [p.id, p.thumbnailUrl as string]),
     );
-    if (missingPhotos.length === 0) return;
-    async function fetchUrls() {
-      const s3Keys = missingPhotos
-        .map((p) => p.thumbnailS3Key)
-        .filter((key): key is string => key !== null);
-      try {
-        const { getMediaUrls } = await import("@/app/actions/media");
-        const result = await getMediaUrls(undefined, s3Keys);
-        if (result.success && result.urls) {
-          setPhotoUrls((prev) => ({ ...prev, ...result.urls }));
-        }
-      } catch (error) {
-        logger.error("Error fetching presigned URLs:", error);
-      }
-    }
-    fetchUrls();
-  }, [clusters, supercluster, photoUrls]);
+    setPhotoUrls((prev) => ({ ...prev, ...urls }));
+  }, [clusters, supercluster]);
   const createClusterIcon = (pointCount: number, clusterId: number) => {
     const clusterPoints = supercluster?.getLeaves(clusterId, 4) || [];
     const photoPoints = clusterPoints.filter(
@@ -311,9 +296,7 @@ export default function PhotoMap() {
     const stackedPhotos = photosToShow
       .map((p: GeoJSON.Feature<GeoJSON.Point, any>, index: number) => {
         const photo = p.properties.photo as Photo;
-        const url = photo.thumbnailS3Key
-          ? photoUrls[photo.thumbnailS3Key]
-          : null;
+        const url = photo.thumbnailUrl || photoUrls[photo.id] || null;
         const offset = index * 3;
         const zIndex = maxPhotos - index;
         const background = url
@@ -372,9 +355,7 @@ export default function PhotoMap() {
     });
   };
   const createPhotoIcon = (photo: Photo) => {
-    const thumbnailUrl = photo.thumbnailS3Key
-      ? photoUrls[photo.thumbnailS3Key]
-      : null;
+    const thumbnailUrl = photo.thumbnailUrl || photoUrls[photo.id] || null;
     const isVideo = photo.mimeType.startsWith("video/");
     if (!thumbnailUrl) {
       return L.divIcon({
@@ -446,9 +427,7 @@ export default function PhotoMap() {
     const photosToShow = eventPhotos.slice(0, 9);
     const photoGrid = photosToShow
       .map((photo, index) => {
-        const url = photo.thumbnailS3Key
-          ? photoUrls[photo.thumbnailS3Key]
-          : null;
+        const url = photo.thumbnailUrl || photoUrls[photo.id] || null;
         const row = Math.floor(index / 3);
         const col = index % 3;
         const size = 20;
@@ -614,23 +593,22 @@ export default function PhotoMap() {
               >
                 <Popup maxWidth={250}>
                   <div className="min-w-45 sm:min-w-50">
-                    {photo.thumbnailS3Key &&
-                      photoUrls[photo.thumbnailS3Key] && (
-                        <div className="relative mb-2 rounded-lg overflow-hidden">
-                          <img
-                            src={photoUrls[photo.thumbnailS3Key]}
-                            alt={photo.filename}
-                            width={200}
-                            height={150}
-                            className="w-full h-auto"
-                          />
-                          {photo.mimeType.startsWith("video/") && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
-                              <HiPlay className="text-white text-3xl sm:text-4xl" />
-                            </div>
-                          )}
-                        </div>
-                      )}
+                    {(photo.thumbnailUrl || photoUrls[photo.id]) && (
+                      <div className="relative mb-2 rounded-lg overflow-hidden">
+                        <img
+                          src={photo.thumbnailUrl || photoUrls[photo.id]}
+                          alt={photo.filename}
+                          width={200}
+                          height={150}
+                          className="w-full h-auto"
+                        />
+                        {photo.mimeType.startsWith("video/") && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
+                            <HiPlay className="text-white text-3xl sm:text-4xl" />
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <p className="font-medium text-xs sm:text-sm mb-1 truncate">
                       {photo.filename}
                     </p>
@@ -685,9 +663,8 @@ export default function PhotoMap() {
                     {eventPhotos.length > 0 && (
                       <div className="grid grid-cols-3 gap-1 mb-2 sm:mb-3 max-h-37.5 sm:max-h-45 overflow-hidden">
                         {eventPhotos.slice(0, 9).map((photo) => {
-                          const url = photo.thumbnailS3Key
-                            ? photoUrls[photo.thumbnailS3Key]
-                            : null;
+                          const url =
+                            photo.thumbnailUrl || photoUrls[photo.id] || null;
                           return (
                             <div
                               key={photo.id}

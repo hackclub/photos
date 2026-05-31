@@ -30,6 +30,9 @@ export async function createShareLink(
     if (!(await can(user, "create", "share_link", mediaItem))) {
       return { success: false, error: "Unauthorized" };
     }
+    if (mediaItem.blurStatus === "pending") {
+      return { success: false, error: "Media is under review" };
+    }
     const existingLink = await db.query.shareLinks.findFirst({
       where: and(
         eq(shareLinks.mediaId, mediaId),
@@ -123,6 +126,9 @@ export async function getSharedMedia(token: string) {
         success: false,
         error: "Public sharing is disabled for this event",
       };
+    }
+    if (link.media.blurStatus === "pending") {
+      return { success: false, error: "Media is under review" };
     }
     db.update(shareLinks)
       .set({ views: link.views + 1 })

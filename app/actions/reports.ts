@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { reports } from "@/lib/db/schema";
+import { media, reports } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { can, getUserContext } from "@/lib/policy";
 export async function createReport(mediaId: string, reason: string) {
@@ -16,7 +16,20 @@ export async function createReport(mediaId: string, reason: string) {
   if (!reason.trim()) {
     return { success: false, error: "Reason is required" };
   }
+  if (reason.length > 2000) {
+    return { success: false, error: "Reason is too long" };
+  }
   try {
+    const mediaItem = await db.query.media.findFirst({
+      where: eq(media.id, mediaId),
+      with: { event: true },
+    });
+    if (!mediaItem) {
+      return { success: false, error: "Media not found" };
+    }
+    if (!(await can(user, "view", "media", mediaItem))) {
+      return { success: false, error: "Forbidden" };
+    }
     const [newReport] = await db
       .insert(reports)
       .values({

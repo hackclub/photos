@@ -23,13 +23,15 @@ export async function generateMetadata({
 }) {
   const { slug } = await params;
   const { photo } = await searchParams;
+  const session = await getSession();
+  const ctx = await getUserContext(session?.id);
   const seriesData = await db.query.series.findFirst({
     where: eq(series.slug, slug),
     with: {
       events: true,
     },
   });
-  if (!seriesData) {
+  if (!seriesData || !(await can(ctx, "view", "series", seriesData))) {
     return {
       title: "Series Not Found",
     };
@@ -42,7 +44,11 @@ export async function generateMetadata({
       where: eq(media.id, photo),
     });
     const eventIds = new Set(seriesData.events.map((event) => event.id));
-    if (photoMedia && eventIds.has(photoMedia.eventId)) {
+    if (
+      photoMedia &&
+      eventIds.has(photoMedia.eventId) &&
+      (await can(ctx, "view", "media", photoMedia))
+    ) {
       const imagePath =
         photoMedia.mimeType === "image/heic" ||
         photoMedia.mimeType === "image/heif"

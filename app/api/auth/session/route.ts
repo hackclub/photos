@@ -14,6 +14,7 @@ export async function GET() {
         slackId: true,
         handle: true,
         preferredName: true,
+        isGlobalAdmin: true,
       },
       with: {
         seriesAdminRoles: { limit: 1 },
@@ -22,7 +23,7 @@ export async function GET() {
     });
     if (user) {
       const hasAdminAccess =
-        session.isGlobalAdmin ||
+        user.isGlobalAdmin ||
         user.seriesAdminRoles.length > 0 ||
         user.eventAdminRoles.length > 0;
       const res = NextResponse.json({
@@ -30,7 +31,7 @@ export async function GET() {
           ...toPublicUser({ ...session, ...user }),
           email: session.email,
           hackclubId: session.hackclubId,
-          isGlobalAdmin: session.isGlobalAdmin,
+          isGlobalAdmin: user.isGlobalAdmin,
           isBanned: user.isBanned,
           slackId: user.slackId,
           hasAdminAccess,

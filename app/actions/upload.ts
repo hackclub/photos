@@ -16,6 +16,7 @@ import {
   abortMultipartUpload,
   completeMultipartUpload,
   createMultipartUpload,
+  deleteFromS3,
   getSignedPartUrl,
   getSignedUploadUrl,
   S3_BUCKET_NAME,
@@ -38,6 +39,40 @@ import {
 
 const MEDIA_KEY_PATTERN = /^media\/([0-9a-f-]{36})\/[A-Za-z0-9._-]+$/i;
 const UUID_PATTERN = /^[0-9a-f-]{36}$/i;
+const MULTIPART_SESSION_TTL_MS = 6 * 60 * 60 * 1000;
+
+const multipartSessions = new Map<
+  string,
+  { userId: string; eventId: string; s3Key: string; expiresAt: number }
+>();
+
+function multipartSessionKey(s3Key: string, uploadId: string) {
+  return `${s3Key}:${uploadId}`;
+}
+
+function rememberMultipartSession(
+  s3Key: string,
+  uploadId: string,
+  userId: string,
+  eventId: string,
+) {
+  multipartSessions.set(multipartSessionKey(s3Key, uploadId), {
+    userId,
+    eventId,
+    s3Key,
+    expiresAt: Date.now() + MULTIPART_SESSION_TTL_MS,
+  });
+}
+
+function getMultipartSession(s3Key: string, uploadId: string, userId: string) {
+  const key = multipartSessionKey(s3Key, uploadId);
+  const session = multipartSessions.get(key);
+  if (!session || session.expiresAt < Date.now() || session.userId !== userId) {
+    multipartSessions.delete(key);
+    return null;
+  }
+  return session;
+}
 
 function getMediaIdFromKey(s3Key: string) {
   return MEDIA_KEY_PATTERN.exec(s3Key)?.[1] ?? null;
@@ -157,6 +192,7 @@ export async function initiateMultipartUpload(
     const s3Key = `media/${mediaId}/original.${fileExtension}`;
     const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
     const uploadId = await createMultipartUpload(s3Key, fileType);
+    rememberMultipartSession(s3Key, uploadId, user.id, eventId);
     const thumbnailUploadUrl = await getSignedUploadUrl(
       thumbnailS3Key,
       "image/jpeg",
@@ -185,6 +221,13 @@ export async function getMultipartPresignedUrls(
     if (!user) return { success: false, error: "Unauthorized" };
     if (!getMediaIdFromKey(s3Key)) {
       return { success: false, error: "Invalid upload key" };
+    }
+    const uploadSession = getMultipartSession(s3Key, uploadId, user.id);
+    if (!uploadSession) {
+      return { success: false, error: "Invalid upload session" };
+    }
+    if (!(await can(user, "upload", "event", uploadSession.eventId))) {
+      return { success: false, error: "Forbidden" };
     }
     if (
       partNumbers.length === 0 ||
@@ -222,7 +265,15 @@ export async function completeMultipart(
     if (!getMediaIdFromKey(s3Key) || parts.length === 0) {
       return { success: false, error: "Invalid upload key" };
     }
+    const uploadSession = getMultipartSession(s3Key, uploadId, user.id);
+    if (!uploadSession) {
+      return { success: false, error: "Invalid upload session" };
+    }
+    if (!(await can(user, "upload", "event", uploadSession.eventId))) {
+      return { success: false, error: "Forbidden" };
+    }
     await completeMultipartUpload(s3Key, uploadId, parts);
+    multipartSessions.delete(multipartSessionKey(s3Key, uploadId));
     return { success: true };
   } catch (error) {
     logger.error("Error completing multipart upload:", error);
@@ -237,7 +288,12 @@ export async function abortMultipart(s3Key: string, uploadId: string) {
     if (!getMediaIdFromKey(s3Key)) {
       return { success: false, error: "Invalid upload key" };
     }
+    const uploadSession = getMultipartSession(s3Key, uploadId, user.id);
+    if (!uploadSession) {
+      return { success: false, error: "Invalid upload session" };
+    }
     await abortMultipartUpload(s3Key, uploadId);
+    multipartSessions.delete(multipartSessionKey(s3Key, uploadId));
     return { success: true };
   } catch (error) {
     logger.error("Error aborting multipart upload:", error);
@@ -323,6 +379,25 @@ export async function finalizeUpload(
           }
           if (realFileSize > data.fileSize + 1024 * 1024) {
             return { success: false, error: "Uploaded file size mismatch" };
+          }
+          const storageCheck = await checkStorageLimit(
+            user.id,
+            realFileSize,
+            user,
+          );
+          if (!storageCheck.allowed) {
+            await deleteFromS3(data.s3Key).catch((deleteError) => {
+              logger.error("Failed to delete over-quota upload:", deleteError);
+            });
+            if (data.thumbnailS3Key) {
+              await deleteFromS3(data.thumbnailS3Key).catch((deleteError) => {
+                logger.error(
+                  "Failed to delete over-quota thumbnail:",
+                  deleteError,
+                );
+              });
+            }
+            return { success: false, error: "Storage limit exceeded" };
           }
           if (
             data.thumbnailS3Key &&

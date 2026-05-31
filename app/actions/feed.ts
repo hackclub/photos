@@ -83,6 +83,10 @@ export async function getSeriesFeed(seriesId: string, limit = 50, offset = 0) {
     if (!seriesData) {
       return { success: false, error: "Series not found" };
     }
+    if (!(await can(user, "view", "series", seriesData))) {
+      if (!user) return { success: false, error: "Unauthorized" };
+      return { success: false, error: "Forbidden" };
+    }
     const accessibleEventIdsSet = await getAccessibleEventIds(
       user?.id,
       seriesData.events,
