@@ -202,6 +202,10 @@ export const media = pgTable(
     latitude: doublePrecision("latitude"),
     longitude: doublePrecision("longitude"),
     exifData: jsonb("exif_data"),
+    metadata: jsonb("metadata"),
+    globalAdminOnlyDelete: boolean("global_admin_only_delete")
+      .notNull()
+      .default(false),
     takenAt: timestamp("taken_at"),
     caption: text("caption"),
     apiKeyId: uuid("api_key_id").references((): AnyPgColumn => apiKeys.id, {
@@ -486,6 +490,7 @@ export const apiKeys = pgTable("api_keys", {
   rateLimitRequestCount: integer("rate_limit_request_count").default(0),
   isRevoked: boolean("is_revoked").notNull().default(false),
   canUpload: boolean("can_upload").notNull().default(false),
+  isAdmin: boolean("is_admin").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 export const dataExports = pgTable("data_exports", {

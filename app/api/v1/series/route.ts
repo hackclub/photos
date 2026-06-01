@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
         createdAt: series.createdAt,
       })
       .from(series)
-      .where(eq(series.visibility, "public"))
+      .where(auth.isAdminApiKey ? undefined : eq(series.visibility, "public"))
       .orderBy(desc(series.createdAt))
       .limit(limit)
       .offset(offset);

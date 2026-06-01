@@ -23,6 +23,7 @@ export async function listAllApiKeys() {
         name: true,
         note: true,
         canUpload: true,
+        isAdmin: true,
         isRevoked: true,
         lastUsedAt: true,
         createdAt: true,

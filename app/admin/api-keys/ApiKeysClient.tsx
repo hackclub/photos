@@ -31,6 +31,7 @@ interface ApiKey {
   createdAt: Date;
   lastUsedAt: Date | null;
   canUpload: boolean;
+  isAdmin: boolean;
   isRevoked: boolean;
   rateLimitRequestCount: number | null;
   user: {
@@ -169,6 +170,11 @@ export default function ApiKeyList({ initialKeys }: { initialKeys: ApiKey[] }) {
                       ) : (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 w-fit">
                           Read Only
+                        </span>
+                      )}
+                      {key.isAdmin && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20 w-fit">
+                          Global Admin
                         </span>
                       )}
                     </div>

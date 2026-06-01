@@ -12,6 +12,7 @@ export async function createApiKey(
   name: string,
   canUpload: boolean = false,
   note: string = "",
+  isAdmin: boolean = false,
 ) {
   try {
     const session = await getSession();
@@ -22,6 +23,12 @@ export async function createApiKey(
     if (!(await can(user, "create", "api_key", null))) {
       return { success: false, error: "Unauthorized" };
     }
+    if (isAdmin && !user.isGlobalAdmin) {
+      return {
+        success: false,
+        error: "Only global admins can create admin API keys",
+      };
+    }
     const key = `hcp_${randomBytes(24).toString("hex")}`;
     const [newKey] = await db
       .insert(apiKeys)
@@ -29,13 +36,15 @@ export async function createApiKey(
         key,
         userId: user.id,
         name,
-        canUpload,
+        canUpload: canUpload || isAdmin,
+        isAdmin,
         note,
       })
       .returning();
     await auditLog(user.id, "create", "api_key", newKey.id, {
       name,
-      canUpload,
+      canUpload: canUpload || isAdmin,
+      isAdmin,
     });
     revalidatePath("/developer");
     return { success: true, key };
@@ -64,6 +73,7 @@ export async function listApiKeys() {
         createdAt: true,
         lastUsedAt: true,
         canUpload: true,
+        isAdmin: true,
       },
     });
     return { success: true, keys };

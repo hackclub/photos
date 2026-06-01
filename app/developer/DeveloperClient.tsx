@@ -30,18 +30,22 @@ interface ApiKey {
   name: string | null;
   note: string | null;
   canUpload: boolean;
+  isAdmin: boolean;
   createdAt: Date;
   lastUsedAt: Date | null;
 }
 export default function DeveloperDashboard({
   initialKeys,
+  isGlobalAdmin,
 }: {
   initialKeys: ApiKey[];
+  isGlobalAdmin: boolean;
 }) {
   const [keys, setKeys] = useState<ApiKey[]>(initialKeys);
   const [newKeyName, setNewKeyName] = useState("");
   const [newKeyNote, setNewKeyNote] = useState("");
   const [canUpload, setCanUpload] = useState(false);
+  const [isAdminKey, setIsAdminKey] = useState(false);
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
@@ -50,7 +54,7 @@ export default function DeveloperDashboard({
   const handleCreateKey = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newKeyName.trim()) return;
-    if (canUpload) {
+    if (canUpload || isAdminKey) {
       setShowUploadWarningModal(true);
       return;
     }
@@ -58,7 +62,12 @@ export default function DeveloperDashboard({
   };
   const submitCreateKey = async () => {
     setIsLoading(true);
-    const result = await createApiKey(newKeyName, canUpload, newKeyNote);
+    const result = await createApiKey(
+      newKeyName,
+      canUpload || isAdminKey,
+      newKeyNote,
+      isAdminKey,
+    );
     setIsLoading(false);
     setShowUploadWarningModal(false);
     if (result.success && result.key) {
@@ -66,6 +75,7 @@ export default function DeveloperDashboard({
       setNewKeyName("");
       setNewKeyNote("");
       setCanUpload(false);
+      setIsAdminKey(false);
       router.refresh();
     } else {
       alert("Failed to create API key");
@@ -174,6 +184,11 @@ export default function DeveloperDashboard({
                                     Upload
                                   </span>
                                 )}
+                                {key.isAdmin && (
+                                  <span className="px-2 py-1 rounded-full bg-amber-500/10 text-xs text-amber-300 border border-amber-500/20">
+                                    Global Admin
+                                  </span>
+                                )}
                               </div>
                             </TableCell>
                             <TableCell className="text-zinc-500">
@@ -224,6 +239,33 @@ export default function DeveloperDashboard({
                       onChange={(e) => setNewKeyNote(e.target.value)}
                     />
                   </div>
+
+                  {isGlobalAdmin && (
+                    <div className="bg-amber-950/25 border border-amber-500/25 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          id="isAdminKey"
+                          checked={isAdminKey}
+                          onChange={(e) => setIsAdminKey(e.target.checked)}
+                          className="mt-1 w-4 h-4 rounded-md border-zinc-700 bg-zinc-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-zinc-900"
+                        />
+                        <div>
+                          <label
+                            htmlFor="isAdminKey"
+                            className="text-sm font-medium text-amber-100 block mb-1"
+                          >
+                            Global admin API key
+                          </label>
+                          <p className="text-xs text-amber-200/70">
+                            Grants access to admin API routes, private/unlisted
+                            events, upload-as, and temporary file URLs. Only
+                            global admins can create or use this power.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4">
                     <div className="flex items-start gap-3">
@@ -277,23 +319,29 @@ export default function DeveloperDashboard({
               <p>
                 You can make up to{" "}
                 <span className="text-white font-medium">
-                  1,000 requests per hour
+                  5,000 read requests per hour
                 </span>{" "}
                 per key.
               </p>
               <p>
                 <span className="text-red-400 font-medium">
-                  Uploads are strictly limited to 2,000 requests per hour.
+                  Uploads are limited to 1,000 requests per hour.
                 </span>
               </p>
-              <p>
-                To prevent abuse, all requests have an artificial{" "}
-                <span className="text-white font-medium">2-second delay</span>{" "}
-                and are limited to 1 request every 2 seconds.
-              </p>
+              {isGlobalAdmin && (
+                <p>
+                  Admin API keys get{" "}
+                  <span className="text-white font-medium">
+                    50,000 read requests
+                  </span>{" "}
+                  and{" "}
+                  <span className="text-white font-medium">10,000 uploads</span>{" "}
+                  per hour.
+                </p>
+              )}
               <p className="pt-2 border-t border-zinc-800">
-                Need more? Just ask in Slack! Also you only get access to public
-                photos.
+                Normal keys only get public photos. Global admin API keys can
+                access private and unlisted content.
               </p>
             </div>
           </div>
@@ -328,6 +376,51 @@ export default function DeveloperDashboard({
             </div>
           </div>
 
+          <div className="mb-8 grid gap-3 text-sm text-zinc-400 md:grid-cols-2">
+            <div className="rounded-lg border border-zinc-800 bg-black/30 p-4">
+              <h3 className="mb-2 font-medium text-white">Public API</h3>
+              <p>
+                <code>GET /api/v1/events</code>, <code>/photos</code>,{" "}
+                <code>/videos</code>, <code>/media</code>, and{" "}
+                <code>/series</code> return public content for normal keys.
+                Admin API keys see private and unlisted content too.
+              </p>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-black/30 p-4">
+              <h3 className="mb-2 font-medium text-white">Upload API</h3>
+              <p>
+                <code>POST /api/v1/upload</code> accepts media, app tags,
+                metadata, captions, and admin-only upload-as/delete-lock
+                options. Server handles thumbnails, metadata, feed, Slack, and
+                audit log.
+              </p>
+            </div>
+            {isGlobalAdmin && (
+              <>
+                <div className="rounded-lg border border-amber-500/20 bg-amber-950/10 p-4">
+                  <h3 className="mb-2 font-medium text-amber-100">
+                    Admin Events
+                  </h3>
+                  <p>
+                    <code>POST /api/v1/events</code> creates events. Required:{" "}
+                    <code>name</code>, <code>slug</code>. Optional: visibility,
+                    series, location, date, sharing, invite settings.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-amber-500/20 bg-amber-950/10 p-4">
+                  <h3 className="mb-2 font-medium text-amber-100">
+                    Admin Media + Files
+                  </h3>
+                  <p>
+                    <code>PATCH/DELETE /api/v1/admin/media/:id</code> updates or
+                    deletes media. <code>POST /api/v1/admin/temp-url/:id</code>{" "}
+                    creates signed URLs for media, thumbnails, and banners.
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+
           <div className="mb-6">
             <h3 className="text-lg font-medium text-white mb-4">
               REST API Playground
@@ -335,7 +428,7 @@ export default function DeveloperDashboard({
             <p className="text-zinc-400 mb-6 text-sm">
               Pick an endpoint, tweak the settings, and see what happens.
             </p>
-            <ApiPlayground />
+            <ApiPlayground isGlobalAdmin={isGlobalAdmin} />
           </div>
         </div>
       </section>
@@ -347,7 +440,8 @@ export default function DeveloperDashboard({
         message={
           <div className="space-y-4">
             <p className="text-zinc-300">
-              You are responsible for all content uploaded with this key.
+              You are responsible for all content uploaded or changed with this
+              key.
             </p>
             <p className="text-zinc-300">
               If this key leaks and is used to upload inappropriate content, you

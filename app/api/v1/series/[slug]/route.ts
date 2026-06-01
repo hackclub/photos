@@ -39,12 +39,12 @@ export async function GET(
     if (!seriesData) {
       return Response.json({ error: "Series not found" }, { status: 404 });
     }
-    if (seriesData.visibility !== "public") {
+    if (!auth.isAdminApiKey && seriesData.visibility !== "public") {
       return Response.json({ error: "Series not found" }, { status: 404 });
     }
-    const publicEvents = seriesData.events.filter(
-      (event) => event.visibility === "public",
-    );
+    const publicEvents = auth.isAdminApiKey
+      ? seriesData.events
+      : seriesData.events.filter((event) => event.visibility === "public");
     const eventIds = publicEvents.map((e) => e.id);
     const mediaCounts =
       eventIds.length > 0

@@ -16,7 +16,9 @@ export async function GET(req: NextRequest) {
   const offset = (page - 1) * limit;
   const search = searchParams.get("search");
   try {
-    const conditions = [eq(events.visibility, "public")];
+    const conditions = auth.isAdminApiKey
+      ? []
+      : [eq(events.visibility, "public")];
     if (search) {
       conditions.push(
         or(
@@ -41,7 +43,7 @@ export async function GET(req: NextRequest) {
         createdAt: events.createdAt,
       })
       .from(events)
-      .where(and(...conditions))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(events.eventDate))
       .limit(limit)
       .offset(offset);
@@ -72,6 +74,53 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     logger.error("Error fetching events:", error);
+    return Response.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const auth = await validateApiKey();
+  if (!auth) return unauthorizedResponse();
+  if (!auth.isAdminApiKey || !auth.user.isGlobalAdmin) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+  try {
+    const body = await req.json();
+    const name = String(body.name ?? "").trim();
+    const slug = String(body.slug ?? "").trim();
+    if (!name || !/^[a-z0-9][a-z0-9-]{1,80}$/.test(slug)) {
+      return Response.json(
+        { error: "Valid name and slug are required" },
+        { status: 400 },
+      );
+    }
+    const visibility = ["public", "auth_required", "unlisted"].includes(
+      body.visibility,
+    )
+      ? body.visibility
+      : "auth_required";
+    const [event] = await db
+      .insert(events)
+      .values({
+        name,
+        slug,
+        description: body.description ?? null,
+        visibility,
+        allowPublicSharing: body.allowPublicSharing ?? true,
+        requiresInvite: body.requiresInvite ?? false,
+        eventDate: body.eventDate ? new Date(body.eventDate) : null,
+        location: body.location ?? null,
+        locationCity: body.locationCity ?? null,
+        locationCountry: body.locationCountry ?? null,
+        latitude: body.latitude ?? null,
+        longitude: body.longitude ?? null,
+        seriesId: body.seriesId ?? null,
+        createdById: auth.user.id,
+      })
+      .returning();
+    return Response.json({ data: event }, { status: 201 });
+  } catch (error) {
+    logger.error("Error creating event via API:", error);
     return Response.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

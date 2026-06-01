@@ -12,7 +12,11 @@ type Endpoint =
   | "event-detail"
   | "series"
   | "series-detail"
-  | "upload";
+  | "upload"
+  | "admin-create-event"
+  | "admin-temp-url"
+  | "admin-media-update"
+  | "admin-media-delete";
 
 const ENDPOINTS: {
   id: Endpoint;
@@ -35,7 +39,34 @@ const ENDPOINTS: {
     description: "Get details about one series",
   },
   { id: "upload", label: "Upload", description: "Upload media to an event" },
+  {
+    id: "admin-create-event",
+    label: "Create Event",
+    description: "Admin-only event creation",
+  },
+  {
+    id: "admin-temp-url",
+    label: "Temp URL",
+    description: "Admin-only signed file URL",
+  },
+  {
+    id: "admin-media-update",
+    label: "Update Media",
+    description: "Admin-only media metadata updates",
+  },
+  {
+    id: "admin-media-delete",
+    label: "Delete Media",
+    description: "Admin-only media deletion",
+  },
 ];
+
+const ADMIN_ENDPOINTS = new Set<Endpoint>([
+  "admin-create-event",
+  "admin-temp-url",
+  "admin-media-update",
+  "admin-media-delete",
+]);
 
 const EXAMPLE_RESPONSES: Record<Endpoint, object> = {
   photos: {
@@ -217,12 +248,60 @@ const EXAMPLE_RESPONSES: Record<Endpoint, object> = {
       height: 1080,
       eventId: "event-uuid",
       uploadedById: "user-uuid",
-      createdAt: "2025-07-16T10:00:00.000Z",
+      latitude: 43.6532,
+      longitude: -79.3832,
+      exifData: { camera: "Example Camera" },
+      metadata: {
+        uploadedVia: "api",
+        source: "website-import",
+        globalAdminOnlyDelete: true,
+      },
+      uploadedAt: "2025-07-16T10:00:00.000Z",
     },
+    tags: ["demo", "website"],
+  },
+  "admin-create-event": {
+    data: {
+      id: "event-uuid",
+      name: "Hack Night",
+      slug: "hack-night-2026",
+      visibility: "unlisted",
+      allowPublicSharing: true,
+      requiresInvite: false,
+      location: "New York, NY",
+      createdById: "global-admin-user-uuid",
+      createdAt: "2026-06-01T12:00:00.000Z",
+    },
+  },
+  "admin-temp-url": {
+    url: "https://example.com/presigned-file-url",
+    expiresIn: 3600,
+    type: "media",
+    variant: "original",
+  },
+  "admin-media-update": {
+    data: {
+      id: "media-uuid",
+      caption: "Updated caption",
+      metadata: {
+        uploadedVia: "api",
+        externalId: "cms-123",
+        globalAdminOnlyDelete: true,
+      },
+      globalAdminOnlyDelete: true,
+      uploadedById: "user-uuid",
+    },
+  },
+  "admin-media-delete": {
+    success: true,
   },
 };
 
-export default function ApiPlayground() {
+export default function ApiPlayground({
+  isGlobalAdmin = false,
+}: {
+  isGlobalAdmin?: boolean;
+}) {
   const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint>("photos");
   const [params, setParams] = useState({
     random: false,
@@ -232,6 +311,7 @@ export default function ApiPlayground() {
     limit: "20",
     search: "",
     slug: "",
+    id: "",
   });
   const [copied, setCopied] = useState(false);
   const [origin, setOrigin] = useState(APP_URL);
@@ -259,6 +339,20 @@ export default function ApiPlayground() {
   const buildUrl = () => {
     if (selectedEndpoint === "upload") {
       return `${origin}/api/v1/upload`;
+    }
+    if (selectedEndpoint === "admin-create-event") {
+      return `${origin}/api/v1/events`;
+    }
+    if (selectedEndpoint === "admin-temp-url") {
+      const id = params.id || "media-or-event-uuid";
+      return `${origin}/api/v1/admin/temp-url/${id}`;
+    }
+    if (
+      selectedEndpoint === "admin-media-update" ||
+      selectedEndpoint === "admin-media-delete"
+    ) {
+      const id = params.id || "media-uuid";
+      return `${origin}/api/v1/admin/media/${id}`;
     }
     if (selectedEndpoint === "event-detail") {
       const s = params.slug || "daydream-toronto";
@@ -301,7 +395,34 @@ export default function ApiPlayground() {
       return `curl -X POST "${buildUrl()}" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -F "file=@/path/to/photo.jpg" \\
-  -F "eventId=${params.event || "event-uuid"}"`;
+  -F "eventId=${params.event || "event-uuid"}" \\
+  -F "caption=Demo upload" \\
+  -F "tags=demo,website" \\
+  -F 'metadata={"source":"website-import","externalId":"cms-123"}' \\
+  -F "uploadedById=user-uuid" \\
+  -F "globalAdminOnlyDelete=true"`;
+    }
+    if (selectedEndpoint === "admin-create-event") {
+      return `curl -X POST "${buildUrl()}" \\
+  -H "Authorization: Bearer YOUR_ADMIN_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name":"Hack Night","slug":"hack-night-2026","visibility":"unlisted","location":"New York, NY","eventDate":"2026-06-01T18:00:00.000Z"}'`;
+    }
+    if (selectedEndpoint === "admin-temp-url") {
+      return `curl -X POST "${buildUrl()}" \\
+  -H "Authorization: Bearer YOUR_ADMIN_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"type":"media","variant":"original","expiresIn":3600}'`;
+    }
+    if (selectedEndpoint === "admin-media-update") {
+      return `curl -X PATCH "${buildUrl()}" \\
+  -H "Authorization: Bearer YOUR_ADMIN_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"caption":"Updated caption","metadata":{"externalId":"cms-123"},"uploadedById":"user-uuid","globalAdminOnlyDelete":true}'`;
+    }
+    if (selectedEndpoint === "admin-media-delete") {
+      return `curl -X DELETE "${buildUrl()}" \\
+  -H "Authorization: Bearer YOUR_ADMIN_API_KEY"`;
     }
     return `curl "${buildUrl()}" \\
   -H "Authorization: Bearer YOUR_API_KEY"`;
@@ -321,11 +442,19 @@ export default function ApiPlayground() {
     selectedEndpoint,
   );
   const isUpload = selectedEndpoint === "upload";
+  const isAdminCreateEvent = selectedEndpoint === "admin-create-event";
+  const isTempUrl = selectedEndpoint === "admin-temp-url";
+  const isAdminMedia =
+    selectedEndpoint === "admin-media-update" ||
+    selectedEndpoint === "admin-media-delete";
+  const visibleEndpoints = ENDPOINTS.filter(
+    (endpoint) => !ADMIN_ENDPOINTS.has(endpoint.id) || isGlobalAdmin,
+  );
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2">
-        {ENDPOINTS.map((endpoint) => (
+        {visibleEndpoints.map((endpoint) => (
           <button
             key={endpoint.id}
             onClick={() => setSelectedEndpoint(endpoint.id)}
@@ -513,9 +642,76 @@ export default function ApiPlayground() {
                     <li>
                       <code>eventId</code>: The ID of the event to upload to
                     </li>
+                    <li>
+                      <code>tags</code>: Comma-separated app tags
+                    </li>
+                    <li>
+                      <code>metadata</code>: JSON object stored on media
+                    </li>
+                    <li>
+                      <code>uploadedById</code>: Admin API key only, upload as
+                      another user
+                    </li>
+                    <li>
+                      <code>globalAdminOnlyDelete</code>: Admin API key only,
+                      only global admins can delete this media
+                    </li>
                   </ul>
                   <p className="mt-2 text-yellow-500/80">
                     Note: You must use an API key with "Upload" permissions.
+                  </p>
+                </div>
+              )}
+
+              {isAdminCreateEvent && isGlobalAdmin && (
+                <div className="text-sm text-zinc-400 space-y-2">
+                  <p>
+                    Admin-only. Creates public, auth-required, or unlisted
+                    events.
+                  </p>
+                  <p>
+                    Required JSON: <code>name</code>, <code>slug</code>.
+                  </p>
+                  <p>
+                    Optional JSON: <code>description</code>,{" "}
+                    <code>visibility</code>, <code>seriesId</code>,{" "}
+                    <code>eventDate</code>, <code>location</code>,{" "}
+                    <code>locationCity</code>, <code>locationCountry</code>,{" "}
+                    <code>latitude</code>, <code>longitude</code>,{" "}
+                    <code>allowPublicSharing</code>, <code>requiresInvite</code>
+                    .
+                  </p>
+                </div>
+              )}
+
+              {isTempUrl && isGlobalAdmin && (
+                <div className="text-sm text-zinc-400">
+                  <FormInput
+                    label="File Owner ID"
+                    placeholder="media, event, or series UUID"
+                    value={params.id}
+                    onChange={(e) => handleParamChange("id", e.target.value)}
+                    className="mb-4"
+                  />
+                  <p>
+                    Admin-only. Generates short-lived signed URLs for media,
+                    thumbnails, event banners, and series banners.
+                  </p>
+                </div>
+              )}
+
+              {isAdminMedia && isGlobalAdmin && (
+                <div className="text-sm text-zinc-400">
+                  <FormInput
+                    label="Media ID"
+                    placeholder="media UUID"
+                    value={params.id}
+                    onChange={(e) => handleParamChange("id", e.target.value)}
+                    className="mb-4"
+                  />
+                  <p>
+                    Admin-only. Update caption, metadata, event, uploaded user,
+                    or deletion lock. Delete removes S3 files and the DB row.
                   </p>
                 </div>
               )}

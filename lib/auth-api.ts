@@ -20,8 +20,10 @@ export function getClientIpFromHeaders(
   return fallback;
 }
 
-const RATE_LIMIT_MAX_REQUESTS = 1000;
-const RATE_LIMIT_UPLOAD_MAX_REQUESTS = 2000;
+const RATE_LIMIT_MAX_REQUESTS = 5000;
+const RATE_LIMIT_UPLOAD_MAX_REQUESTS = 1000;
+const RATE_LIMIT_ADMIN_MAX_REQUESTS = 50000;
+const RATE_LIMIT_ADMIN_UPLOAD_MAX_REQUESTS = 10000;
 const RATE_LIMIT_WINDOW_SECONDS = 60 * 60; // 1 hour
 
 export async function validateApiKey(requireUpload: boolean = false) {
@@ -61,9 +63,14 @@ export async function validateApiKey(requireUpload: boolean = false) {
       return null;
     }
 
-    const limit = requireUpload
-      ? RATE_LIMIT_UPLOAD_MAX_REQUESTS
-      : RATE_LIMIT_MAX_REQUESTS;
+    const isAdminApiKey = apiKey.isAdmin && apiKey.user.isGlobalAdmin;
+    const limit = isAdminApiKey
+      ? requireUpload
+        ? RATE_LIMIT_ADMIN_UPLOAD_MAX_REQUESTS
+        : RATE_LIMIT_ADMIN_MAX_REQUESTS
+      : requireUpload
+        ? RATE_LIMIT_UPLOAD_MAX_REQUESTS
+        : RATE_LIMIT_MAX_REQUESTS;
 
     const rateLimitResult = await rateLimit(`api_key:${apiKey.id}`, {
       limit,
@@ -81,11 +88,21 @@ export async function validateApiKey(requireUpload: boolean = false) {
       })
       .where(eq(apiKeys.id, apiKey.id))
       .catch((err) => logger.error("Failed to update API key stats:", err));
-    return { user: apiKey.user, apiKeyId: apiKey.id, apiKeyName: apiKey.name };
+    return {
+      user: apiKey.user,
+      apiKeyId: apiKey.id,
+      apiKeyName: apiKey.name,
+      isAdminApiKey,
+    };
   } catch (error) {
     logger.error("Error validating API key:", error);
     return null;
   }
+}
+export async function validateAdminApiKey(requireUpload: boolean = false) {
+  const auth = await validateApiKey(requireUpload);
+  if (!auth?.isAdminApiKey || !auth.user.isGlobalAdmin) return null;
+  return auth;
 }
 export function unauthorizedResponse() {
   return Response.json(

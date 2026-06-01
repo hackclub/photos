@@ -275,6 +275,7 @@ async function checkMediaPermission(
   const isOwner = user ? resource.uploadedById === user.id : false;
   if (action === "delete") {
     if (!user) return false;
+    if (resource.globalAdminOnlyDelete) return user.isGlobalAdmin;
     if (isOwner) return true;
     return checkEventPermission(user, "manage", resource.eventId);
   }
@@ -354,6 +355,7 @@ export async function filterDeletableMedia<
   T extends {
     eventId: string;
     uploadedById: string;
+    globalAdminOnlyDelete?: boolean;
   },
 >(userId: string, mediaItems: T[]): Promise<T[]> {
   const ctx = await getUserContext(userId);
@@ -372,6 +374,7 @@ export async function filterDeletableMedia<
     eventAdminChecks.map(({ eventId, isAdmin }) => [eventId, isAdmin]),
   );
   return mediaItems.filter((item) => {
+    if (item.globalAdminOnlyDelete) return false;
     const isAdmin = eventAdminMap.get(item.eventId);
     const isOwner = item.uploadedById === userId;
     return isAdmin || isOwner;
@@ -381,6 +384,7 @@ export async function augmentMediaWithPermissions<
   T extends {
     eventId: string;
     uploadedById: string;
+    globalAdminOnlyDelete?: boolean;
   },
 >(
   userId: string | undefined,
@@ -415,7 +419,7 @@ export async function augmentMediaWithPermissions<
     const isOwner = item.uploadedById === userId;
     return {
       ...item,
-      canDelete: !!(isAdmin || isOwner),
+      canDelete: item.globalAdminOnlyDelete ? false : !!(isAdmin || isOwner),
     };
   });
 }

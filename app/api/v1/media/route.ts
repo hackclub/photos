@@ -21,10 +21,9 @@ export async function GET(req: NextRequest) {
     : Math.min(Math.max(limitParam, 1), 100);
   const offset = (page - 1) * limit;
   try {
-    const conditions = [
-      eq(events.visibility, "public"),
-      isNull(media.blurStatus),
-    ];
+    const conditions = auth.isAdminApiKey
+      ? []
+      : [eq(events.visibility, "public"), isNull(media.blurStatus)];
     if (eventSlug) {
       conditions.push(eq(events.slug, eventSlug));
     }
@@ -36,6 +35,11 @@ export async function GET(req: NextRequest) {
         width: media.width,
         height: media.height,
         caption: media.caption,
+        fileSize: media.fileSize,
+        latitude: media.latitude,
+        longitude: media.longitude,
+        exifData: media.exifData,
+        metadata: media.metadata,
         takenAt: media.takenAt,
         uploadedAt: media.uploadedAt,
         eventId: media.eventId,
@@ -44,7 +48,7 @@ export async function GET(req: NextRequest) {
       })
       .from(media)
       .innerJoin(events, eq(media.eventId, events.id))
-      .where(and(...conditions));
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
     const mediaItems = await baseQuery
       .orderBy(isRandom ? sql`random()` : desc(media.uploadedAt))
       .limit(limit)
@@ -68,6 +72,13 @@ export async function GET(req: NextRequest) {
         width: item.width,
         height: item.height,
         caption: item.caption,
+        fileSize: item.fileSize,
+        location:
+          item.latitude != null && item.longitude != null
+            ? { latitude: item.latitude, longitude: item.longitude }
+            : null,
+        exif: item.exifData,
+        metadata: item.metadata,
         takenAt: item.takenAt,
         uploadedAt: item.uploadedAt,
         eventId: item.eventId,

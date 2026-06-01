@@ -1,11 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { type NextRequest, NextResponse } from "next/server";
 import { auditLog } from "@/lib/audit";
 import { unauthorizedResponse, validateApiKey } from "@/lib/auth-api";
 import { db } from "@/lib/db";
-import { eventParticipants, events, media } from "@/lib/db/schema";
+import {
+  eventParticipants,
+  events,
+  media,
+  mediaTags,
+  tags,
+  users,
+} from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { extractExifData } from "@/lib/media/exif";
 import { uploadToS3 } from "@/lib/media/s3";
@@ -27,6 +34,30 @@ function safeFileExtension(filename: string) {
   return /^[a-z0-9]{1,12}$/.test(ext) ? ext : "bin";
 }
 
+function parseJsonObject(value: FormDataEntryValue | null) {
+  if (!value || typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseTagNames(value: FormDataEntryValue | null) {
+  if (!value || typeof value !== "string") return [];
+  return Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((tag) => tag.trim().toLowerCase())
+        .filter((tag) => /^[a-z0-9][a-z0-9 -]{0,38}[a-z0-9]$/.test(tag)),
+    ),
+  ).slice(0, 25);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await validateApiKey(true);
@@ -46,7 +77,7 @@ export async function POST(req: NextRequest) {
         { status: 413 },
       );
     }
-    const { user, apiKeyId, apiKeyName } = auth;
+    const { user, apiKeyId, apiKeyName, isAdminApiKey } = auth;
     if (!user) {
       logger.error("API Key validated but no user found", { apiKeyId });
       return NextResponse.json(
@@ -85,6 +116,18 @@ export async function POST(req: NextRequest) {
     }
     const eventId = formData.get("eventId") as string;
     const file = formData.get("file") as File;
+    const uploadAsUserId = formData.get("uploadedById") as string | null;
+    const metadata = parseJsonObject(formData.get("metadata"));
+    const tagNames = parseTagNames(formData.get("tags"));
+    const globalAdminOnlyDelete =
+      formData.get("globalAdminOnlyDelete") === "true" ||
+      formData.get("globalAdminOnlyDelete") === "1";
+    if (globalAdminOnlyDelete && !isAdminApiKey) {
+      return NextResponse.json(
+        { error: "Admin API key required for global-admin-only delete" },
+        { status: 403 },
+      );
+    }
     if (!eventId || !file) {
       return NextResponse.json(
         { error: "Missing required fields" },
@@ -105,14 +148,43 @@ export async function POST(req: NextRequest) {
       );
     }
     const ctx = await getUserContext(user.id);
-    const canUpload = await can(ctx, "upload", "event", eventId);
+    const canUpload =
+      isAdminApiKey || (await can(ctx, "upload", "event", eventId));
     if (!canUpload) {
       return NextResponse.json(
         { error: "Not a participant or admin" },
         { status: 403 },
       );
     }
-    const storageCheck = await checkStorageLimit(user.id, file.size, ctx);
+    let uploadedById = user.id;
+    if (uploadAsUserId) {
+      if (!isAdminApiKey) {
+        return NextResponse.json(
+          { error: "Admin API key required for upload-as" },
+          { status: 403 },
+        );
+      }
+      if (!/^[0-9a-f-]{36}$/i.test(uploadAsUserId)) {
+        return NextResponse.json(
+          { error: "Invalid uploadedById" },
+          { status: 400 },
+        );
+      }
+      const targetUser = await db.query.users.findFirst({
+        where: eq(users.id, uploadAsUserId),
+        columns: { id: true, isBanned: true },
+      });
+      if (!targetUser || targetUser.isBanned) {
+        return NextResponse.json(
+          { error: "Upload-as user not found" },
+          { status: 404 },
+        );
+      }
+      uploadedById = targetUser.id;
+    }
+    const storageCheck = isAdminApiKey
+      ? { allowed: true }
+      : await checkStorageLimit(uploadedById, file.size, ctx);
     if (!storageCheck.allowed) {
       return NextResponse.json(
         { error: "Storage limit exceeded" },
@@ -125,9 +197,10 @@ export async function POST(req: NextRequest) {
     const mediaId = randomUUID();
     const fileExtension = safeFileExtension(file.name);
     const s3Key = `media/${mediaId}/original.${fileExtension}`;
-    const tags = {
+    const objectTags = {
       eventId,
-      uploadedBy: user.id,
+      uploadedBy: uploadedById,
+      uploadedVia: "api",
     };
     let thumbnailS3Key: string | null = null;
     let exifData: Record<string, unknown> | null = null;
@@ -141,7 +214,7 @@ export async function POST(req: NextRequest) {
       s3Key,
       mimeType,
       undefined,
-      tags,
+      objectTags,
     );
     if (file.type.startsWith("image/")) {
       try {
@@ -187,7 +260,7 @@ export async function POST(req: NextRequest) {
           file.type,
           mediaId,
           undefined,
-          tags,
+          objectTags,
         );
       } catch (e) {
         logger.error("Video processing error:", e);
@@ -206,14 +279,24 @@ export async function POST(req: NextRequest) {
         .values({
           id: mediaId,
           eventId,
-          uploadedById: user.id,
+          uploadedById,
           s3Key,
           s3Url: s3Key,
           thumbnailS3Key,
           filename: file.name,
           mimeType,
           fileSize: originalBuffer.length,
-          exifData: exifData ? JSON.stringify(exifData) : null,
+          exifData,
+          metadata: {
+            ...(metadata ?? {}),
+            uploadedVia: "api",
+            apiKeyId,
+            apiKeyName,
+            actingUserId: user.id,
+            uploadAs: uploadedById !== user.id,
+            globalAdminOnlyDelete,
+          },
+          globalAdminOnlyDelete,
           width,
           height,
           takenAt,
@@ -226,6 +309,24 @@ export async function POST(req: NextRequest) {
       await deleteMediaAndThumbnail(s3Key, thumbnailS3Key);
       throw error;
     }
+    if (tagNames.length > 0) {
+      await db
+        .insert(tags)
+        .values(tagNames.map((name) => ({ name })))
+        .onConflictDoNothing();
+      const tagRows = await db.query.tags.findMany({
+        where: inArray(tags.name, tagNames),
+        columns: { id: true },
+      });
+      if (tagRows.length > 0) {
+        await db
+          .insert(mediaTags)
+          .values(
+            tagRows.map((tag) => ({ mediaId: inserted.id, tagId: tag.id })),
+          )
+          .onConflictDoNothing();
+      }
+    }
     try {
       const { broadcastNewPhoto } = await import("@/app/api/feed/stream/route");
       broadcastNewPhoto(inserted.id).catch((error) => {
@@ -234,15 +335,32 @@ export async function POST(req: NextRequest) {
     } catch (error) {
       logger.error("Failed to broadcast new photo:", error);
     }
+    try {
+      const { notifyUploadForFeed } = await import("@/lib/slack-notifications");
+      notifyUploadForFeed(inserted.id).catch((error) => {
+        logger.error("Failed to enqueue Slack feed notification:", error);
+      });
+    } catch (error) {
+      logger.error("Failed to load Slack feed notification:", error);
+    }
     await auditLog(user.id, "upload", "media", inserted.id, {
       eventId,
       filename: file.name,
       viaApiKey: true,
       apiKeyId,
       apiKeyName,
+      isAdminApiKey,
+      uploadedById,
+      uploadAs: uploadedById !== user.id,
+      globalAdminOnlyDelete,
+      tags: tagNames,
     });
     revalidatePath(`/events/${eventId}`);
-    return NextResponse.json({ success: true, media: publicMedia(inserted) });
+    return NextResponse.json({
+      success: true,
+      media: publicMedia(inserted),
+      tags: tagNames,
+    });
   } catch (error) {
     logger.error("API upload error:", error);
     return NextResponse.json(

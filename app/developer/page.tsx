@@ -8,6 +8,7 @@ import {
 import { getSession } from "@/lib/auth";
 import { APP_URL } from "@/lib/constants";
 import { createOgMetadata } from "@/lib/metadata";
+import { getUserContext } from "@/lib/policy";
 import DeveloperDashboard from "./DeveloperClient";
 export const metadata: Metadata = createOgMetadata({
   title: "Developer Dashboard | Hack Club Photos",
@@ -22,6 +23,7 @@ export default async function DeveloperPage() {
     redirect("/auth/signin?callbackUrl=/developer");
   }
   const { keys } = await listApiKeys();
+  const user = await getUserContext(session.id);
   return (
     <div className="min-h-screen pb-12">
       <AdminPageHeader
@@ -30,7 +32,10 @@ export default async function DeveloperPage() {
       />
 
       <AdminPageContent>
-        <DeveloperDashboard initialKeys={keys || []} />
+        <DeveloperDashboard
+          initialKeys={keys || []}
+          isGlobalAdmin={!!user?.isGlobalAdmin}
+        />
       </AdminPageContent>
     </div>
   );

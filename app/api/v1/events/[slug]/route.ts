@@ -19,7 +19,9 @@ export async function GET(
   try {
     const event = await db.query.events.findFirst({
       where: (events, { and, eq }) =>
-        and(eq(events.slug, slug), eq(events.visibility, "public")),
+        auth.isAdminApiKey
+          ? eq(events.slug, slug)
+          : and(eq(events.slug, slug), eq(events.visibility, "public")),
       with: {
         series: {
           columns: {
@@ -58,6 +60,9 @@ export async function GET(
         eventDate: event.eventDate,
         location: event.location,
         locationCity: event.locationCity,
+        visibility: event.visibility,
+        allowPublicSharing: event.allowPublicSharing,
+        requiresInvite: auth.isAdminApiKey ? event.requiresInvite : undefined,
         latitude: event.latitude,
         longitude: event.longitude,
         bannerUrl: event.bannerS3Key
