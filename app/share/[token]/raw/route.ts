@@ -25,9 +25,6 @@ export async function GET(
   if (!result.success || !result.link || !result.link.media) {
     return new NextResponse("Not Found", { status: 404 });
   }
-  if (result.link.type !== "raw") {
-    return new NextResponse("Not Found", { status: 404 });
-  }
   const { media } = result.link;
   try {
     const key = media.s3Key;
