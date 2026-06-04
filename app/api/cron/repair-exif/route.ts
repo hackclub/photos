@@ -1,5 +1,5 @@
 import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { eq, gt } from "drizzle-orm";
+import { and, eq, lt, or } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { db } from "@/lib/db";
@@ -10,11 +10,11 @@ import { getSignedDownloadUrl, S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
 import { extractVideoMetadata } from "@/lib/media/video-metadata";
 import { recordCronJob } from "@/lib/telemetry";
 
-const BATCH_SIZE = 50;
-const REPAIR_CONCURRENCY = 3;
-const MAX_DURATION_MS = 30 * 60 * 1000;
-const PER_MEDIA_TIMEOUT_MS = 60_000;
-const IMAGE_RANGE_BYTES = 8 * 1024 * 1024;
+const BATCH_SIZE = 200;
+const REPAIR_CONCURRENCY = 48;
+const MAX_DURATION_MS = 2 * 60 * 60 * 1000;
+const PER_MEDIA_TIMEOUT_MS = 45_000;
+const IMAGE_RANGE_STEPS = [2 * 1024 * 1024, 8 * 1024 * 1024];
 
 type MediaRow = typeof media.$inferSelect;
 
@@ -128,10 +128,69 @@ async function extractVideoMetadataFromKeys(keys: string[]) {
     : new Error("No source object found");
 }
 
+async function extractImageMetadataFromKeys(keys: string[], mimeType: string) {
+  let bestExif: Record<string, unknown> | null = null;
+  for (const rangeBytes of IMAGE_RANGE_STEPS) {
+    const rangeBuffer = await getObjectBuffer(keys, rangeBytes);
+    const [exifResult, imageMetadata] = await Promise.all([
+      extractExifData(rangeBuffer, mimeType),
+      sharp(rangeBuffer, { failOn: "none", limitInputPixels: false })
+        .metadata()
+        .catch(() => null),
+    ]);
+    bestExif = exifResult
+      ? mergeExifData(
+          {
+            ...exifResult,
+            width: exifResult.width ?? imageMetadata?.width,
+            height: exifResult.height ?? imageMetadata?.height,
+          },
+          bestExif,
+        )
+      : mergeExifData(
+          imageMetadata
+            ? { width: imageMetadata.width, height: imageMetadata.height }
+            : null,
+          bestExif,
+        );
+    if (
+      bestExif &&
+      (hasValue(bestExif.dateTimeOriginal) ||
+        hasValue(bestExif.Make) ||
+        hasValue(bestExif.Model) ||
+        hasValue(bestExif.make) ||
+        hasValue(bestExif.model) ||
+        hasValue(bestExif.gpsLatitude) ||
+        hasValue(bestExif.gpsLongitude)) &&
+      hasValue(bestExif.width) &&
+      hasValue(bestExif.height)
+    ) {
+      return bestExif;
+    }
+  }
+  return bestExif;
+}
+
 function validDate(value: unknown) {
   if (!value) return null;
   const date = new Date(value as string);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function encodeCursor(cutoff: Date, item: MediaRow) {
+  return `${cutoff.toISOString()}|${item.uploadedAt.toISOString()}|${item.id}`;
+}
+
+function parseCursor(cursor?: string) {
+  if (!cursor) return null;
+  const [cutoffValue, uploadedAtValue, id] = cursor.split("|");
+  if (!cutoffValue || !uploadedAtValue || !id) return null;
+  const cutoff = new Date(cutoffValue);
+  const uploadedAt = new Date(uploadedAtValue);
+  if (Number.isNaN(cutoff.getTime()) || Number.isNaN(uploadedAt.getTime())) {
+    return null;
+  }
+  return { cutoff, uploadedAt, id };
 }
 
 async function repairExifForMedia(item: MediaRow) {
@@ -152,28 +211,10 @@ async function repairExifForMedia(item: MediaRow) {
     }
     let extractedExif: Record<string, unknown> | null = null;
     if (item.mimeType.startsWith("image/")) {
-      const rangeBuffer = await getObjectBuffer(sourceKeys, IMAGE_RANGE_BYTES);
-      const [exifResult, imageMetadata] = await Promise.all([
-        extractExifData(rangeBuffer, item.mimeType),
-        sharp(rangeBuffer, { failOn: "none", limitInputPixels: false })
-          .metadata()
-          .catch(() => null),
-      ]);
-      extractedExif = exifResult
-        ? mergeExifData(
-            {
-              ...exifResult,
-              width: exifResult.width ?? imageMetadata?.width,
-              height: exifResult.height ?? imageMetadata?.height,
-            },
-            null,
-          )
-        : mergeExifData(
-            imageMetadata
-              ? { width: imageMetadata.width, height: imageMetadata.height }
-              : null,
-            null,
-          );
+      extractedExif = await extractImageMetadataFromKeys(
+        sourceKeys,
+        item.mimeType,
+      );
     } else {
       const videoMetadata = await extractVideoMetadataFromKeys(sourceKeys);
       extractedExif = mergeExifData(
@@ -233,11 +274,28 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
-    const cursor = request.nextUrl.searchParams.get("cursor") || undefined;
-    logger.info({ cursor }, "media metadata repair started");
+    const cursor = parseCursor(
+      request.nextUrl.searchParams.get("cursor") || undefined,
+    );
+    const cutoff = cursor?.cutoff ?? new Date();
+    logger.info(
+      { cutoff: cutoff.toISOString(), cursor },
+      "media metadata repair started",
+    );
     const rows = await db.query.media.findMany({
-      where: cursor ? gt(media.id, cursor) : undefined,
-      orderBy: (m, { asc }) => [asc(m.id)],
+      where: cursor
+        ? and(
+            lt(media.uploadedAt, cutoff),
+            or(
+              lt(media.uploadedAt, cursor.uploadedAt),
+              and(
+                eq(media.uploadedAt, cursor.uploadedAt),
+                lt(media.id, cursor.id),
+              ),
+            ),
+          )
+        : lt(media.uploadedAt, cutoff),
+      orderBy: (m, { desc }) => [desc(m.uploadedAt), desc(m.id)],
       limit: BATCH_SIZE,
     });
     const results = await mapLimit(
@@ -271,7 +329,7 @@ export async function GET(request: NextRequest) {
     const nextCursor =
       processedRows > 0 &&
       (rows.length === BATCH_SIZE || processedRows < rows.length)
-        ? rows[processedRows - 1]?.id
+        ? encodeCursor(cutoff, rows[processedRows - 1])
         : undefined;
     logger.info(
       {
