@@ -1,6 +1,7 @@
 import exifr from "exifr";
 import { logger } from "@/lib/logger";
 export interface ExifData {
+  [key: string]: unknown;
   make?: string;
   model?: string;
   lensModel?: string;
@@ -27,6 +28,38 @@ function toIsoDate(value: unknown) {
     return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
   }
   return undefined;
+}
+
+function toJsonSafeExifValue(value: unknown): unknown {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value.toISOString();
+  }
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => toJsonSafeExifValue(item))
+      .filter((item) => item !== undefined);
+  }
+  if (value && typeof value === "object") {
+    const safeObject: Record<string, unknown> = {};
+    for (const [key, nestedValue] of Object.entries(value)) {
+      const safeValue = toJsonSafeExifValue(nestedValue);
+      if (safeValue !== undefined) safeObject[key] = safeValue;
+    }
+    return Object.keys(safeObject).length > 0 ? safeObject : undefined;
+  }
+  return value;
+}
+
+function toJsonSafeExif(exif: Record<string, unknown>) {
+  const safeExif: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(exif)) {
+    const safeValue = toJsonSafeExifValue(value);
+    if (safeValue !== undefined) safeExif[key] = safeValue;
+  }
+  return safeExif;
 }
 
 export async function extractExifData(
@@ -96,6 +129,7 @@ export async function extractExifData(
       gpsLongitude = lonValue;
     }
     return {
+      ...toJsonSafeExif(exif as Record<string, unknown>),
       make: exif.Make,
       model: exif.Model,
       lensModel: exif.LensModel,

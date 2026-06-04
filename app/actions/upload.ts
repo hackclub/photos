@@ -564,7 +564,7 @@ export async function finalizeUpload(
             filename: data.filename,
             mimeType: data.mimeType,
             fileSize: realFileSize,
-            exifData: finalExifData ? JSON.stringify(finalExifData) : null,
+            exifData: finalExifData,
             width: (finalExifData?.width as number | undefined) || data.width,
             height:
               (finalExifData?.height as number | undefined) || data.height,

@@ -422,7 +422,7 @@ export async function uploadMedia(formData: FormData) {
           filename: file.name,
           mimeType,
           fileSize: buffer.length,
-          exifData: exifData ? JSON.stringify(exifData) : null,
+          exifData,
           width,
           height,
           takenAt,

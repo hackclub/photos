@@ -45,23 +45,6 @@ function getExifObject(item: MediaRow) {
     : null;
 }
 
-function alreadyHasReliableExif(item: MediaRow) {
-  const exif = getExifObject(item);
-  if (hasValue(item.latitude) && hasValue(item.longitude)) return true;
-  if (!exif) return false;
-  return Boolean(
-    hasValue(exif.gpsLatitude) ||
-      hasValue(exif.gpsLongitude) ||
-      hasValue(exif.make) ||
-      hasValue(exif.model) ||
-      hasValue(exif.lensModel) ||
-      hasValue(exif.focalLength) ||
-      hasValue(exif.fNumber) ||
-      hasValue(exif.iso) ||
-      hasValue(exif.exposureTime),
-  );
-}
-
 function mergeExifData(
   primary: Record<string, unknown> | null | undefined,
   fallback: Record<string, unknown> | null | undefined,
@@ -105,9 +88,6 @@ async function getObjectBuffer(keys: string[]) {
 async function repairExifForMedia(item: MediaRow) {
   if (!item.mimeType.startsWith("image/")) {
     return { scanned: 0, skipped: 1, repaired: 0, failed: 0 };
-  }
-  if (alreadyHasReliableExif(item)) {
-    return { scanned: 1, skipped: 1, repaired: 0, failed: 0 };
   }
   try {
     const sourceKeys = [
