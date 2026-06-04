@@ -21,9 +21,11 @@ import {
   HiHeart,
   HiPhoto,
   HiTrash,
+  HiUser,
 } from "react-icons/hi2";
 import { bulkDeleteMedia, getBulkMediaUrls } from "@/app/actions/bulk";
 import { deleteMedia } from "@/app/actions/media";
+import ChangeOwnerModal from "@/components/media/ChangeOwnerModal";
 import VideoIndicator from "@/components/media/VideoIndicator";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import ServerActionModal from "@/components/ui/ServerActionModal";
@@ -119,6 +121,7 @@ export interface MediaItem {
   id: string;
   s3Url: string;
   thumbnailS3Key: string | null;
+  thumbnailUrl?: string;
   filename: string;
   mimeType: string;
   width: number | null;
@@ -190,9 +193,16 @@ export default function SearchGallery({
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [showChangeOwnerModal, setShowChangeOwnerModal] = useState(false);
   const [mediaToDelete, setMediaToDelete] = useState<string | null>(null);
   useEffect(() => {
     setLocalMedia(media);
+    thumbnailUrlCacheRef.current = Object.fromEntries(
+      media
+        .filter((item) => item.thumbnailUrl)
+        .map((item) => [item.id, item.thumbnailUrl!]),
+    );
+    setPresignedUrls(thumbnailUrlCacheRef.current);
     startTransition(() => setVisibleCount(INITIAL_VISIBLE_ITEMS));
   }, [media]);
   const sortedMedia = useMemo(() => {
@@ -265,7 +275,10 @@ export default function SearchGallery({
 
   const loadThumbnailUrls = useCallback(async (items: MediaItem[]) => {
     const unloadedItems = items.filter(
-      (item) => item.thumbnailS3Key && !thumbnailUrlCacheRef.current[item.id],
+      (item) =>
+        item.thumbnailS3Key &&
+        !item.thumbnailUrl &&
+        !thumbnailUrlCacheRef.current[item.id],
     );
     if (unloadedItems.length === 0) return;
     try {
@@ -307,7 +320,9 @@ export default function SearchGallery({
   }, [sortedMedia.length]);
 
   const queueThumbnailLoad = (item: MediaItem) => {
-    if (!item.thumbnailS3Key || presignedUrls[item.id]) return;
+    if (item.thumbnailUrl || !item.thumbnailS3Key || presignedUrls[item.id]) {
+      return;
+    }
     queuedThumbnailIdsRef.current.add(item.id);
     if (thumbnailFlushTimerRef.current) return;
     const flush = () => {
@@ -527,6 +542,18 @@ export default function SearchGallery({
             {isAdmin && (
               <button
                 type="button"
+                onClick={() => setShowChangeOwnerModal(true)}
+                disabled={selectedItems.size === 0 || downloading || deleting}
+                className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-sm bg-yellow-600 hover:bg-yellow-700 disabled:bg-zinc-700 disabled:cursor-not-allowed rounded-lg transition flex items-center justify-center gap-2"
+              >
+                <HiUser className="w-5 h-5" />
+                <span className="hidden sm:inline">Change Owner</span>
+                <span className="sm:hidden">Owner</span>
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                type="button"
                 onClick={handleBulkDownload}
                 disabled={selectedItems.size === 0 || downloading || deleting}
                 className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 disabled:cursor-not-allowed rounded-lg transition flex items-center justify-center gap-2"
@@ -655,7 +682,7 @@ export default function SearchGallery({
         {sortedMedia
           .slice(0, Math.min(visibleCount, sortedMedia.length))
           .map((item) => {
-            const url = presignedUrls[item.id];
+            const url = presignedUrls[item.id] || item.thumbnailUrl;
             const isSelected = selectedItems.has(item.id);
             const isVideo = item.mimeType.startsWith("video/");
             const _event = item.event;
@@ -857,6 +884,17 @@ export default function SearchGallery({
         cancelText="Cancel"
         danger={true}
         timerSeconds={3}
+      />
+
+      <ChangeOwnerModal
+        isOpen={showChangeOwnerModal}
+        onClose={() => setShowChangeOwnerModal(false)}
+        mediaIds={Array.from(selectedItems)}
+        onComplete={() => {
+          setLocalMedia((prev) => [...prev]);
+          setSelectedItems(new Set());
+          setSelectionMode(false);
+        }}
       />
     </div>
   );

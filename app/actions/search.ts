@@ -178,6 +178,7 @@ export async function globalSearch(query: string): Promise<{
     const mediaSearchConditions = [
       ilike(media.caption, searchPattern),
       ilike(media.filename, searchPattern),
+      sql`${media.exifData}::text ILIKE ${searchPattern}`,
     ];
     if (matchingUserIds.length > 0) {
       mediaSearchConditions.push(inArray(media.uploadedById, matchingUserIds));
@@ -397,6 +398,7 @@ export async function advancedSearch(
       const textSearchConditions = [
         ilike(media.caption, searchPattern),
         ilike(media.filename, searchPattern),
+        sql`${media.exifData}::text ILIKE ${searchPattern}`,
       ];
       if (matchingUserIds.length > 0) {
         textSearchConditions.push(inArray(media.uploadedById, matchingUserIds));

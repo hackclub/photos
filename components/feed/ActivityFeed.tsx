@@ -35,6 +35,7 @@ export default function ActivityFeed({
   >(null);
   const [fullSizeUrl, setFullSizeUrl] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -118,6 +119,7 @@ export default function ActivityFeed({
         if (res.ok) {
           const data = await res.json();
           setCurrentUserId(data.user?.id || null);
+          setIsGlobalAdmin(Boolean(data.user?.isGlobalAdmin));
         }
       } catch (error) {
         logger.error("Error fetching user session:", error);
@@ -423,6 +425,7 @@ export default function ActivityFeed({
           fullSizeUrl={fullSizeUrl}
           event={items.find((i) => i.media?.id === selectedMedia.id)?.event}
           currentUserId={currentUserId || undefined}
+          isGlobalAdmin={isGlobalAdmin}
           onClose={() => setSelectedMedia(null)}
           onDownload={async () => {
             if (!fullSizeUrl) return;
