@@ -2,6 +2,7 @@ import { Readable } from "node:stream";
 import ffmpeg from "fluent-ffmpeg";
 import { logger } from "@/lib/logger";
 export interface VideoMetadata {
+  [key: string]: unknown;
   duration?: number;
   width?: number;
   height?: number;
@@ -10,6 +11,27 @@ export interface VideoMetadata {
   model?: string;
   latitude?: number;
   longitude?: number;
+}
+
+function toJsonSafeValue(value: unknown): unknown {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value.toISOString();
+  }
+  if (typeof value === "bigint") return value.toString();
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => toJsonSafeValue(item))
+      .filter((item) => item !== undefined);
+  }
+  if (value && typeof value === "object") {
+    const safeObject: Record<string, unknown> = {};
+    for (const [key, nestedValue] of Object.entries(value)) {
+      const safeValue = toJsonSafeValue(nestedValue);
+      if (safeValue !== undefined) safeObject[key] = safeValue;
+    }
+    return Object.keys(safeObject).length > 0 ? safeObject : undefined;
+  }
+  return value;
 }
 export async function extractVideoMetadata(
   input: Buffer | string,
@@ -74,6 +96,15 @@ export async function extractVideoMetadata(
           model,
           latitude,
           longitude,
+          formatName: format.format_name,
+          formatLongName: format.format_long_name,
+          bitrate: format.bit_rate,
+          codecName: videoStream?.codec_name,
+          codecLongName: videoStream?.codec_long_name,
+          pixelFormat: videoStream?.pix_fmt,
+          rotation: videoStream?.rotation,
+          formatTags: toJsonSafeValue(formatTags),
+          streamTags: toJsonSafeValue(streamTags),
         });
       });
     } catch (error) {

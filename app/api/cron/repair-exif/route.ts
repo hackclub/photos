@@ -6,11 +6,15 @@ import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
 import { logger, recordException, serializeError } from "@/lib/logger";
 import { extractExifData } from "@/lib/media/exif";
-import { S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
+import { getSignedDownloadUrl, S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
+import { extractVideoMetadata } from "@/lib/media/video-metadata";
 import { recordCronJob } from "@/lib/telemetry";
 
-const BATCH_SIZE = 300;
-const REPAIR_CONCURRENCY = 6;
+const BATCH_SIZE = 50;
+const REPAIR_CONCURRENCY = 3;
+const MAX_DURATION_MS = 30 * 60 * 1000;
+const PER_MEDIA_TIMEOUT_MS = 60_000;
+const IMAGE_RANGE_BYTES = 8 * 1024 * 1024;
 
 type MediaRow = typeof media.$inferSelect;
 
@@ -18,11 +22,12 @@ async function mapLimit<T, R>(
   items: T[],
   limit: number,
   fn: (item: T) => Promise<R>,
+  shouldContinue?: () => boolean,
 ) {
   const results: R[] = [];
   let index = 0;
   async function worker() {
-    while (index < items.length) {
+    while (index < items.length && (shouldContinue?.() ?? true)) {
       const current = items[index++];
       results.push(await fn(current));
     }
@@ -35,6 +40,24 @@ async function mapLimit<T, R>(
 
 function hasValue(value: unknown) {
   return value !== undefined && value !== null && value !== "";
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+) {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 function getExifObject(item: MediaRow) {
@@ -63,12 +86,16 @@ function mergeExifData(
   return Object.keys(merged).length > 0 ? merged : null;
 }
 
-async function getObjectBuffer(keys: string[]) {
+async function getObjectBuffer(keys: string[], rangeBytes?: number) {
   let lastError: unknown;
   for (const key of keys) {
     try {
       const response = await s3Client.send(
-        new GetObjectCommand({ Bucket: S3_BUCKET_NAME, Key: key }),
+        new GetObjectCommand({
+          Bucket: S3_BUCKET_NAME,
+          Key: key,
+          Range: rangeBytes ? `bytes=0-${rangeBytes - 1}` : undefined,
+        }),
       );
       if (!response.Body) throw new Error("S3 object had no body");
       const chunks: Uint8Array[] = [];
@@ -85,8 +112,33 @@ async function getObjectBuffer(keys: string[]) {
     : new Error("No source object found");
 }
 
+async function extractVideoMetadataFromKeys(keys: string[]) {
+  let lastError: unknown;
+  for (const key of keys) {
+    try {
+      const signedUrl = await getSignedDownloadUrl(key, 5 * 60);
+      const metadata = await extractVideoMetadata(signedUrl);
+      if (metadata) return metadata;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("No source object found");
+}
+
+function validDate(value: unknown) {
+  if (!value) return null;
+  const date = new Date(value as string);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 async function repairExifForMedia(item: MediaRow) {
-  if (!item.mimeType.startsWith("image/")) {
+  if (
+    !item.mimeType.startsWith("image/") &&
+    !item.mimeType.startsWith("video/")
+  ) {
     return { scanned: 0, skipped: 1, repaired: 0, failed: 0 };
   }
   try {
@@ -95,32 +147,49 @@ async function repairExifForMedia(item: MediaRow) {
       item.originalS3Key,
       item.blurredS3Key,
     ].filter((key): key is string => Boolean(key));
-    const buffer = await getObjectBuffer(sourceKeys);
-    const [exifResult, imageMetadata] = await Promise.all([
-      extractExifData(buffer, item.mimeType),
-      sharp(buffer, { failOn: "none", limitInputPixels: false })
-        .metadata()
-        .catch(() => null),
-    ]);
-    const extractedExif = exifResult
-      ? mergeExifData(
-          {
-            ...exifResult,
-            width: exifResult.width ?? imageMetadata?.width,
-            height: exifResult.height ?? imageMetadata?.height,
-          },
-          null,
-        )
-      : mergeExifData(
-          imageMetadata
-            ? { width: imageMetadata.width, height: imageMetadata.height }
-            : null,
-          null,
-        );
+    if (sourceKeys.length === 0) {
+      return { scanned: 1, skipped: 0, repaired: 0, failed: 1 };
+    }
+    let extractedExif: Record<string, unknown> | null = null;
+    if (item.mimeType.startsWith("image/")) {
+      const rangeBuffer = await getObjectBuffer(sourceKeys, IMAGE_RANGE_BYTES);
+      const [exifResult, imageMetadata] = await Promise.all([
+        extractExifData(rangeBuffer, item.mimeType),
+        sharp(rangeBuffer, { failOn: "none", limitInputPixels: false })
+          .metadata()
+          .catch(() => null),
+      ]);
+      extractedExif = exifResult
+        ? mergeExifData(
+            {
+              ...exifResult,
+              width: exifResult.width ?? imageMetadata?.width,
+              height: exifResult.height ?? imageMetadata?.height,
+            },
+            null,
+          )
+        : mergeExifData(
+            imageMetadata
+              ? { width: imageMetadata.width, height: imageMetadata.height }
+              : null,
+            null,
+          );
+    } else {
+      const videoMetadata = await extractVideoMetadataFromKeys(sourceKeys);
+      extractedExif = mergeExifData(
+        {
+          ...videoMetadata,
+          dateTimeOriginal: videoMetadata.creationTime,
+          gpsLatitude: videoMetadata.latitude,
+          gpsLongitude: videoMetadata.longitude,
+        },
+        null,
+      );
+    }
     const finalExif = mergeExifData(extractedExif, getExifObject(item));
     const dateValue =
       (finalExif?.dateTimeOriginal as string | undefined) ?? undefined;
-    const takenAt = dateValue ? new Date(dateValue) : item.takenAt;
+    const takenAt = validDate(dateValue) ?? item.takenAt;
     const latitude =
       (finalExif?.gpsLatitude as number | undefined) ?? item.latitude;
     const longitude =
@@ -147,7 +216,7 @@ async function repairExifForMedia(item: MediaRow) {
     await recordException(error);
     logger.error(
       { mediaId: item.id, error: serializeError(error) },
-      "EXIF repair failed",
+      "media metadata repair failed",
     );
     return { scanned: 1, skipped: 0, repaired: 0, failed: 1 };
   }
@@ -165,7 +234,7 @@ export async function GET(request: NextRequest) {
   }
   try {
     const cursor = request.nextUrl.searchParams.get("cursor") || undefined;
-    logger.info({ cursor }, "EXIF repair started");
+    logger.info({ cursor }, "media metadata repair started");
     const rows = await db.query.media.findMany({
       where: cursor ? gt(media.id, cursor) : undefined,
       orderBy: (m, { asc }) => [asc(m.id)],
@@ -174,7 +243,20 @@ export async function GET(request: NextRequest) {
     const results = await mapLimit(
       rows,
       REPAIR_CONCURRENCY,
-      repairExifForMedia,
+      (item) =>
+        withTimeout(
+          repairExifForMedia(item),
+          PER_MEDIA_TIMEOUT_MS,
+          `Media metadata repair timed out for ${item.id}`,
+        ).catch(async (error) => {
+          await recordException(error);
+          logger.error(
+            { mediaId: item.id, error: serializeError(error) },
+            "media metadata repair timed out",
+          );
+          return { scanned: 1, skipped: 0, repaired: 0, failed: 1 };
+        }),
+      () => Date.now() - startedAt < MAX_DURATION_MS,
     );
     const totals = results.reduce(
       (acc, result) => ({
@@ -185,17 +267,21 @@ export async function GET(request: NextRequest) {
       }),
       { scanned: 0, skipped: 0, repaired: 0, failed: 0 },
     );
+    const processedRows = results.length;
     const nextCursor =
-      rows.length === BATCH_SIZE ? rows[rows.length - 1]?.id : undefined;
+      processedRows > 0 &&
+      (rows.length === BATCH_SIZE || processedRows < rows.length)
+        ? rows[processedRows - 1]?.id
+        : undefined;
     logger.info(
       {
-        checked: rows.length,
+        checked: processedRows,
         ...totals,
         nextCursor,
         completed: !nextCursor,
         durationMs: Date.now() - startedAt,
       },
-      "EXIF repair finished",
+      "media metadata repair finished",
     );
     recordCronJob(
       "repair_exif",
@@ -203,7 +289,7 @@ export async function GET(request: NextRequest) {
       startedAt,
     );
     return NextResponse.json({
-      checked: rows.length,
+      checked: processedRows,
       ...totals,
       nextCursor,
       completed: !nextCursor,

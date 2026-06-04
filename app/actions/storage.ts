@@ -138,14 +138,36 @@ export async function repairExifData(cursor?: string) {
       headers: { Authorization: `Bearer ${cronSecret}` },
       cache: "no-store",
     });
+    const responseText = await response.text();
     if (!response.ok) {
+      const isTimeout = response.status === 524 || response.status === 504;
       throw new Error(
-        `EXIF repair failed: ${response.status} ${await response.text()}`,
+        isTimeout
+          ? "EXIF repair request timed out before returning progress. The repair job is now smaller-batched; retry from the same cursor."
+          : `EXIF repair failed: ${response.status} ${responseText.slice(0, 500)}`,
       );
     }
-    const result = await response.json();
-    await auditLog(user.id, "update", "storage", "exif", { result });
-    return { success: true, ...result };
+    let result: unknown;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      throw new Error(
+        `EXIF repair returned an unexpected response: ${responseText.slice(0, 500)}`,
+      );
+    }
+    const payload = result as Record<string, unknown>;
+    await auditLog(user.id, "update", "storage", "exif", { result: payload });
+    return {
+      success: true,
+      checked: Number(payload.checked ?? 0),
+      scanned: Number(payload.scanned ?? 0),
+      skipped: Number(payload.skipped ?? 0),
+      repaired: Number(payload.repaired ?? 0),
+      failed: Number(payload.failed ?? 0),
+      nextCursor:
+        typeof payload.nextCursor === "string" ? payload.nextCursor : undefined,
+      completed: payload.completed === true,
+    };
   } catch (error) {
     await recordException(error);
     logger.error(

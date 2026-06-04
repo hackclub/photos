@@ -843,7 +843,7 @@ function RepairExifButton() {
   const handleRepair = async () => {
     if (
       !confirm(
-        "Scan storage and repair missing EXIF data? Images that already have camera/lens/exposure or location metadata will be skipped.",
+        "Scan storage and rewrite media metadata for all images and videos? This runs in small batches and updates progress as it goes.",
       )
     )
       return;
@@ -861,11 +861,11 @@ function RepairExifButton() {
       while (!completed) {
         const result = await repairExifData(cursor);
         if (!result.success) throw new Error(result.error);
-        totalChecked += result.checked;
-        totalScanned += result.scanned;
-        totalSkipped += result.skipped;
-        totalRepaired += result.repaired;
-        totalFailed += result.failed;
+        totalChecked += result.checked ?? 0;
+        totalScanned += result.scanned ?? 0;
+        totalSkipped += result.skipped ?? 0;
+        totalRepaired += result.repaired ?? 0;
+        totalFailed += result.failed ?? 0;
         setProgress({
           checked: totalChecked,
           scanned: totalScanned,
@@ -873,11 +873,11 @@ function RepairExifButton() {
           repaired: totalRepaired,
           failed: totalFailed,
         });
-        completed = result.completed;
+        completed = result.completed ?? true;
         cursor = result.nextCursor;
       }
       alert(
-        `EXIF repair complete!\nChecked: ${totalChecked}\nScanned: ${totalScanned}\nSkipped: ${totalSkipped}\nFixed: ${totalRepaired}\nFailed: ${totalFailed}`,
+        `Metadata repair complete!\nChecked: ${totalChecked}\nScanned: ${totalScanned}\nSkipped: ${totalSkipped}\nFixed: ${totalRepaired}\nFailed: ${totalFailed}`,
       );
       window.location.reload();
     } catch (error) {
@@ -902,11 +902,11 @@ function RepairExifButton() {
         <>
           <span className="w-3 h-3 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
           {progress
-            ? `Repairing EXIF (${progress.checked} checked, ${progress.repaired} fixed, ${progress.failed} failed)...`
-            : "Repairing EXIF..."}
+            ? `Repairing metadata (${progress.checked} checked, ${progress.repaired} fixed, ${progress.failed} failed)...`
+            : "Repairing metadata..."}
         </>
       ) : (
-        "Scan and repair EXIF data"
+        "Scan and repair metadata"
       )}
     </button>
   );
