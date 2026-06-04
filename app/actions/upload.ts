@@ -83,6 +83,36 @@ function safeFileExtension(filename: string) {
   return /^[a-z0-9]{1,12}$/.test(ext) ? ext : "bin";
 }
 
+async function streamToBuffer(stream: Readable) {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+function hasExifValue(value: unknown) {
+  return value !== undefined && value !== null && value !== "";
+}
+
+function mergeExifData(
+  primary: ExifData | Record<string, unknown> | null | undefined,
+  fallback: ExifData | Record<string, unknown> | null | undefined,
+) {
+  const merged: Record<string, unknown> = {};
+  if (fallback) {
+    for (const [key, value] of Object.entries(fallback)) {
+      if (hasExifValue(value)) merged[key] = value;
+    }
+  }
+  if (primary) {
+    for (const [key, value] of Object.entries(primary)) {
+      if (hasExifValue(value)) merged[key] = value;
+    }
+  }
+  return Object.keys(merged).length > 0 ? merged : null;
+}
+
 async function objectExists(key: string) {
   try {
     await s3Client.send(
@@ -366,7 +396,7 @@ export async function finalizeUpload(
           );
         }
         let realFileSize = data.fileSize;
-        let serverExifData = null;
+        let serverExifData: Record<string, unknown> | null = null;
         let thumbnailS3Key = data.thumbnailS3Key;
         try {
           const headCommand = new HeadObjectCommand({
@@ -405,7 +435,7 @@ export async function finalizeUpload(
           ) {
             thumbnailS3Key = null;
           }
-          if (data.mimeType.startsWith("image/") && !thumbnailS3Key) {
+          if (data.mimeType.startsWith("image/")) {
             try {
               const getCommand = new GetObjectCommand({
                 Bucket: S3_BUCKET_NAME,
@@ -413,25 +443,47 @@ export async function finalizeUpload(
               });
               const s3Object = await s3Client.send(getCommand);
               if (s3Object.Body) {
-                const imageResult = await processImageUpload(
+                const originalBuffer = await streamToBuffer(
                   s3Object.Body as Readable,
-                  mediaId,
-                  user.id,
-                  eventId,
+                );
+                const originalExif = await extractExifData(
+                  originalBuffer,
                   data.mimeType,
                 );
-                const exifPromise = imageResult.exifBuffer
-                  ? extractExifData(imageResult.exifBuffer, data.mimeType)
-                  : Promise.resolve(null);
-                const [exifResult] = await Promise.all([exifPromise]);
-                if (imageResult.thumbnailS3Key) {
-                  thumbnailS3Key = imageResult.thumbnailS3Key;
+                serverExifData = mergeExifData(originalExif, data.exifData);
+                if (originalExif) {
+                  serverExifData = mergeExifData(
+                    {
+                      ...serverExifData,
+                      width: originalExif.width,
+                      height: originalExif.height,
+                    },
+                    null,
+                  );
                 }
-                serverExifData = {
-                  ...(exifResult || {}),
-                  width: imageResult.width || exifResult?.width,
-                  height: imageResult.height || exifResult?.height,
-                };
+                if (!serverExifData) {
+                  serverExifData = mergeExifData(data.exifData, null);
+                }
+                if (!thumbnailS3Key) {
+                  const imageResult = await processImageUpload(
+                    originalBuffer,
+                    mediaId,
+                    user.id,
+                    eventId,
+                    data.mimeType,
+                  );
+                  if (imageResult.thumbnailS3Key) {
+                    thumbnailS3Key = imageResult.thumbnailS3Key;
+                  }
+                  serverExifData = mergeExifData(
+                    {
+                      ...serverExifData,
+                      width: imageResult.width || serverExifData?.width,
+                      height: imageResult.height || serverExifData?.height,
+                    },
+                    data.exifData,
+                  );
+                }
               }
             } catch (e) {
               logger.error("Failed to process image server-side:", e);
@@ -493,12 +545,13 @@ export async function finalizeUpload(
             error: "Upload verification failed: File not found in storage",
           };
         }
-        const finalExifData = serverExifData ?? null;
-        const takenAt = serverExifData?.dateTimeOriginal
-          ? new Date(serverExifData.dateTimeOriginal)
-          : null;
-        const latitude = serverExifData?.gpsLatitude ?? null;
-        const longitude = serverExifData?.gpsLongitude ?? null;
+        const finalExifData = mergeExifData(serverExifData, data.exifData);
+        const dateValue = finalExifData?.dateTimeOriginal ?? data.takenAt;
+        const takenAt = dateValue ? new Date(dateValue as string) : null;
+        const latitude =
+          (finalExifData?.gpsLatitude as number | undefined) ?? null;
+        const longitude =
+          (finalExifData?.gpsLongitude as number | undefined) ?? null;
         const [insertedMedia] = await db
           .insert(media)
           .values({
@@ -512,8 +565,9 @@ export async function finalizeUpload(
             mimeType: data.mimeType,
             fileSize: realFileSize,
             exifData: finalExifData ? JSON.stringify(finalExifData) : null,
-            width: serverExifData?.width || data.width,
-            height: serverExifData?.height || data.height,
+            width: (finalExifData?.width as number | undefined) || data.width,
+            height:
+              (finalExifData?.height as number | undefined) || data.height,
             latitude,
             longitude,
             takenAt: takenAt,

@@ -95,6 +95,7 @@ export default function StorageClient() {
         <div className="flex flex-wrap gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
           <CleanupButton />
           <RepairThumbnailsButton />
+          <RepairExifButton />
         </div>
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-12 text-center text-zinc-400">
           {statsError || "Loading storage stats..."}
@@ -130,6 +131,7 @@ export default function StorageClient() {
             <h3 className="text-lg font-semibold text-white">Storage Usage</h3>
             <CleanupButton />
             <RepairThumbnailsButton />
+            <RepairExifButton />
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-white">
@@ -823,6 +825,88 @@ function RepairThumbnailsButton() {
         </>
       ) : (
         "Find and repair thumbnails"
+      )}
+    </button>
+  );
+}
+
+function RepairExifButton() {
+  const [isRepairing, setIsRepairing] = useState(false);
+  const [progress, setProgress] = useState<{
+    checked: number;
+    scanned: number;
+    skipped: number;
+    repaired: number;
+    failed: number;
+  } | null>(null);
+
+  const handleRepair = async () => {
+    if (
+      !confirm(
+        "Scan storage and repair missing EXIF data? Images that already have camera/lens/exposure or location metadata will be skipped.",
+      )
+    )
+      return;
+    setIsRepairing(true);
+    setProgress({ checked: 0, scanned: 0, skipped: 0, repaired: 0, failed: 0 });
+    try {
+      const { repairExifData } = await import("@/app/actions/storage");
+      let cursor: string | undefined;
+      let totalChecked = 0;
+      let totalScanned = 0;
+      let totalSkipped = 0;
+      let totalRepaired = 0;
+      let totalFailed = 0;
+      let completed = false;
+      while (!completed) {
+        const result = await repairExifData(cursor);
+        if (!result.success) throw new Error(result.error);
+        totalChecked += result.checked;
+        totalScanned += result.scanned;
+        totalSkipped += result.skipped;
+        totalRepaired += result.repaired;
+        totalFailed += result.failed;
+        setProgress({
+          checked: totalChecked,
+          scanned: totalScanned,
+          skipped: totalSkipped,
+          repaired: totalRepaired,
+          failed: totalFailed,
+        });
+        completed = result.completed;
+        cursor = result.nextCursor;
+      }
+      alert(
+        `EXIF repair complete!\nChecked: ${totalChecked}\nScanned: ${totalScanned}\nSkipped: ${totalSkipped}\nFixed: ${totalRepaired}\nFailed: ${totalFailed}`,
+      );
+      window.location.reload();
+    } catch (error) {
+      logger.error("EXIF repair error:", error);
+      alert(
+        `EXIF repair failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    } finally {
+      setIsRepairing(false);
+      setProgress(null);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleRepair}
+      disabled={isRepairing}
+      className="px-3 py-1.5 text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+    >
+      {isRepairing ? (
+        <>
+          <span className="w-3 h-3 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+          {progress
+            ? `Repairing EXIF (${progress.checked} checked, ${progress.repaired} fixed, ${progress.failed} failed)...`
+            : "Repairing EXIF..."}
+        </>
+      ) : (
+        "Scan and repair EXIF data"
       )}
     </button>
   );

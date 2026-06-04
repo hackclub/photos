@@ -121,3 +121,40 @@ export async function repairThumbnails(cursor?: string) {
     };
   }
 }
+
+export async function repairExifData(cursor?: string) {
+  const session = await getSession();
+  const user = await getUserContext(session?.id);
+  if (!user) return { success: false, error: "Unauthorized" };
+  if (!(await can(user, "manage", "storage", null))) {
+    return { success: false, error: "Forbidden" };
+  }
+  try {
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret) throw new Error("CRON_SECRET is not configured");
+    const url = new URL(`${APP_URL}/api/cron/repair-exif`);
+    if (cursor) url.searchParams.set("cursor", cursor);
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${cronSecret}` },
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw new Error(
+        `EXIF repair failed: ${response.status} ${await response.text()}`,
+      );
+    }
+    const result = await response.json();
+    await auditLog(user.id, "update", "storage", "exif", { result });
+    return { success: true, ...result };
+  } catch (error) {
+    await recordException(error);
+    logger.error(
+      { userId: user.id, cursor, error: serializeError(error) },
+      "manual EXIF repair failed",
+    );
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "EXIF repair failed",
+    };
+  }
+}

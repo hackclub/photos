@@ -218,6 +218,18 @@ export async function POST(req: NextRequest) {
     );
     if (file.type.startsWith("image/")) {
       try {
+        const originalExifResult = await extractExifData(
+          originalBuffer,
+          mimeType,
+        );
+        if (originalExifResult) {
+          exifData = { ...originalExifResult };
+          takenAt = originalExifResult.dateTimeOriginal
+            ? new Date(originalExifResult.dateTimeOriginal)
+            : null;
+          latitude = originalExifResult.gpsLatitude ?? null;
+          longitude = originalExifResult.gpsLongitude ?? null;
+        }
         const result = await processImageUpload(
           originalBuffer,
           mediaId,
@@ -228,7 +240,7 @@ export async function POST(req: NextRequest) {
         thumbnailS3Key = result.thumbnailS3Key;
         width = result.width ?? null;
         height = result.height ?? null;
-        if (result.exifBuffer) {
+        if (!exifData && result.exifBuffer) {
           const exifResult = await extractExifData(result.exifBuffer, mimeType);
           if (exifResult) {
             exifData = {

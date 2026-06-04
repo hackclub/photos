@@ -369,6 +369,50 @@ export async function extractMetadata(file: File): Promise<{
   takenAt: Date | null;
   duration?: number;
 }> {
+  if (file.type.startsWith("image/")) {
+    try {
+      const exifr = await import("exifr");
+      const exif = await exifr.parse(file, {
+        gps: true,
+        mergeOutput: true,
+        reviveValues: true,
+      });
+      if (exif) {
+        const date =
+          exif.DateTimeOriginal instanceof Date
+            ? exif.DateTimeOriginal
+            : exif.CreateDate instanceof Date
+              ? exif.CreateDate
+              : exif.ModifyDate instanceof Date
+                ? exif.ModifyDate
+                : null;
+        const exifData: ExifData = {
+          make: exif.Make,
+          model: exif.Model,
+          lensModel: exif.LensModel,
+          focalLength: exif.FocalLength,
+          fNumber: exif.FNumber,
+          iso: exif.ISO,
+          exposureTime: exif.ExposureTime,
+          flash: exif.Flash !== undefined ? exif.Flash > 0 : undefined,
+          dateTimeOriginal: date?.toISOString(),
+          gpsLatitude: exif.latitude,
+          gpsLongitude: exif.longitude,
+          width: exif.ImageWidth || exif.ExifImageWidth,
+          height: exif.ImageHeight || exif.ExifImageHeight,
+          orientation: exif.Orientation,
+        };
+        return {
+          exifData,
+          width: exifData.width ?? null,
+          height: exifData.height ?? null,
+          takenAt: date ?? new Date(file.lastModified),
+        };
+      }
+    } catch (error) {
+      logger.warn("Client metadata extraction failed:", error);
+    }
+  }
   return {
     exifData: null,
     width: null,

@@ -16,6 +16,19 @@ export interface ExifData {
   height?: number;
   orientation?: number;
 }
+
+function toIsoDate(value: unknown) {
+  if (!value) return undefined;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString();
+  }
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+  }
+  return undefined;
+}
+
 export async function extractExifData(
   buffer: Buffer,
   contextInfo?: string,
@@ -91,7 +104,10 @@ export async function extractExifData(
       iso: exif.ISO,
       exposureTime: exif.ExposureTime,
       flash: exif.Flash !== undefined ? exif.Flash > 0 : undefined,
-      dateTimeOriginal: exif.DateTimeOriginal?.toISOString(),
+      dateTimeOriginal:
+        toIsoDate(exif.DateTimeOriginal) ||
+        toIsoDate(exif.CreateDate) ||
+        toIsoDate(exif.ModifyDate),
       gpsLatitude,
       gpsLongitude,
       width: exif.ImageWidth || exif.ExifImageWidth,
