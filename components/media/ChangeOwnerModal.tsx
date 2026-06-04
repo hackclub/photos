@@ -168,7 +168,12 @@ export default function ChangeOwnerModal({
   const canSubmit = !!selectedUser || !!resolvedSlackIdOnly;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+      role="presentation"
+    >
       <div className="max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl">
         <div className="flex items-center justify-between border-b border-zinc-800 p-4 sm:p-6">
           <h2 className="text-lg font-semibold text-white">Change Owner</h2>
