@@ -15,7 +15,7 @@ export interface ExifData {
   gpsLongitude?: number;
   width?: number;
   height?: number;
-  orientation?: number;
+  orientation?: number | string;
 }
 
 function toIsoDate(value: unknown) {
@@ -84,7 +84,7 @@ export async function extractExifData(
       return await exifr.parse(buf, {
         gps: true,
         mergeOutput: true,
-        tiff: isTiff,
+        ...(isTiff ? { tiff: true } : {}),
       });
     };
     let exif = null;
