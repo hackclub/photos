@@ -4,13 +4,10 @@ import {
 } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-import { verifySessionToken } from "@/lib/auth";
-import { getUserContext } from "@/lib/auth-api";
 import { db } from "@/lib/db";
-import { events, series, users } from "@/lib/db/schema";
+import { events, series } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
-import { can } from "@/lib/policy";
 export const dynamic = "force-dynamic";
 
 export async function GET(
@@ -32,49 +29,9 @@ export async function GET(
   if (requestRange && !/^bytes=\d*-\d*(,\d*-\d*)?$/.test(requestRange)) {
     return new NextResponse("Invalid range", { status: 416 });
   }
-  let { user } = await getUserContext();
-
-  if (!user) {
-    const sessionToken = req.cookies.get("session")?.value;
-
-    if (sessionToken) {
-      const sessionUser = await verifySessionToken(sessionToken);
-      if (sessionUser) {
-        const dbUser = await db.query.users.findFirst({
-          where: eq(users.id, sessionUser.id),
-          columns: {
-            id: true,
-            slackId: true,
-            isGlobalAdmin: true,
-            isBanned: true,
-          },
-          with: {
-            seriesAdminRoles: {
-              columns: { seriesId: true },
-            },
-            eventAdminRoles: {
-              columns: { eventId: true },
-            },
-          },
-        });
-
-        if (dbUser && !dbUser.isBanned) {
-          user = {
-            id: dbUser.id,
-            slackId: dbUser.slackId,
-            isGlobalAdmin: dbUser.isGlobalAdmin,
-            isBanned: dbUser.isBanned || false,
-            seriesAdmins: dbUser.seriesAdminRoles,
-            eventAdmins: dbUser.eventAdminRoles,
-          };
-        }
-      }
-    }
-  }
 
   try {
     let s3Key: string | null = null;
-    let isPublic = false;
     switch (type) {
       case "event-banner": {
         const event = await db.query.events.findFirst({
@@ -83,11 +40,7 @@ export async function GET(
         if (!event || !event.bannerS3Key) {
           return new NextResponse("Not Found", { status: 404 });
         }
-        if (!(await can(user, "view", "event", event))) {
-          return new NextResponse("Not Found", { status: 404 });
-        }
         s3Key = event.bannerS3Key;
-        isPublic = event.visibility === "public";
         break;
       }
       case "series-banner": {
@@ -97,11 +50,7 @@ export async function GET(
         if (!seriesItem || !seriesItem.bannerS3Key) {
           return new NextResponse("Not Found", { status: 404 });
         }
-        if (!(await can(user, "view", "series", seriesItem))) {
-          return new NextResponse("Not Found", { status: 404 });
-        }
         s3Key = seriesItem.bannerS3Key;
-        isPublic = seriesItem.visibility === "public";
         break;
       }
       default:
@@ -149,14 +98,10 @@ export async function GET(
     if (s3Response.ContentRange) {
       headers.set("Content-Range", s3Response.ContentRange);
     }
-    if (isPublic) {
-      const cacheControl = "public, max-age=31536000, immutable";
-      headers.set("Cache-Control", cacheControl);
-      headers.set("CDN-Cache-Control", cacheControl);
-      headers.set("Cloudflare-CDN-Cache-Control", cacheControl);
-    } else {
-      headers.set("Cache-Control", "private, max-age=3600");
-    }
+    const cacheControl = "public, max-age=31536000, immutable";
+    headers.set("Cache-Control", cacheControl);
+    headers.set("CDN-Cache-Control", cacheControl);
+    headers.set("Cloudflare-CDN-Cache-Control", cacheControl);
     return new NextResponse(s3Response.Body as ReadableStream, {
       status: s3Response.ContentRange ? 206 : 200,
       headers,
