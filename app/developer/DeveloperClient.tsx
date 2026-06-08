@@ -391,8 +391,10 @@ export default function DeveloperDashboard({
               <p>
                 <code>POST /api/v1/upload</code> accepts media, app tags,
                 metadata, captions, and admin-only upload-as/delete-lock
-                options. Server handles thumbnails, metadata, feed, Slack, and
-                audit log.
+                options. Upload-as accepts user UUIDs, Slack user IDs, or Hack
+                Club IDs. Unknown Slack/Hack Club IDs become pending ownership
+                and auto-claim on signup. Server handles thumbnails, metadata,
+                feed, Slack, and audit log.
               </p>
             </div>
             {isGlobalAdmin && (

@@ -91,6 +91,7 @@ export async function completeOnboarding(data: { handle: string }) {
       });
       await claimPendingOwnershipForUser({
         id: session.id,
+        hackclubId: session.hackclubId,
         slackId: session.slackId,
       });
     } else if (onboardingSession) {
@@ -122,6 +123,7 @@ export async function completeOnboarding(data: { handle: string }) {
         });
         await claimPendingOwnershipForUser({
           id: existingUser.id,
+          hackclubId: existingUser.hackclubId,
           slackId: existingUser.slackId,
         });
       } else {
@@ -159,6 +161,7 @@ export async function completeOnboarding(data: { handle: string }) {
         });
         await claimPendingOwnershipForUser({
           id: newUser.id,
+          hackclubId: newUser.hackclubId,
           slackId: newUser.slackId,
         });
       }

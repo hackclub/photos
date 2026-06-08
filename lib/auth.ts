@@ -319,7 +319,11 @@ export async function createOrUpdateUser(
 
     await claimPendingAdminGrantsForUser({ id: existingUser.id, slackId });
 
-    await claimPendingOwnershipForUser({ id: existingUser.id, slackId });
+    await claimPendingOwnershipForUser({
+      id: existingUser.id,
+      hackclubId: existingUser.hackclubId,
+      slackId,
+    });
 
     return {
       ...toPublicUser(existingUser),
@@ -352,6 +356,7 @@ export async function createOrUpdateUser(
 
   await claimPendingOwnershipForUser({
     id: newUser.id,
+    hackclubId: newUser.hackclubId,
     slackId: newUser.slackId,
   });
 

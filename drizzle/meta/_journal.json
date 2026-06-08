@@ -57,6 +57,13 @@
       "when": 1780355808031,
       "tag": "0007_admin-api-keys",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780881194714,
+      "tag": "0008_pending-ownership-hackclub-id",
+      "breakpoints": true
     }
   ]
 }

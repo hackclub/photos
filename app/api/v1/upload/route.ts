@@ -10,6 +10,7 @@ import {
   events,
   media,
   mediaTags,
+  pendingMediaOwnership,
   tags,
   users,
 } from "@/lib/db/schema";
@@ -24,7 +25,9 @@ import {
 import { validateMediaFile } from "@/lib/media/validation";
 import { extractVideoMetadata } from "@/lib/media/video-metadata";
 import { can, getUserContext } from "@/lib/policy";
+import { PENDING_REGISTRATION_USER_ID } from "@/lib/pending-ownership";
 import { publicMedia } from "@/lib/public-data";
+import { isValidSlackId, normalizeSlackId } from "@/lib/slack-id";
 import { checkStorageLimit } from "@/lib/storage";
 
 const MAX_DIRECT_API_UPLOAD_BYTES = 100 * 1024 * 1024;
@@ -157,6 +160,8 @@ export async function POST(req: NextRequest) {
       );
     }
     let uploadedById = user.id;
+    let pendingOwnerSlackId: string | null = null;
+    let pendingOwnerHackclubId: string | null = null;
     if (uploadAsUserId) {
       if (!isAdminApiKey) {
         return NextResponse.json(
@@ -164,23 +169,56 @@ export async function POST(req: NextRequest) {
           { status: 403 },
         );
       }
-      if (!/^[0-9a-f-]{36}$/i.test(uploadAsUserId)) {
-        return NextResponse.json(
-          { error: "Invalid uploadedById" },
-          { status: 400 },
-        );
+      if (/^[0-9a-f-]{36}$/i.test(uploadAsUserId)) {
+        const targetUser = await db.query.users.findFirst({
+          where: eq(users.id, uploadAsUserId),
+          columns: { id: true, isBanned: true },
+        });
+        if (!targetUser || targetUser.isBanned) {
+          return NextResponse.json(
+            { error: "Upload-as user not found" },
+            { status: 404 },
+          );
+        }
+        uploadedById = targetUser.id;
+      } else if (isValidSlackId(uploadAsUserId)) {
+        const slackId = normalizeSlackId(uploadAsUserId);
+        const targetUser = await db.query.users.findFirst({
+          where: eq(users.slackId, slackId),
+          columns: { id: true, isBanned: true },
+        });
+        if (targetUser?.isBanned) {
+          return NextResponse.json(
+            { error: "Upload-as user is banned" },
+            { status: 404 },
+          );
+        }
+        uploadedById = targetUser?.id ?? PENDING_REGISTRATION_USER_ID;
+        pendingOwnerSlackId = targetUser ? null : slackId;
+      } else {
+        const hackclubId = uploadAsUserId.trim();
+        if (!hackclubId || hackclubId.length > 200) {
+          return NextResponse.json(
+            {
+              error:
+                "uploadedById must be a user UUID, Slack user ID, or Hack Club ID",
+            },
+            { status: 400 },
+          );
+        }
+        const targetUser = await db.query.users.findFirst({
+          where: eq(users.hackclubId, hackclubId),
+          columns: { id: true, isBanned: true },
+        });
+        if (targetUser?.isBanned) {
+          return NextResponse.json(
+            { error: "Upload-as user is banned" },
+            { status: 404 },
+          );
+        }
+        uploadedById = targetUser?.id ?? PENDING_REGISTRATION_USER_ID;
+        pendingOwnerHackclubId = targetUser ? null : hackclubId;
       }
-      const targetUser = await db.query.users.findFirst({
-        where: eq(users.id, uploadAsUserId),
-        columns: { id: true, isBanned: true },
-      });
-      if (!targetUser || targetUser.isBanned) {
-        return NextResponse.json(
-          { error: "Upload-as user not found" },
-          { status: 404 },
-        );
-      }
-      uploadedById = targetUser.id;
     }
     const storageCheck = isAdminApiKey
       ? { allowed: true }
@@ -306,6 +344,8 @@ export async function POST(req: NextRequest) {
             apiKeyName,
             actingUserId: user.id,
             uploadAs: uploadedById !== user.id,
+            pendingOwnerSlackId,
+            pendingOwnerHackclubId,
             globalAdminOnlyDelete,
           },
           globalAdminOnlyDelete,
@@ -320,6 +360,22 @@ export async function POST(req: NextRequest) {
     } catch (error) {
       await deleteMediaAndThumbnail(s3Key, thumbnailS3Key);
       throw error;
+    }
+    if (pendingOwnerSlackId || pendingOwnerHackclubId) {
+      try {
+        await db.insert(pendingMediaOwnership).values({
+          mediaId: inserted.id,
+          slackId: pendingOwnerSlackId,
+          hackclubId: pendingOwnerHackclubId,
+          showPlaceholder: true,
+          previousOwnerId: user.id,
+          createdById: user.id,
+        });
+      } catch (error) {
+        await deleteMediaAndThumbnail(s3Key, thumbnailS3Key);
+        await db.delete(media).where(eq(media.id, inserted.id));
+        throw error;
+      }
     }
     if (tagNames.length > 0) {
       await db
@@ -364,6 +420,8 @@ export async function POST(req: NextRequest) {
       isAdminApiKey,
       uploadedById,
       uploadAs: uploadedById !== user.id,
+      pendingOwnerSlackId,
+      pendingOwnerHackclubId,
       globalAdminOnlyDelete,
       tags: tagNames,
     });

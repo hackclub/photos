@@ -1,13 +1,15 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { NextRequest } from "next/server";
 import { auditLog } from "@/lib/audit";
 import { unauthorizedResponse, validateAdminApiKey } from "@/lib/auth-api";
 import { db } from "@/lib/db";
-import { events, media, users } from "@/lib/db/schema";
+import { events, media, pendingMediaOwnership, users } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { deleteMediaAndThumbnail } from "@/lib/media/thumbnail";
+import { PENDING_REGISTRATION_USER_ID } from "@/lib/pending-ownership";
 import { publicMedia } from "@/lib/public-data";
+import { isValidSlackId, normalizeSlackId } from "@/lib/slack-id";
 
 async function getMedia(id: string) {
   return db.query.media.findFirst({ where: eq(media.id, id) });
@@ -59,21 +61,96 @@ export async function PATCH(
       updates.eventId = event.id;
     }
     if (body.uploadedById) {
-      const user = await db.query.users.findFirst({
-        where: eq(users.id, body.uploadedById),
-        columns: { id: true, isBanned: true },
-      });
-      if (!user || user.isBanned) {
-        return Response.json({ error: "User not found" }, { status: 404 });
+      let newUploadedById: string;
+      let pendingOwnerSlackId: string | null = null;
+      let pendingOwnerHackclubId: string | null = null;
+      if (/^[0-9a-f-]{36}$/i.test(body.uploadedById)) {
+        const user = await db.query.users.findFirst({
+          where: eq(users.id, body.uploadedById),
+          columns: { id: true, isBanned: true },
+        });
+        if (!user || user.isBanned) {
+          return Response.json({ error: "User not found" }, { status: 404 });
+        }
+        newUploadedById = user.id;
+      } else if (isValidSlackId(body.uploadedById)) {
+        const slackId = normalizeSlackId(body.uploadedById);
+        const user = await db.query.users.findFirst({
+          where: eq(users.slackId, slackId),
+          columns: { id: true, isBanned: true },
+        });
+        if (user?.isBanned) {
+          return Response.json({ error: "User is banned" }, { status: 404 });
+        }
+        newUploadedById = user?.id ?? PENDING_REGISTRATION_USER_ID;
+        pendingOwnerSlackId = user ? null : slackId;
+      } else {
+        const hackclubId = String(body.uploadedById).trim();
+        if (!hackclubId || hackclubId.length > 200) {
+          return Response.json(
+            {
+              error:
+                "uploadedById must be a user UUID, Slack user ID, or Hack Club ID",
+            },
+            { status: 400 },
+          );
+        }
+        const user = await db.query.users.findFirst({
+          where: eq(users.hackclubId, hackclubId),
+          columns: { id: true, isBanned: true },
+        });
+        if (user?.isBanned) {
+          return Response.json({ error: "User is banned" }, { status: 404 });
+        }
+        newUploadedById = user?.id ?? PENDING_REGISTRATION_USER_ID;
+        pendingOwnerHackclubId = user ? null : hackclubId;
       }
-      updates.uploadedById = user.id;
+      updates.uploadedById = newUploadedById;
       updates.metadata = {
         ...((updates.metadata as object | undefined) ??
           (item.metadata as object | null) ??
           {}),
         reassignedByApi: true,
         reassignedByUserId: auth.user.id,
+        pendingOwnerSlackId,
+        pendingOwnerHackclubId,
       };
+      if (pendingOwnerSlackId || pendingOwnerHackclubId) {
+        const existingPending = await db.query.pendingMediaOwnership.findFirst({
+          where: and(
+            eq(pendingMediaOwnership.mediaId, item.id),
+            isNull(pendingMediaOwnership.resolvedAt),
+          ),
+        });
+        if (existingPending) {
+          await db
+            .update(pendingMediaOwnership)
+            .set({
+              slackId: pendingOwnerSlackId,
+              hackclubId: pendingOwnerHackclubId,
+              showPlaceholder: true,
+            })
+            .where(eq(pendingMediaOwnership.id, existingPending.id));
+        } else {
+          await db.insert(pendingMediaOwnership).values({
+            mediaId: item.id,
+            slackId: pendingOwnerSlackId,
+            hackclubId: pendingOwnerHackclubId,
+            showPlaceholder: true,
+            previousOwnerId: item.uploadedById,
+            createdById: auth.user.id,
+          });
+        }
+      } else {
+        await db
+          .delete(pendingMediaOwnership)
+          .where(
+            and(
+              eq(pendingMediaOwnership.mediaId, item.id),
+              isNull(pendingMediaOwnership.resolvedAt),
+            ),
+          );
+      }
     }
 
     const [updated] = await db

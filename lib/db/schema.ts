@@ -315,7 +315,8 @@ export const pendingMediaOwnership = pgTable("pending_media_ownership", {
   mediaId: uuid("media_id")
     .notNull()
     .references(() => media.id, { onDelete: "cascade" }),
-  slackId: text("slack_id").notNull(),
+  slackId: text("slack_id"),
+  hackclubId: text("hackclub_id"),
   showPlaceholder: boolean("show_placeholder").notNull().default(false),
   previousOwnerId: uuid("previous_owner_id").references(() => users.id, {
     onDelete: "set null",

@@ -399,7 +399,7 @@ export default function ApiPlayground({
   -F "caption=Demo upload" \\
   -F "tags=demo,website" \\
   -F 'metadata={"source":"website-import","externalId":"cms-123"}' \\
-  -F "uploadedById=user-uuid" \\
+  -F "uploadedById=U12345678" \\
   -F "globalAdminOnlyDelete=true"`;
     }
     if (selectedEndpoint === "admin-create-event") {
@@ -418,7 +418,7 @@ export default function ApiPlayground({
       return `curl -X PATCH "${buildUrl()}" \\
   -H "Authorization: Bearer YOUR_ADMIN_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"caption":"Updated caption","metadata":{"externalId":"cms-123"},"uploadedById":"user-uuid","globalAdminOnlyDelete":true}'`;
+  -d '{"caption":"Updated caption","metadata":{"externalId":"cms-123"},"uploadedById":"U12345678","globalAdminOnlyDelete":true}'`;
     }
     if (selectedEndpoint === "admin-media-delete") {
       return `curl -X DELETE "${buildUrl()}" \\
@@ -650,7 +650,9 @@ export default function ApiPlayground({
                     </li>
                     <li>
                       <code>uploadedById</code>: Admin API key only, upload as
-                      another user
+                      another user. Use user UUID, Slack user ID, or Hack Club
+                      ID. Unknown Slack/Hack Club IDs create pending ownership
+                      and auto-claim on signup.
                     </li>
                     <li>
                       <code>globalAdminOnlyDelete</code>: Admin API key only,
@@ -711,7 +713,9 @@ export default function ApiPlayground({
                   />
                   <p>
                     Admin-only. Update caption, metadata, event, uploaded user,
-                    or deletion lock. Delete removes S3 files and the DB row.
+                    or deletion lock. Uploaded user accepts user UUID, Slack
+                    user ID, or Hack Club ID; unknown Slack/Hack Club IDs become
+                    pending ownership. Delete removes S3 files and the DB row.
                   </p>
                 </div>
               )}
