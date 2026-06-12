@@ -23,7 +23,7 @@ import {
   HiTrash,
   HiUser,
 } from "react-icons/hi2";
-import { bulkDeleteMedia, getBulkMediaUrls } from "@/app/actions/bulk";
+import { bulkDeleteMedia } from "@/app/actions/bulk";
 import { deleteMedia } from "@/app/actions/media";
 import ChangeOwnerModal from "@/components/media/ChangeOwnerModal";
 import VideoIndicator from "@/components/media/VideoIndicator";
@@ -38,7 +38,31 @@ const PhotoDetailModal = dynamic(
 
 const INITIAL_VISIBLE_ITEMS = 60;
 const VISIBLE_ITEMS_INCREMENT = 60;
-const THUMBNAIL_BATCH_SIZE = 24;
+
+function getMediaProxyUrl(
+  mediaId: string,
+  variant: "original" | "thumbnail" | "display" = "original",
+) {
+  if (variant === "thumbnail") return `/media/${mediaId}/thumbnail`;
+  if (variant === "display") return `/media/${mediaId}/display`;
+  return `/media/${mediaId}`;
+}
+
+function getThumbnailUrl(item: MediaItem) {
+  return (
+    item.thumbnailUrl ||
+    (item.thumbnailS3Key ? getMediaProxyUrl(item.id, "thumbnail") : undefined)
+  );
+}
+
+function getFullSizeUrl(item: MediaItem) {
+  return getMediaProxyUrl(
+    item.id,
+    item.mimeType === "image/heic" || item.mimeType === "image/heif"
+      ? "display"
+      : "original",
+  );
+}
 
 let searchGalleryImageObserver: IntersectionObserver | null = null;
 
@@ -59,15 +83,7 @@ function getSearchGalleryImageObserver() {
   return searchGalleryImageObserver;
 }
 
-function LazySearchGalleryImage({
-  src,
-  alt,
-  onVisible,
-}: {
-  src?: string;
-  alt: string;
-  onVisible: () => void;
-}) {
+function LazySearchGalleryImage({ src, alt }: { src?: string; alt: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -78,7 +94,6 @@ function LazySearchGalleryImage({
     const observer = getSearchGalleryImageObserver();
     const handleVisible = () => {
       setIsVisible(true);
-      onVisible();
     };
     element.addEventListener("search-gallery-image-visible", handleVisible, {
       once: true,
@@ -91,7 +106,7 @@ function LazySearchGalleryImage({
       );
       observer?.unobserve(element);
     };
-  }, [onVisible]);
+  }, []);
 
   return (
     <div ref={ref} className="relative h-full w-full bg-zinc-800">
@@ -173,17 +188,8 @@ export default function SearchGallery({
   const [sortBy, setSortBy] = useState<"date" | "likes" | "random">("date");
   const [dateOrder, setDateOrder] = useState<"desc" | "asc">("desc");
   const [randomSeed, setRandomSeed] = useState(Math.random());
-  const [presignedUrls, setPresignedUrls] = useState<Record<string, string>>(
-    {},
-  );
-  const thumbnailUrlCacheRef = useRef<Record<string, string>>({});
   const fullSizeUrlCacheRef = useRef<Record<string, string>>({});
-  const fullSizeRequestSeqRef = useRef(0);
   const loadMoreRef = useRef<HTMLDivElement>(null);
-  const queuedThumbnailIdsRef = useRef<Set<string>>(new Set());
-  const thumbnailFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_ITEMS);
   const [_isPending, startTransition] = useTransition();
   const [completed, setCompleted] = useState(false);
@@ -197,12 +203,6 @@ export default function SearchGallery({
   const [mediaToDelete, setMediaToDelete] = useState<string | null>(null);
   useEffect(() => {
     setLocalMedia(media);
-    thumbnailUrlCacheRef.current = Object.fromEntries(
-      media
-        .filter((item) => item.thumbnailUrl)
-        .map((item) => [item.id, item.thumbnailUrl!]),
-    );
-    setPresignedUrls(thumbnailUrlCacheRef.current);
     startTransition(() => setVisibleCount(INITIAL_VISIBLE_ITEMS));
   }, [media]);
   const sortedMedia = useMemo(() => {
@@ -256,52 +256,6 @@ export default function SearchGallery({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
   useEffect(() => {
-    setPresignedUrls((prev) => {
-      if (localMedia.length === 0) return {};
-      const ids = new Set(localMedia.map((item) => item.id));
-      const next: Record<string, string> = {};
-      let changed = false;
-      for (const [id, url] of Object.entries(prev)) {
-        if (ids.has(id)) {
-          next[id] = url;
-        } else {
-          changed = true;
-          delete thumbnailUrlCacheRef.current[id];
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [localMedia]);
-
-  const loadThumbnailUrls = useCallback(async (items: MediaItem[]) => {
-    const unloadedItems = items.filter(
-      (item) =>
-        item.thumbnailS3Key &&
-        !item.thumbnailUrl &&
-        !thumbnailUrlCacheRef.current[item.id],
-    );
-    if (unloadedItems.length === 0) return;
-    try {
-      const data = await getBulkMediaUrls(
-        unloadedItems.map((item) => item.thumbnailS3Key!),
-      );
-      const urls = data.urls ?? {};
-      const newUrls: Record<string, string> = {};
-      for (const item of unloadedItems) {
-        if (item.thumbnailS3Key && urls[item.thumbnailS3Key]) {
-          newUrls[item.id] = urls[item.thumbnailS3Key];
-        }
-      }
-      if (Object.keys(newUrls).length > 0) {
-        Object.assign(thumbnailUrlCacheRef.current, newUrls);
-        setPresignedUrls((prev) => ({ ...prev, ...newUrls }));
-      }
-    } catch (error) {
-      logger.error("Failed to load thumbnails:", error);
-    }
-  }, []);
-
-  useEffect(() => {
     const element = loadMoreRef.current;
     if (!element) return;
     const observer = new IntersectionObserver(
@@ -319,66 +273,26 @@ export default function SearchGallery({
     return () => observer.disconnect();
   }, [sortedMedia.length]);
 
-  const queueThumbnailLoad = (item: MediaItem) => {
-    if (item.thumbnailUrl || !item.thumbnailS3Key || presignedUrls[item.id]) {
-      return;
-    }
-    queuedThumbnailIdsRef.current.add(item.id);
-    if (thumbnailFlushTimerRef.current) return;
-    const flush = () => {
-      thumbnailFlushTimerRef.current = null;
-      const ids = Array.from(queuedThumbnailIdsRef.current).slice(
-        0,
-        THUMBNAIL_BATCH_SIZE,
-      );
-      ids.forEach((id) => {
-        queuedThumbnailIdsRef.current.delete(id);
-      });
-      const idSet = new Set(ids);
-      const items = sortedMedia.filter((mediaItem) => idSet.has(mediaItem.id));
-      void loadThumbnailUrls(items);
-      if (queuedThumbnailIdsRef.current.size > 0) {
-        thumbnailFlushTimerRef.current = setTimeout(flush, 120);
-      }
-    };
-    thumbnailFlushTimerRef.current = setTimeout(flush, 80);
-  };
   const [fullSizeUrl, setFullSizeUrl] = useState<string | null>(null);
   useEffect(() => {
-    const loadFullSize = async () => {
-      if (!selectedMedia) {
-        setFullSizeUrl(null);
-        return;
-      }
-      const requestSeq = ++fullSizeRequestSeqRef.current;
-      setFullSizeUrl(fullSizeUrlCacheRef.current[selectedMedia.id] ?? null);
-      try {
-        const data = await getBulkMediaUrls(undefined, [selectedMedia.id]);
-        const url = data.urls?.[selectedMedia.id] ?? null;
-        if (requestSeq !== fullSizeRequestSeqRef.current) return;
-        if (url) fullSizeUrlCacheRef.current[selectedMedia.id] = url;
-        setFullSizeUrl(url);
-      } catch (error) {
-        if (requestSeq !== fullSizeRequestSeqRef.current) return;
-        logger.error("Failed to load full-size image:", error);
-      }
-    };
-    loadFullSize();
+    if (!selectedMedia) {
+      setFullSizeUrl(null);
+      return;
+    }
+    const cachedUrl = fullSizeUrlCacheRef.current[selectedMedia.id];
+    if (cachedUrl) {
+      setFullSizeUrl(cachedUrl);
+      return;
+    }
+    const url = getFullSizeUrl(selectedMedia);
+    fullSizeUrlCacheRef.current[selectedMedia.id] = url;
+    setFullSizeUrl(url);
   }, [selectedMedia]);
 
-  const prefetchFullSizeUrls = useCallback(async (items: MediaItem[]) => {
-    const mediaIds = items
-      .filter((item) => !fullSizeUrlCacheRef.current[item.id])
-      .map((item) => item.id);
-    if (mediaIds.length === 0) return;
-    try {
-      const data = await getBulkMediaUrls(undefined, mediaIds);
-      Object.entries(data.urls ?? {}).forEach(([id, url]) => {
-        fullSizeUrlCacheRef.current[id] = url;
-      });
-    } catch (error) {
-      logger.error("Failed to prefetch full-size images:", error);
-    }
+  const prefetchFullSizeUrls = useCallback((items: MediaItem[]) => {
+    items.forEach((item) => {
+      fullSizeUrlCacheRef.current[item.id] ||= getFullSizeUrl(item);
+    });
   }, []);
 
   const prefetchAdjacentMedia = (item: MediaItem) => {
@@ -410,11 +324,7 @@ export default function SearchGallery({
   const handleDownload = async (mediaItem: MediaItem) => {
     setDownloading(true);
     try {
-      const url = presignedUrls[mediaItem.id];
-      if (!url) {
-        alert("Download URL not available");
-        return;
-      }
+      const url = `${getMediaProxyUrl(mediaItem.id)}?download=true`;
       const response = await fetch(url);
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
@@ -682,7 +592,7 @@ export default function SearchGallery({
         {sortedMedia
           .slice(0, Math.min(visibleCount, sortedMedia.length))
           .map((item) => {
-            const url = presignedUrls[item.id] || item.thumbnailUrl;
+            const url = getThumbnailUrl(item);
             const isSelected = selectedItems.has(item.id);
             const isVideo = item.mimeType.startsWith("video/");
             const _event = item.event;
@@ -704,11 +614,7 @@ export default function SearchGallery({
                   }}
                   aria-label={`View ${item.filename}`}
                 >
-                  <LazySearchGalleryImage
-                    src={url}
-                    alt={item.filename}
-                    onVisible={() => queueThumbnailLoad(item)}
-                  />
+                  <LazySearchGalleryImage src={url} alt={item.filename} />
 
                   {isVideo && url && <VideoIndicator size="lg" />}
 

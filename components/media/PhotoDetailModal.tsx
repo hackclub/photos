@@ -260,6 +260,13 @@ export default function PhotoDetailModal({
       return displayUrl;
     }
   }, [displayUrl, retryCount]);
+  const imageIdentity = `${media.id}:${displayUrl ?? ""}`;
+  useEffect(() => {
+    if (!imageIdentity) return;
+    setImageLoaded(false);
+    setImageError(false);
+    setRetryCount(0);
+  }, [imageIdentity]);
   const [activeTab, setActiveTab] = useState<"info" | "comments">("info");
   const [likeCount, setLikeCount] = useState(0);
   const [hasLiked, setHasLiked] = useState(false);
@@ -1266,6 +1273,8 @@ export default function PhotoDetailModal({
                   <img
                     src={thumbnailUrl}
                     alt={media.filename}
+                    decoding="async"
+                    fetchPriority="high"
                     className="absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain opacity-100 blur-[1px] scale-[1.005] transition-opacity duration-300"
                     aria-hidden="true"
                   />
@@ -1274,6 +1283,8 @@ export default function PhotoDetailModal({
                   <img
                     src={effectiveUrl}
                     alt={media.filename}
+                    decoding="async"
+                    fetchPriority="high"
                     draggable={false}
                     className={`absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain transition-opacity duration-500 ease-out ${
                       imageLoaded ? "opacity-100" : "opacity-0"

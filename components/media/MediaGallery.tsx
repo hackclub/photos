@@ -29,17 +29,6 @@ const PhotoDetailModal = dynamic(() => import("./PhotoDetailModal"), {
 
 const INITIAL_VISIBLE_ITEMS = 60;
 const VISIBLE_ITEMS_INCREMENT = 60;
-const THUMBNAIL_BATCH_SIZE = 24;
-
-function getGalleryBatchDelay() {
-  const nav = navigator as Navigator & {
-    deviceMemory?: number;
-  };
-  const lowEndDevice =
-    (nav.deviceMemory !== undefined && nav.deviceMemory <= 3) ||
-    (navigator.hardwareConcurrency || 4) <= 4;
-  return lowEndDevice ? 140 : 70;
-}
 
 let galleryImageObserver: IntersectionObserver | null = null;
 
@@ -60,15 +49,7 @@ function getGalleryImageObserver() {
   return galleryImageObserver;
 }
 
-function LazyGalleryImage({
-  src,
-  alt,
-  onVisible,
-}: {
-  src?: string;
-  alt: string;
-  onVisible: () => void;
-}) {
+function LazyGalleryImage({ src, alt }: { src?: string; alt: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -80,7 +61,6 @@ function LazyGalleryImage({
 
     const handleVisible = () => {
       setIsVisible(true);
-      onVisible();
     };
 
     element.addEventListener("gallery-image-visible", handleVisible, {
@@ -91,7 +71,7 @@ function LazyGalleryImage({
       element.removeEventListener("gallery-image-visible", handleVisible);
       observer?.unobserve(element);
     };
-  }, [onVisible]);
+  }, []);
 
   return (
     <div ref={ref} className="relative h-full w-full bg-zinc-800">
@@ -172,8 +152,7 @@ export default function MediaGallery({
     dateOrder,
     setDateOrder,
     setRandomSeed,
-    presignedUrls,
-    loadThumbnailUrls,
+    getThumbnailUrl,
     selectedMedia,
     setSelectedMedia,
     selectedThumbnailUrl,
@@ -202,10 +181,6 @@ export default function MediaGallery({
   const [_isPending, startTransition] = useTransition();
   const abortControllerRef = useRef<AbortController | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
-  const queuedThumbnailIdsRef = useRef<Set<string>>(new Set());
-  const thumbnailFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
 
   useEffect(() => {
     const element = loadMoreRef.current;
@@ -226,35 +201,6 @@ export default function MediaGallery({
     observer.observe(element);
     return () => observer.disconnect();
   }, [sortedMedia.length]);
-
-  const queueThumbnailLoad = (item: MediaItem) => {
-    if (!item.thumbnailS3Key || presignedUrls[item.id]) return;
-    queuedThumbnailIdsRef.current.add(item.id);
-    if (thumbnailFlushTimerRef.current) return;
-
-    const flush = () => {
-      thumbnailFlushTimerRef.current = null;
-      const ids = Array.from(queuedThumbnailIdsRef.current).slice(
-        0,
-        THUMBNAIL_BATCH_SIZE,
-      );
-      ids.forEach((id) => {
-        queuedThumbnailIdsRef.current.delete(id);
-      });
-      const idSet = new Set(ids);
-      const items = sortedMedia.filter((mediaItem) => idSet.has(mediaItem.id));
-      void loadThumbnailUrls(items);
-
-      if (queuedThumbnailIdsRef.current.size > 0) {
-        thumbnailFlushTimerRef.current = setTimeout(
-          flush,
-          getGalleryBatchDelay(),
-        );
-      }
-    };
-
-    thumbnailFlushTimerRef.current = setTimeout(flush, getGalleryBatchDelay());
-  };
 
   const prefetchAdjacentMedia = (item: MediaItem) => {
     const currentIndex = sortedMedia.findIndex((m) => m.id === item.id);
@@ -566,7 +512,7 @@ export default function MediaGallery({
         {sortedMedia
           .slice(0, Math.min(visibleCount, sortedMedia.length))
           .map((item) => {
-            const url = presignedUrls[item.id];
+            const url = getThumbnailUrl(item) ?? undefined;
             const isSelected = selectedItems.has(item.id);
             const isVideo = item.mimeType.startsWith("video/");
             const event =
@@ -590,11 +536,7 @@ export default function MediaGallery({
                   }}
                   aria-label={`View ${item.filename}`}
                 >
-                  <LazyGalleryImage
-                    src={url}
-                    alt={item.filename}
-                    onVisible={() => queueThumbnailLoad(item)}
-                  />
+                  <LazyGalleryImage src={url} alt={item.filename} />
 
                   {isVideo && url && <VideoIndicator size="lg" />}
 

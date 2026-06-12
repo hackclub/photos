@@ -1,8 +1,28 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getBulkMediaUrls } from "@/app/actions/bulk";
-import { logger } from "@/lib/logger";
 import type { Event, MediaItem } from "@/types/media";
+
+function getMediaProxyUrl(
+  mediaId: string,
+  variant: "original" | "thumbnail" | "display" = "original",
+) {
+  if (variant === "thumbnail") return `/media/${mediaId}/thumbnail`;
+  if (variant === "display") return `/media/${mediaId}/display`;
+  return `/media/${mediaId}`;
+}
+
+function getFullSizeProxyUrl(item: MediaItem) {
+  return getMediaProxyUrl(
+    item.id,
+    item.mimeType === "image/heic" || item.mimeType === "image/heif"
+      ? "display"
+      : "original",
+  );
+}
+
+function getThumbnailProxyUrl(item: MediaItem) {
+  return item.thumbnailS3Key ? getMediaProxyUrl(item.id, "thumbnail") : null;
+}
 
 function shouldReduceMediaPrefetch() {
   if (typeof navigator === "undefined") return false;
@@ -26,17 +46,9 @@ export function useMediaGalleryData(
   >("date");
   const [dateOrder, setDateOrder] = useState<"desc" | "asc">("desc");
   const [randomSeed, setRandomSeed] = useState(Math.random());
-  const [presignedUrls, setPresignedUrls] = useState<Record<string, string>>(
-    {},
-  );
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
-  const [selectedThumbnailUrl, setSelectedThumbnailUrl] = useState<
-    string | null
-  >(null);
   const [fullSizeUrl, setFullSizeUrl] = useState<string | null>(null);
   const fullSizeUrlCacheRef = useRef<Record<string, string>>({});
-  const thumbnailUrlCacheRef = useRef<Record<string, string>>({});
-  const fullSizeRequestSeqRef = useRef(0);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -115,123 +127,44 @@ export function useMediaGalleryData(
     }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
-  const loadThumbnailUrls = useCallback(async (items: MediaItem[]) => {
-    const unloadedItems = items.filter(
-      (item) => item.thumbnailS3Key && !thumbnailUrlCacheRef.current[item.id],
-    );
-    if (unloadedItems.length === 0) return;
-
-    try {
-      const data = await getBulkMediaUrls(
-        unloadedItems.map((item) => item.thumbnailS3Key!),
-      );
-      const newUrls: Record<string, string> = {};
-      const urls = data.urls ?? {};
-      unloadedItems.forEach((item) => {
-        if (item.thumbnailS3Key && urls[item.thumbnailS3Key]) {
-          newUrls[item.id] = urls[item.thumbnailS3Key];
-        }
-      });
-      if (Object.keys(newUrls).length > 0) {
-        Object.assign(thumbnailUrlCacheRef.current, newUrls);
-        setPresignedUrls((prev) => ({ ...prev, ...newUrls }));
-      }
-    } catch (error) {
-      logger.error("Failed to load thumbnails:", error);
-    }
-  }, []);
-
-  useEffect(() => {
-    setPresignedUrls((prev) => {
-      if (localMedia.length === 0) return {};
-      const ids = new Set(localMedia.map((item) => item.id));
-      let changed = false;
-      const next: Record<string, string> = {};
-      Object.entries(prev).forEach(([id, url]) => {
-        if (ids.has(id)) {
-          next[id] = url;
-        } else {
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
-    });
-  }, [localMedia]);
-  useEffect(() => {
-    if (!selectedMedia) {
-      setSelectedThumbnailUrl(null);
-      return;
-    }
-    const thumb = presignedUrls[selectedMedia.id] ?? null;
-    setSelectedThumbnailUrl(thumb);
-  }, [selectedMedia, presignedUrls]);
+  const getThumbnailUrl = useCallback(getThumbnailProxyUrl, []);
+  const selectedThumbnailUrl = selectedMedia
+    ? getThumbnailProxyUrl(selectedMedia)
+    : null;
 
   const refreshFullSizeUrl = useCallback(
-    async (mediaToLoad?: MediaItem | null) => {
+    (mediaToLoad?: MediaItem | null) => {
       const target = mediaToLoad ?? selectedMedia;
       if (!target) {
         setFullSizeUrl(null);
         return;
       }
-      const requestSeq = ++fullSizeRequestSeqRef.current;
-      setFullSizeUrl(fullSizeUrlCacheRef.current[target.id] ?? null);
-      try {
-        const data = await getBulkMediaUrls(undefined, [target.id]);
-        let url = data.urls?.[target.id] ?? null;
-        if (requestSeq !== fullSizeRequestSeqRef.current) return;
-
-        if (
-          url &&
-          (target.mimeType === "image/heic" ||
-            target.mimeType === "image/heif") &&
-          (url.includes("/api/v1/view") || url.includes("/media/"))
-        ) {
-          const urlObj = new URL(url, window.location.origin);
-          urlObj.searchParams.delete("variant");
-          urlObj.searchParams.set("variant", "display");
-          url = urlObj.toString();
-        }
-
-        if (url) fullSizeUrlCacheRef.current[target.id] = url;
-        setFullSizeUrl(url);
-      } catch (error) {
-        if (requestSeq !== fullSizeRequestSeqRef.current) return;
-        logger.error("Failed to load full-size image:", error);
+      const cachedUrl = fullSizeUrlCacheRef.current[target.id];
+      if (cachedUrl) {
+        setFullSizeUrl(cachedUrl);
+        return;
       }
+      const url = getFullSizeProxyUrl(target);
+      fullSizeUrlCacheRef.current[target.id] = url;
+      setFullSizeUrl(url);
     },
     [selectedMedia],
   );
 
-  const prefetchFullSizeUrls = useCallback(async (items: MediaItem[]) => {
+  const prefetchFullSizeUrls = useCallback((items: MediaItem[]) => {
     if (shouldReduceMediaPrefetch()) return;
-    const mediaIds = items
-      .filter((item) => !fullSizeUrlCacheRef.current[item.id])
-      .map((item) => item.id);
-    if (mediaIds.length === 0) return;
+    const uncachedItems = items.filter(
+      (item) => !fullSizeUrlCacheRef.current[item.id],
+    );
+    if (uncachedItems.length === 0) return;
 
-    try {
-      const data = await getBulkMediaUrls(undefined, mediaIds);
-      Object.entries(data.urls ?? {}).forEach(([id, url]) => {
-        fullSizeUrlCacheRef.current[id] = url;
-      });
-    } catch (error) {
-      logger.error("Failed to prefetch full-size images:", error);
-    }
+    uncachedItems.forEach((item) => {
+      fullSizeUrlCacheRef.current[item.id] = getFullSizeProxyUrl(item);
+    });
   }, []);
 
   useEffect(() => {
-    let isMounted = true;
-    const load = async () => {
-      if (!selectedMedia) {
-        if (isMounted) setFullSizeUrl(null);
-        return;
-      }
-      await refreshFullSizeUrl(selectedMedia);
-    };
-    load();
-    return () => {
-      isMounted = false;
-    };
+    refreshFullSizeUrl(selectedMedia);
   }, [selectedMedia, refreshFullSizeUrl]);
 
   return {
@@ -245,8 +178,7 @@ export function useMediaGalleryData(
     setDateOrder,
     randomSeed,
     setRandomSeed,
-    presignedUrls,
-    loadThumbnailUrls,
+    getThumbnailUrl,
     selectedMedia,
     setSelectedMedia,
     selectedThumbnailUrl,
