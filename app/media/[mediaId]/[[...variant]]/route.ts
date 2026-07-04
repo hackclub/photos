@@ -11,8 +11,59 @@ import { media, users } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { convertHeicToJpeg } from "@/lib/media/heic";
 import { S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
+import {
+  generateAndUploadThumbnail,
+  getThumbnailS3Key,
+} from "@/lib/media/thumbnail";
 import { can } from "@/lib/policy";
 import { contentDispositionFilename } from "@/lib/safe-filename";
+
+async function streamToBuffer(stream: AsyncIterable<Uint8Array>) {
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+async function generateMissingImageThumbnail(
+  mediaItem: typeof media.$inferSelect,
+) {
+  if (!mediaItem.mimeType.startsWith("image/")) return null;
+  try {
+    const source = await s3Client.send(
+      new GetObjectCommand({
+        Bucket: S3_BUCKET_NAME,
+        Key: mediaItem.s3Key,
+      }),
+    );
+    if (!source.Body) throw new Error("S3 object had no body");
+    const buffer = await streamToBuffer(
+      source.Body as AsyncIterable<Uint8Array>,
+    );
+    const thumbnailS3Key = await generateAndUploadThumbnail(
+      buffer,
+      mediaItem.mimeType,
+      mediaItem.id,
+      undefined,
+      { uploadedBy: mediaItem.uploadedById, eventId: mediaItem.eventId },
+    );
+    if (!thumbnailS3Key) return null;
+    if (thumbnailS3Key !== mediaItem.thumbnailS3Key) {
+      await db
+        .update(media)
+        .set({ thumbnailS3Key })
+        .where(eq(media.id, mediaItem.id));
+    }
+    return thumbnailS3Key;
+  } catch (error) {
+    logger.error(
+      { mediaId: mediaItem.id, error },
+      "thumbnail generation failed",
+    );
+    return null;
+  }
+}
 
 export async function GET(
   request: NextRequest,
@@ -126,13 +177,13 @@ export async function GET(
   let s3Key = mediaItem.s3Key;
   let filename = contentDispositionFilename(mediaItem.filename);
   if (variant === "thumbnail") {
+    const baseName =
+      filename.substring(0, filename.lastIndexOf(".")) || filename;
+    filename = `thumbnail_${baseName}.jpg`;
     if (mediaItem.thumbnailS3Key) {
       s3Key = mediaItem.thumbnailS3Key;
-      const baseName =
-        filename.substring(0, filename.lastIndexOf(".")) || filename;
-      filename = `thumbnail_${baseName}.jpg`;
-    } else {
-      s3Key = mediaItem.s3Key;
+    } else if (mediaItem.mimeType.startsWith("image/")) {
+      s3Key = getThumbnailS3Key(mediaItem.id);
     }
   }
   const command = new GetObjectCommand({
@@ -147,15 +198,62 @@ export async function GET(
   let s3Response: GetObjectCommandOutput;
   try {
     s3Response = await s3Client.send(command);
+    if (
+      variant === "thumbnail" &&
+      mediaItem.mimeType.startsWith("image/") &&
+      !mediaItem.thumbnailS3Key &&
+      s3Key === getThumbnailS3Key(mediaItem.id)
+    ) {
+      await db
+        .update(media)
+        .set({ thumbnailS3Key: s3Key })
+        .where(eq(media.id, mediaItem.id));
+    }
   } catch (error: any) {
     if (error?.$metadata?.httpStatusCode === 304) {
       return new NextResponse(null, { status: 304 });
     }
-    logger.error(`Failed to fetch from S3:`, error);
-    return new NextResponse("Failed to fetch media", { status: 502 });
+    if (variant === "thumbnail" && mediaItem.mimeType.startsWith("image/")) {
+      const regeneratedThumbnailKey =
+        await generateMissingImageThumbnail(mediaItem);
+      if (regeneratedThumbnailKey) {
+        try {
+          s3Response = await s3Client.send(
+            new GetObjectCommand({
+              Bucket: S3_BUCKET_NAME,
+              Key: regeneratedThumbnailKey,
+              Range: requestRange,
+              IfNoneMatch: request.headers.get("if-none-match") ?? undefined,
+              IfModifiedSince: request.headers.get("if-modified-since")
+                ? new Date(request.headers.get("if-modified-since") as string)
+                : undefined,
+            }),
+          );
+        } catch (retryError: any) {
+          if (retryError?.$metadata?.httpStatusCode === 304) {
+            return new NextResponse(null, { status: 304 });
+          }
+          logger.error(
+            "Failed to fetch regenerated thumbnail from S3:",
+            retryError,
+          );
+          return new NextResponse("Failed to fetch media", { status: 502 });
+        }
+      } else {
+        logger.error(`Failed to fetch from S3:`, error);
+        return new NextResponse("Failed to fetch media", { status: 502 });
+      }
+    } else {
+      logger.error(`Failed to fetch from S3:`, error);
+      return new NextResponse("Failed to fetch media", { status: 502 });
+    }
   }
   const headers = new Headers();
-  headers.set("Content-Type", s3Response.ContentType || mediaItem.mimeType);
+  headers.set(
+    "Content-Type",
+    s3Response.ContentType ||
+      (variant === "thumbnail" ? "image/jpeg" : mediaItem.mimeType),
+  );
   headers.set("X-Content-Type-Options", "nosniff");
   if (s3Response.ContentLength) {
     headers.set("Content-Length", String(s3Response.ContentLength));

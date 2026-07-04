@@ -24,6 +24,7 @@ import {
 } from "@/lib/media/s3";
 import {
   generateAndUploadThumbnail,
+  getThumbnailS3Key,
   processImageUpload,
 } from "@/lib/media/thumbnail";
 import { validateMediaFile } from "@/lib/media/validation";
@@ -398,6 +399,7 @@ export async function finalizeUpload(
         let realFileSize = data.fileSize;
         let serverExifData: Record<string, unknown> | null = null;
         let thumbnailS3Key = data.thumbnailS3Key;
+        const canonicalThumbnailS3Key = getThumbnailS3Key(mediaId);
         try {
           const headCommand = new HeadObjectCommand({
             Bucket: S3_BUCKET_NAME,
@@ -434,6 +436,12 @@ export async function finalizeUpload(
             !(await objectExists(data.thumbnailS3Key))
           ) {
             thumbnailS3Key = null;
+          }
+          if (
+            !thumbnailS3Key &&
+            (await objectExists(canonicalThumbnailS3Key))
+          ) {
+            thumbnailS3Key = canonicalThumbnailS3Key;
           }
           if (data.mimeType.startsWith("image/")) {
             try {

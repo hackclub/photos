@@ -14,6 +14,16 @@ import {
   traceAsync,
 } from "@/lib/telemetry";
 import { deleteFromS3, deleteFromS3Batch, uploadToS3 } from "./s3";
+
+export function getThumbnailS3Key(mediaId: string) {
+  return `media/${mediaId}/thumbnail.jpg`;
+}
+
+export function isHeicMimeType(mimeType?: string | null) {
+  const normalized = mimeType?.split(";")[0]?.toLowerCase();
+  return normalized === "image/heic" || normalized === "image/heif";
+}
+
 export async function processImageUpload(
   input: Readable | Buffer,
   mediaId: string,
@@ -124,7 +134,7 @@ async function uploadThumbnail(
   tags?: Record<string, string>,
   signal?: AbortSignal,
 ) {
-  const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
+  const thumbnailS3Key = getThumbnailS3Key(mediaId);
   await uploadToS3(thumbnailBuffer, thumbnailS3Key, "image/jpeg", signal, tags);
   return thumbnailS3Key;
 }
@@ -138,10 +148,7 @@ async function generateImageThumbnailBuffer(
   height?: number;
   exifBuffer?: Buffer;
 }> {
-  const isHeic =
-    mimeType?.toLowerCase() === "image/heic" ||
-    mimeType?.toLowerCase() === "image/heif";
-  if (isHeic) {
+  if (isHeicMimeType(mimeType)) {
     let decoder: any = decode;
     if (
       typeof decoder !== "function" &&
@@ -190,7 +197,7 @@ async function processImageUploadInternal(
       exifBuffer,
     };
   } catch (error: any) {
-    if (mimeType?.toLowerCase() !== "image/heic") {
+    if (!isHeicMimeType(mimeType)) {
       logger.info(
         "Sharp failed with unsupported format, attempting HEIC fallback...",
       );
@@ -336,7 +343,7 @@ async function generateVideoThumbnail(
       sharp(thumbnailBuffer),
     );
     if (signal?.aborted) return null;
-    const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
+    const thumbnailS3Key = getThumbnailS3Key(mediaId);
     await uploadToS3(
       processedThumbnail,
       thumbnailS3Key,

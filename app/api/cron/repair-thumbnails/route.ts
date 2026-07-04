@@ -11,7 +11,10 @@ import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
 import { logger, recordException, serializeError } from "@/lib/logger";
 import { s3Client, uploadToS3 } from "@/lib/media/s3";
-import { generateAndUploadThumbnail } from "@/lib/media/thumbnail";
+import {
+  generateAndUploadThumbnail,
+  getThumbnailS3Key,
+} from "@/lib/media/thumbnail";
 import { recordCronJob } from "@/lib/telemetry";
 
 const BATCH_SIZE = 500;
@@ -115,7 +118,7 @@ async function fallbackImageThumbnail(
       ? lastError
       : new Error("Could not extract real image thumbnail");
   }
-  const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
+  const thumbnailS3Key = getThumbnailS3Key(mediaId);
   await uploadToS3(output, thumbnailS3Key, "image/jpeg", undefined, tags);
   return thumbnailS3Key;
 }
@@ -159,7 +162,7 @@ async function fallbackVideoThumbnail(
       .resize(400, 400, { fit: "cover", position: "center" })
       .jpeg({ quality: 82, mozjpeg: true })
       .toBuffer();
-    const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
+    const thumbnailS3Key = getThumbnailS3Key(mediaId);
     await uploadToS3(
       thumbnailBuffer,
       thumbnailS3Key,
@@ -198,6 +201,17 @@ export async function GET(request: NextRequest) {
         : false;
       if (hasThumbnail) return { repaired: 0, failed: 0 };
       try {
+        const canonicalThumbnailS3Key = getThumbnailS3Key(item.id);
+        if (
+          item.thumbnailS3Key !== canonicalThumbnailS3Key &&
+          (await objectExists(canonicalThumbnailS3Key))
+        ) {
+          await db
+            .update(media)
+            .set({ thumbnailS3Key: canonicalThumbnailS3Key })
+            .where(eq(media.id, item.id));
+          return { repaired: 1, failed: 0 };
+        }
         const sourceKeys = [
           item.s3Key,
           item.blurredS3Key,
