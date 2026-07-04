@@ -20,8 +20,14 @@ function getFullSizeProxyUrl(item: MediaItem) {
   );
 }
 
+function isImageMedia(item: MediaItem) {
+  return item.mimeType.startsWith("image/");
+}
+
 function getThumbnailProxyUrl(item: MediaItem) {
-  return item.thumbnailS3Key ? getMediaProxyUrl(item.id, "thumbnail") : null;
+  return item.thumbnailS3Key || isImageMedia(item)
+    ? getMediaProxyUrl(item.id, "thumbnail")
+    : null;
 }
 
 function shouldReduceMediaPrefetch() {

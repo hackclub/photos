@@ -38,6 +38,7 @@ const PhotoDetailModal = dynamic(
 
 const INITIAL_VISIBLE_ITEMS = 60;
 const VISIBLE_ITEMS_INCREMENT = 60;
+const THUMBNAIL_AUTO_RETRIES = 5;
 
 function getMediaProxyUrl(
   mediaId: string,
@@ -51,7 +52,9 @@ function getMediaProxyUrl(
 function getThumbnailUrl(item: MediaItem) {
   return (
     item.thumbnailUrl ||
-    (item.thumbnailS3Key ? getMediaProxyUrl(item.id, "thumbnail") : undefined)
+    (item.thumbnailS3Key || item.mimeType.startsWith("image/")
+      ? getMediaProxyUrl(item.id, "thumbnail")
+      : undefined)
   );
 }
 
@@ -87,6 +90,7 @@ function LazySearchGalleryImage({ src, alt }: { src?: string; alt: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     const element = ref.current;
@@ -118,7 +122,11 @@ function LazySearchGalleryImage({ src, alt }: { src?: string; alt: string }) {
       {isVisible && src && (
         <img
           key={src}
-          src={src}
+          src={
+            retryCount > 0
+              ? `${src}${src.includes("?") ? "&" : "?"}retry=${retryCount}`
+              : src
+          }
           alt={alt}
           loading="eager"
           decoding="async"
@@ -127,6 +135,14 @@ function LazySearchGalleryImage({ src, alt }: { src?: string; alt: string }) {
             isLoaded ? "opacity-100" : "opacity-0"
           }`}
           onLoad={() => setIsLoaded(true)}
+          onError={() => {
+            setIsLoaded(false);
+            if (retryCount >= THUMBNAIL_AUTO_RETRIES) return;
+            window.setTimeout(
+              () => setRetryCount((count) => count + 1),
+              350 * (retryCount + 1),
+            );
+          }}
         />
       )}
     </div>
@@ -614,7 +630,11 @@ export default function SearchGallery({
                   }}
                   aria-label={`View ${item.filename}`}
                 >
-                  <LazySearchGalleryImage src={url} alt={item.filename} />
+                  <LazySearchGalleryImage
+                    key={url ?? item.id}
+                    src={url}
+                    alt={item.filename}
+                  />
 
                   {isVideo && url && <VideoIndicator size="lg" />}
 

@@ -29,6 +29,7 @@ const PhotoDetailModal = dynamic(() => import("./PhotoDetailModal"), {
 
 const INITIAL_VISIBLE_ITEMS = 60;
 const VISIBLE_ITEMS_INCREMENT = 60;
+const THUMBNAIL_AUTO_RETRIES = 5;
 
 let galleryImageObserver: IntersectionObserver | null = null;
 
@@ -53,6 +54,7 @@ function LazyGalleryImage({ src, alt }: { src?: string; alt: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     const element = ref.current;
@@ -82,16 +84,28 @@ function LazyGalleryImage({ src, alt }: { src?: string; alt: string }) {
       )}
       {isVisible && src && (
         <img
-          src={src}
+          src={
+            retryCount > 0
+              ? `${src}${src.includes("?") ? "&" : "?"}retry=${retryCount}`
+              : src
+          }
           alt={alt}
           decoding="async"
           loading="eager"
           fetchPriority="low"
-          key={src}
+          key={`${src}-${retryCount}`}
           className={`h-full w-full object-cover transition-opacity duration-700 ease-out ${
             isLoaded ? "opacity-100" : "opacity-0"
           }`}
           onLoad={() => setIsLoaded(true)}
+          onError={() => {
+            setIsLoaded(false);
+            if (retryCount >= THUMBNAIL_AUTO_RETRIES) return;
+            window.setTimeout(
+              () => setRetryCount((count) => count + 1),
+              350 * (retryCount + 1),
+            );
+          }}
         />
       )}
     </div>
@@ -536,7 +550,11 @@ export default function MediaGallery({
                   }}
                   aria-label={`View ${item.filename}`}
                 >
-                  <LazyGalleryImage src={url} alt={item.filename} />
+                  <LazyGalleryImage
+                    key={url ?? item.id}
+                    src={url}
+                    alt={item.filename}
+                  />
 
                   {isVideo && url && <VideoIndicator size="lg" />}
 

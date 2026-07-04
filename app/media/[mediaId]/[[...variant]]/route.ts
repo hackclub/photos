@@ -4,6 +4,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
+import sharp from "sharp";
 import { verifySessionToken } from "@/lib/auth";
 import { getUserContext } from "@/lib/auth-api";
 import { db } from "@/lib/db";
@@ -24,6 +25,47 @@ async function streamToBuffer(stream: AsyncIterable<Uint8Array>) {
     chunks.push(chunk);
   }
   return Buffer.concat(chunks);
+}
+
+async function isValidThumbnailBuffer(buffer: Buffer) {
+  if (buffer.length < 32) return false;
+  try {
+    const metadata = await sharp(buffer, { failOn: "none" }).metadata();
+    return Boolean(metadata.width && metadata.height && metadata.format);
+  } catch {
+    return false;
+  }
+}
+
+async function fetchMediaObject(
+  key: string,
+  request: NextRequest,
+  range?: string,
+) {
+  return await s3Client.send(
+    new GetObjectCommand({
+      Bucket: S3_BUCKET_NAME,
+      Key: key,
+      Range: range,
+      IfNoneMatch: request.headers.get("if-none-match") ?? undefined,
+      IfModifiedSince: request.headers.get("if-modified-since")
+        ? new Date(request.headers.get("if-modified-since") as string)
+        : undefined,
+    }),
+  );
+}
+
+async function fetchValidThumbnail(
+  key: string,
+  request: NextRequest,
+): Promise<{ response: GetObjectCommandOutput; buffer: Buffer } | null> {
+  const response = await fetchMediaObject(key, request);
+  if (!response.Body) return null;
+  const buffer = await streamToBuffer(
+    response.Body as AsyncIterable<Uint8Array>,
+  );
+  if (!(await isValidThumbnailBuffer(buffer))) return null;
+  return { response, buffer };
 }
 
 async function generateMissingImageThumbnail(
@@ -63,6 +105,16 @@ async function generateMissingImageThumbnail(
     );
     return null;
   }
+}
+
+async function regenerateAndFetchValidThumbnail(
+  mediaItem: typeof media.$inferSelect,
+  request: NextRequest,
+) {
+  const regeneratedThumbnailKey =
+    await generateMissingImageThumbnail(mediaItem);
+  if (!regeneratedThumbnailKey) return null;
+  return await fetchValidThumbnail(regeneratedThumbnailKey, request);
 }
 
 export async function GET(
@@ -186,61 +238,73 @@ export async function GET(
       s3Key = getThumbnailS3Key(mediaItem.id);
     }
   }
-  const command = new GetObjectCommand({
-    Bucket: S3_BUCKET_NAME,
-    Key: s3Key,
-    Range: requestRange,
-    IfNoneMatch: request.headers.get("if-none-match") ?? undefined,
-    IfModifiedSince: request.headers.get("if-modified-since")
-      ? new Date(request.headers.get("if-modified-since") as string)
-      : undefined,
-  });
   let s3Response: GetObjectCommandOutput;
+  let responseBody: BodyInit | ReadableStream;
+  let responseBodyLength: number | undefined;
+  const shouldValidateThumbnail =
+    variant === "thumbnail" && mediaItem.mimeType.startsWith("image/");
   try {
-    s3Response = await s3Client.send(command);
-    if (
-      variant === "thumbnail" &&
-      mediaItem.mimeType.startsWith("image/") &&
-      !mediaItem.thumbnailS3Key &&
-      s3Key === getThumbnailS3Key(mediaItem.id)
-    ) {
-      await db
-        .update(media)
-        .set({ thumbnailS3Key: s3Key })
-        .where(eq(media.id, mediaItem.id));
+    if (shouldValidateThumbnail) {
+      const validThumbnail = await fetchValidThumbnail(s3Key, request);
+      if (validThumbnail) {
+        s3Response = validThumbnail.response;
+        responseBody = validThumbnail.buffer as unknown as BodyInit;
+        responseBodyLength = validThumbnail.buffer.length;
+        if (
+          !mediaItem.thumbnailS3Key &&
+          s3Key === getThumbnailS3Key(mediaItem.id)
+        ) {
+          await db
+            .update(media)
+            .set({ thumbnailS3Key: s3Key })
+            .where(eq(media.id, mediaItem.id));
+        }
+      } else {
+        const regeneratedThumbnail = await regenerateAndFetchValidThumbnail(
+          mediaItem,
+          request,
+        );
+        if (!regeneratedThumbnail) {
+          return new NextResponse("Failed to generate thumbnail", {
+            status: 502,
+          });
+        }
+        s3Response = regeneratedThumbnail.response;
+        responseBody = regeneratedThumbnail.buffer as unknown as BodyInit;
+        responseBodyLength = regeneratedThumbnail.buffer.length;
+      }
+    } else {
+      s3Response = await fetchMediaObject(s3Key, request, requestRange);
+      responseBody = s3Response.Body as ReadableStream;
     }
   } catch (error: any) {
     if (error?.$metadata?.httpStatusCode === 304) {
       return new NextResponse(null, { status: 304 });
     }
-    if (variant === "thumbnail" && mediaItem.mimeType.startsWith("image/")) {
-      const regeneratedThumbnailKey =
-        await generateMissingImageThumbnail(mediaItem);
-      if (regeneratedThumbnailKey) {
-        try {
-          s3Response = await s3Client.send(
-            new GetObjectCommand({
-              Bucket: S3_BUCKET_NAME,
-              Key: regeneratedThumbnailKey,
-              Range: requestRange,
-              IfNoneMatch: request.headers.get("if-none-match") ?? undefined,
-              IfModifiedSince: request.headers.get("if-modified-since")
-                ? new Date(request.headers.get("if-modified-since") as string)
-                : undefined,
-            }),
-          );
-        } catch (retryError: any) {
-          if (retryError?.$metadata?.httpStatusCode === 304) {
-            return new NextResponse(null, { status: 304 });
-          }
-          logger.error(
-            "Failed to fetch regenerated thumbnail from S3:",
-            retryError,
-          );
-          return new NextResponse("Failed to fetch media", { status: 502 });
+    if (shouldValidateThumbnail) {
+      try {
+        const regeneratedThumbnail = await regenerateAndFetchValidThumbnail(
+          mediaItem,
+          request,
+        );
+        if (regeneratedThumbnail) {
+          s3Response = regeneratedThumbnail.response;
+          responseBody = regeneratedThumbnail.buffer as unknown as BodyInit;
+          responseBodyLength = regeneratedThumbnail.buffer.length;
+        } else {
+          logger.error(`Failed to fetch or regenerate thumbnail:`, error);
+          return new NextResponse("Failed to generate thumbnail", {
+            status: 502,
+          });
         }
-      } else {
-        logger.error(`Failed to fetch from S3:`, error);
+      } catch (retryError: any) {
+        if (retryError?.$metadata?.httpStatusCode === 304) {
+          return new NextResponse(null, { status: 304 });
+        }
+        logger.error(
+          "Failed to fetch regenerated thumbnail from S3:",
+          retryError,
+        );
         return new NextResponse("Failed to fetch media", { status: 502 });
       }
     } else {
@@ -255,7 +319,9 @@ export async function GET(
       (variant === "thumbnail" ? "image/jpeg" : mediaItem.mimeType),
   );
   headers.set("X-Content-Type-Options", "nosniff");
-  if (s3Response.ContentLength) {
+  if (responseBodyLength) {
+    headers.set("Content-Length", String(responseBodyLength));
+  } else if (s3Response.ContentLength) {
     headers.set("Content-Length", String(s3Response.ContentLength));
   }
   if (s3Response.ETag) {
@@ -297,7 +363,7 @@ export async function GET(
   } else {
     headers.set("Content-Disposition", `inline; filename="${filename}"`);
   }
-  return new NextResponse(s3Response.Body as ReadableStream, {
+  return new NextResponse(responseBody, {
     status: s3Response.ContentRange ? 206 : 200,
     headers,
   });

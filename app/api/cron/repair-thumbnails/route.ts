@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { eq, gt } from "drizzle-orm";
 import ffmpeg from "fluent-ffmpeg";
 import { type NextRequest, NextResponse } from "next/server";
@@ -20,12 +20,12 @@ import { recordCronJob } from "@/lib/telemetry";
 const BATCH_SIZE = 500;
 const REPAIR_CONCURRENCY = 8;
 
-async function objectExists(key: string) {
+async function thumbnailIsValid(key: string) {
   try {
-    await s3Client.send(
-      new HeadObjectCommand({ Bucket: process.env.S3_BUCKET_NAME, Key: key }),
-    );
-    return true;
+    const buffer = await getObjectBuffer([key]);
+    if (buffer.length < 32) return false;
+    const metadata = await sharp(buffer, { failOn: "none" }).metadata();
+    return Boolean(metadata.width && metadata.height && metadata.format);
   } catch {
     return false;
   }
@@ -197,14 +197,14 @@ export async function GET(request: NextRequest) {
     });
     const results = await mapLimit(rows, REPAIR_CONCURRENCY, async (item) => {
       const hasThumbnail = item.thumbnailS3Key
-        ? await objectExists(item.thumbnailS3Key)
+        ? await thumbnailIsValid(item.thumbnailS3Key)
         : false;
       if (hasThumbnail) return { repaired: 0, failed: 0 };
       try {
         const canonicalThumbnailS3Key = getThumbnailS3Key(item.id);
         if (
           item.thumbnailS3Key !== canonicalThumbnailS3Key &&
-          (await objectExists(canonicalThumbnailS3Key))
+          (await thumbnailIsValid(canonicalThumbnailS3Key))
         ) {
           await db
             .update(media)

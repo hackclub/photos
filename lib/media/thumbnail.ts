@@ -128,6 +128,88 @@ async function buildRobustImageThumbnail(buffer: Buffer) {
     : new Error("Could not generate image thumbnail");
 }
 
+type DecodedHeicImage = {
+  width: number;
+  height: number;
+  data: Uint8Array | Uint8ClampedArray;
+};
+
+function getHeicDecoder() {
+  let decoder: any = decode;
+  if (typeof decoder !== "function" && typeof decoder?.default === "function") {
+    decoder = decoder.default;
+  }
+  return decoder;
+}
+
+function exactArrayBuffer(buffer: Buffer) {
+  return buffer.buffer.slice(
+    buffer.byteOffset,
+    buffer.byteOffset + buffer.byteLength,
+  );
+}
+
+async function decodeHeicWithFallbacks(buffer: Buffer) {
+  const decoder = getHeicDecoder();
+  const exactBuffer = exactArrayBuffer(buffer);
+  const attempts: Array<() => Promise<DecodedHeicImage>> = [
+    () => decoder({ buffer: exactBuffer }),
+    () => decoder({ buffer: Buffer.from(buffer) }),
+    async () => {
+      if (typeof decoder.all !== "function") {
+        throw new Error("HEIC decoder does not support all()");
+      }
+      const images = await decoder.all({ buffer: exactBuffer });
+      try {
+        if (!images || images.length === 0) {
+          throw new Error("HEIC decoder returned no images");
+        }
+        const decodedImages = await Promise.all(
+          images.map((image: { decode: () => Promise<DecodedHeicImage> }) =>
+            image.decode(),
+          ),
+        );
+        decodedImages.sort((a, b) => b.width * b.height - a.width * a.height);
+        return decodedImages[0];
+      } finally {
+        if (typeof images?.dispose === "function") {
+          images.dispose();
+        }
+      }
+    },
+    async () => {
+      if (typeof decoder.all !== "function") {
+        throw new Error("HEIC decoder does not support all()");
+      }
+      const images = await decoder.all({ buffer: Buffer.from(buffer) });
+      try {
+        if (!images || images.length === 0) {
+          throw new Error("HEIC decoder returned no images");
+        }
+        return await images[0].decode();
+      } finally {
+        if (typeof images?.dispose === "function") {
+          images.dispose();
+        }
+      }
+    },
+  ];
+  let lastError: unknown;
+  for (const attempt of attempts) {
+    try {
+      const decoded = await attempt();
+      if (decoded.width && decoded.height && decoded.data?.length) {
+        return decoded;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Could not decode HEIC image");
+}
+
 async function uploadThumbnail(
   thumbnailBuffer: Buffer,
   mediaId: string,
@@ -149,16 +231,23 @@ async function generateImageThumbnailBuffer(
   exifBuffer?: Buffer;
 }> {
   if (isHeicMimeType(mimeType)) {
-    let decoder: any = decode;
-    if (
-      typeof decoder !== "function" &&
-      typeof decoder?.default === "function"
-    ) {
-      decoder = decoder.default;
+    try {
+      const image = sharp(buffer, { failOn: "none", limitInputPixels: false });
+      const metadata = await image.metadata();
+      const thumbnailBuffer = await buildRobustImageThumbnail(buffer);
+      return {
+        thumbnailBuffer,
+        width: metadata.width,
+        height: metadata.height,
+        exifBuffer: buffer,
+      };
+    } catch (sharpError) {
+      logger.info(
+        { error: sharpError },
+        "Sharp could not decode HEIC thumbnail source, using HEIC decoder",
+      );
     }
-    const { width, height, data } = await decoder({
-      buffer: new Uint8Array(buffer).buffer,
-    });
+    const { width, height, data } = await decodeHeicWithFallbacks(buffer);
     const thumbnailBuffer = await encodeJpegThumbnail(
       sharp(Buffer.from(data), { raw: { width, height, channels: 4 } }),
     );
