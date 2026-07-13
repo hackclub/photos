@@ -1,0 +1,1 @@
+ALTER TABLE "media" ALTER COLUMN "file_size" SET DATA TYPE bigint;

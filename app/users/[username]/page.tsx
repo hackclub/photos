@@ -48,11 +48,7 @@ export async function generateMetadata({
       where: eq(media.id, photo),
     });
     if (photoMedia?.uploadedById === user.id) {
-      const imagePath =
-        photoMedia.mimeType === "image/heic" ||
-        photoMedia.mimeType === "image/heif"
-          ? `/media/${photoMedia.id}/display`
-          : `/media/${photoMedia.id}`;
+      const imagePath = `/media/${photoMedia.id}`;
       return createOgMetadata({
         title: `${photoMedia.caption || photoMedia.filename} | ${displayName}`,
         description,

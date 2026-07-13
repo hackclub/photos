@@ -6,8 +6,6 @@ export const ALLOWED_IMAGE_TYPES = [
   "image/png",
   "image/webp",
   "image/gif",
-  "image/heic",
-  "image/heif",
   "image/avif",
   "image/tiff",
 ];
@@ -24,6 +22,53 @@ export const ALLOWED_VIDEO_TYPES = [
   "video/x-msvideo",
   "video/x-matroska",
 ];
+
+const UNSUPPORTED_IMAGE_MIME_TYPES = new Set([
+  "image/heic",
+  "image/heif",
+  "image/heic-sequence",
+  "image/heif-sequence",
+]);
+const UNSUPPORTED_MAJOR_BRANDS = new Set(["heic", "heix", "hevc", "hevx"]);
+const UNSUPPORTED_COMPATIBLE_BRANDS = new Set(["heic", "heix", "hevc", "hevx"]);
+
+type MediaFileDescriptor = {
+  type: string;
+  size: number;
+  name?: string;
+};
+
+function readBrand(data: Uint8Array, offset: number) {
+  if (offset + 4 > data.length) return "";
+  return String.fromCharCode(
+    data[offset],
+    data[offset + 1],
+    data[offset + 2],
+    data[offset + 3],
+  );
+}
+
+export function hasUnsupportedImageIdentity(
+  file: Pick<MediaFileDescriptor, "type" | "name">,
+) {
+  const mimeType = file.type.split(";")[0]?.trim().toLowerCase();
+  return (
+    UNSUPPORTED_IMAGE_MIME_TYPES.has(mimeType) ||
+    /\.(heic|heif)$/i.test(file.name?.trim() ?? "")
+  );
+}
+
+export function isUnsupportedImageBuffer(data: Uint8Array) {
+  if (data.length < 12 || readBrand(data, 4) !== "ftyp") return false;
+  if (UNSUPPORTED_MAJOR_BRANDS.has(readBrand(data, 8))) return true;
+  const boxSize =
+    data[0] * 0x1000000 + data[1] * 0x10000 + data[2] * 0x100 + data[3];
+  const boxEnd = Math.min(data.length, boxSize >= 16 ? boxSize : 16, 4096);
+  for (let offset = 16; offset + 4 <= boxEnd; offset += 4) {
+    if (UNSUPPORTED_COMPATIBLE_BRANDS.has(readBrand(data, offset))) return true;
+  }
+  return false;
+}
 export function validateBannerFile(file: File) {
   if (!ALLOWED_BANNER_TYPES.includes(file.type)) {
     return {
@@ -37,9 +82,17 @@ export function validateBannerFile(file: File) {
   }
   return { valid: true };
 }
-export function validateMediaFile(file: File) {
-  const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
-  const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
+export function validateMediaFile(file: MediaFileDescriptor) {
+  if (hasUnsupportedImageIdentity(file)) {
+    return {
+      valid: false,
+      error:
+        "Unsupported image format. Convert the file to JPEG before uploading.",
+    };
+  }
+  const mimeType = file.type.split(";")[0]?.trim().toLowerCase();
+  const isImage = ALLOWED_IMAGE_TYPES.includes(mimeType);
+  const isVideo = ALLOWED_VIDEO_TYPES.includes(mimeType);
   if (!isImage && !isVideo) {
     return {
       valid: false,

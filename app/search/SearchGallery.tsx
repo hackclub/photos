@@ -42,10 +42,9 @@ const THUMBNAIL_AUTO_RETRIES = 5;
 
 function getMediaProxyUrl(
   mediaId: string,
-  variant: "original" | "thumbnail" | "display" = "original",
+  variant: "original" | "thumbnail" = "original",
 ) {
   if (variant === "thumbnail") return `/media/${mediaId}/thumbnail`;
-  if (variant === "display") return `/media/${mediaId}/display`;
   return `/media/${mediaId}`;
 }
 
@@ -59,12 +58,7 @@ function getThumbnailUrl(item: MediaItem) {
 }
 
 function getFullSizeUrl(item: MediaItem) {
-  return getMediaProxyUrl(
-    item.id,
-    item.mimeType === "image/heic" || item.mimeType === "image/heif"
-      ? "display"
-      : "original",
-  );
+  return getMediaProxyUrl(item.id, "original");
 }
 
 let searchGalleryImageObserver: IntersectionObserver | null = null;

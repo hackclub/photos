@@ -1,20 +1,24 @@
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { and, eq, lt, or } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-import sharp from "sharp";
 import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
 import { logger, recordException, serializeError } from "@/lib/logger";
 import { extractExifData } from "@/lib/media/exif";
+import { createSharp } from "@/lib/media/image-processing";
 import { getSignedDownloadUrl, S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
+import { ALLOWED_IMAGE_TYPES } from "@/lib/media/validation";
 import { extractVideoMetadata } from "@/lib/media/video-metadata";
 import { recordCronJob } from "@/lib/telemetry";
 
 const BATCH_SIZE = 200;
-const REPAIR_CONCURRENCY = 48;
+const REPAIR_CONCURRENCY = 8;
 const MAX_DURATION_MS = 2 * 60 * 60 * 1000;
 const PER_MEDIA_TIMEOUT_MS = 45_000;
 const IMAGE_RANGE_STEPS = [2 * 1024 * 1024, 8 * 1024 * 1024];
+const repairState = globalThis as typeof globalThis & {
+  __exifRepairRunning?: boolean;
+};
 
 type MediaRow = typeof media.$inferSelect;
 
@@ -40,24 +44,6 @@ async function mapLimit<T, R>(
 
 function hasValue(value: unknown) {
   return value !== undefined && value !== null && value !== "";
-}
-
-async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  message: string,
-) {
-  let timeout: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
 }
 
 function getExifObject(item: MediaRow) {
@@ -99,10 +85,20 @@ async function getObjectBuffer(keys: string[], rangeBytes?: number) {
       );
       if (!response.Body) throw new Error("S3 object had no body");
       const chunks: Uint8Array[] = [];
-      for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
+      const maxBytes = rangeBytes ?? IMAGE_RANGE_STEPS.at(-1)!;
+      let size = 0;
+      const body = response.Body as AsyncIterable<Uint8Array> & {
+        destroy?: (error?: Error) => void;
+      };
+      for await (const chunk of body) {
+        size += chunk.length;
+        if (size > maxBytes) {
+          body.destroy?.(new Error("Metadata source exceeds processing limit"));
+          throw new Error("Metadata source exceeds processing limit");
+        }
         chunks.push(chunk);
       }
-      return Buffer.concat(chunks);
+      return Buffer.concat(chunks, size);
     } catch (error) {
       lastError = error;
     }
@@ -117,7 +113,9 @@ async function extractVideoMetadataFromKeys(keys: string[]) {
   for (const key of keys) {
     try {
       const signedUrl = await getSignedDownloadUrl(key, 5 * 60);
-      const metadata = await extractVideoMetadata(signedUrl);
+      const metadata = await extractVideoMetadata(signedUrl, {
+        timeoutMs: PER_MEDIA_TIMEOUT_MS,
+      });
       if (metadata) return metadata;
     } catch (error) {
       lastError = error;
@@ -134,7 +132,7 @@ async function extractImageMetadataFromKeys(keys: string[], mimeType: string) {
     const rangeBuffer = await getObjectBuffer(keys, rangeBytes);
     const [exifResult, imageMetadata] = await Promise.all([
       extractExifData(rangeBuffer, mimeType),
-      sharp(rangeBuffer, { failOn: "none", limitInputPixels: false })
+      createSharp(rangeBuffer, { failOn: "none" })
         .metadata()
         .catch(() => null),
     ]);
@@ -194,6 +192,12 @@ function parseCursor(cursor?: string) {
 }
 
 async function repairExifForMedia(item: MediaRow) {
+  if (
+    item.mimeType.startsWith("image/") &&
+    !ALLOWED_IMAGE_TYPES.includes(item.mimeType)
+  ) {
+    return { scanned: 0, skipped: 1, repaired: 0, failed: 0 };
+  }
   if (
     !item.mimeType.startsWith("image/") &&
     !item.mimeType.startsWith("video/")
@@ -273,6 +277,13 @@ export async function GET(request: NextRequest) {
     recordCronJob("repair_exif", "unauthorized", startedAt);
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (repairState.__exifRepairRunning) {
+    return NextResponse.json(
+      { error: "EXIF repair is already running" },
+      { status: 409 },
+    );
+  }
+  repairState.__exifRepairRunning = true;
   try {
     const cursor = parseCursor(
       request.nextUrl.searchParams.get("cursor") || undefined,
@@ -301,19 +312,7 @@ export async function GET(request: NextRequest) {
     const results = await mapLimit(
       rows,
       REPAIR_CONCURRENCY,
-      (item) =>
-        withTimeout(
-          repairExifForMedia(item),
-          PER_MEDIA_TIMEOUT_MS,
-          `Media metadata repair timed out for ${item.id}`,
-        ).catch(async (error) => {
-          await recordException(error);
-          logger.error(
-            { mediaId: item.id, error: serializeError(error) },
-            "media metadata repair timed out",
-          );
-          return { scanned: 1, skipped: 0, repaired: 0, failed: 1 };
-        }),
+      (item) => repairExifForMedia(item),
       () => Date.now() - startedAt < MAX_DURATION_MS,
     );
     const totals = results.reduce(
@@ -360,5 +359,7 @@ export async function GET(request: NextRequest) {
       { success: false, error: String(error) },
       { status: 500 },
     );
+  } finally {
+    repairState.__exifRepairRunning = false;
   }
 }

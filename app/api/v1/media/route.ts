@@ -55,12 +55,7 @@ export async function GET(req: NextRequest) {
       .offset(isRandom ? 0 : offset);
     const mediaWithUrls = mediaItems.map((item) => {
       const downloadBaseUrl = `${APP_URL}/api/v1/download/${item.id}`;
-      const viewBaseUrl = `${APP_URL}/api/v1/view/${item.id}`;
-      const isHeic =
-        item.mimeType === "image/heic" || item.mimeType === "image/heif";
-      const displayUrl = isHeic
-        ? `${viewBaseUrl}?variant=display&type=media`
-        : `${downloadBaseUrl}?type=media`;
+      const displayUrl = `${downloadBaseUrl}?type=media`;
       return {
         id: item.id,
         url: displayUrl,

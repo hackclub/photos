@@ -1,34 +1,9 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { joinEvent, leaveEvent } from "@/app/actions/events";
 import { getMapData } from "@/app/actions/map";
-import { deleteMedia, updateMediaCaption } from "@/app/actions/media";
-import {
-  addMention,
-  getMediaMentions,
-  removeMention,
-} from "@/app/actions/mentions";
-import { createReport } from "@/app/actions/reports";
 import { globalSearch } from "@/app/actions/search";
-import { createShareLink } from "@/app/actions/sharing";
 import { getRandomMediaIds } from "@/app/actions/signage";
-import {
-  createComment,
-  deleteComment,
-  getMediaComments,
-  getMediaLikes,
-  toggleCommentLike,
-  toggleMediaLike,
-} from "@/app/actions/social";
-import {
-  addTag,
-  getMediaTags,
-  removeTag,
-  searchByTag,
-} from "@/app/actions/tags";
-import { finalizeUpload, getPresignedUrl } from "@/app/actions/upload";
-import { searchUsers } from "@/app/actions/users";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { eventParticipants, media, mediaLikes } from "@/lib/db/schema";
@@ -53,6 +28,7 @@ export async function createTRPCContext() {
 type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
 
 const t = initTRPC.context<TRPCContext>().create();
+const MAX_MOBILE_MEDIA_RESULTS = 500;
 
 const protectedProcedure = t.procedure.use(({ ctx, next }) => {
   if (!ctx.session) throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -260,6 +236,7 @@ export const appRouter = t.router({
                 },
               },
               orderBy: (media, { desc }) => [desc(media.uploadedAt)],
+              limit: MAX_MOBILE_MEDIA_RESULTS,
             },
           },
         });
@@ -367,6 +344,7 @@ export const appRouter = t.router({
                 },
               },
               orderBy: desc(media.uploadedAt),
+              limit: MAX_MOBILE_MEDIA_RESULTS,
             })
           : [];
         const likeRows = allMedia.length
@@ -534,7 +512,7 @@ export const appRouter = t.router({
             country: event.country,
             lat: event.lat,
             lng: event.lng,
-            photoCount: event.photos?.length ?? 0,
+            photoCount: event.photoCount ?? event.photos?.length ?? 0,
             thumbnailUrl: event.photos?.[0]
               ? getMediaProxyUrl(event.photos[0].id, "thumbnail")
               : null,

@@ -9,6 +9,9 @@ import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 import { createOgMetadata } from "@/lib/metadata";
 import { can, getAccessibleEventIds, getUserContext } from "@/lib/policy";
 import { toPublicUser } from "@/lib/user-display";
+
+const MAX_SERIES_PAGE_MEDIA = 2_000;
+
 import SeriesDetailClient from "./SeriesDetailClient";
 export async function generateMetadata({
   params,
@@ -49,11 +52,7 @@ export async function generateMetadata({
       eventIds.has(photoMedia.eventId) &&
       (await can(ctx, "view", "media", photoMedia))
     ) {
-      const imagePath =
-        photoMedia.mimeType === "image/heic" ||
-        photoMedia.mimeType === "image/heif"
-          ? `/media/${photoMedia.id}/display`
-          : `/media/${photoMedia.id}`;
+      const imagePath = `/media/${photoMedia.id}`;
       return createOgMetadata({
         title: `${photoMedia.caption || photoMedia.filename} | ${seriesData.name}`,
         description,
@@ -128,6 +127,7 @@ export default async function SeriesDetailPage({
             },
           },
           orderBy: desc(media.uploadedAt),
+          limit: MAX_SERIES_PAGE_MEDIA,
         })
       : [];
   const likeCounts =

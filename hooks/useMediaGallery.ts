@@ -4,20 +4,14 @@ import type { Event, MediaItem } from "@/types/media";
 
 function getMediaProxyUrl(
   mediaId: string,
-  variant: "original" | "thumbnail" | "display" = "original",
+  variant: "original" | "thumbnail" = "original",
 ) {
   if (variant === "thumbnail") return `/media/${mediaId}/thumbnail`;
-  if (variant === "display") return `/media/${mediaId}/display`;
   return `/media/${mediaId}`;
 }
 
 function getFullSizeProxyUrl(item: MediaItem) {
-  return getMediaProxyUrl(
-    item.id,
-    item.mimeType === "image/heic" || item.mimeType === "image/heif"
-      ? "display"
-      : "original",
-  );
+  return getMediaProxyUrl(item.id, "original");
 }
 
 function isImageMedia(item: MediaItem) {

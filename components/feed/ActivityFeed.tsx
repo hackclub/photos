@@ -20,6 +20,22 @@ type ActivityFeedProps = {
   type: "global" | "event" | "series";
   pollInterval?: number;
 };
+const MAX_FEED_ITEMS = 500;
+const MAX_FEED_IMAGE_URLS = 600;
+
+function capFeedItems(items: FeedItemType[]) {
+  return items.slice(0, MAX_FEED_ITEMS);
+}
+
+function capImageUrls(urls: Map<string, string>) {
+  while (urls.size > MAX_FEED_IMAGE_URLS) {
+    const oldestKey = urls.keys().next().value;
+    if (!oldestKey) break;
+    urls.delete(oldestKey);
+  }
+  return urls;
+}
+
 export default function ActivityFeed({
   fetchData,
   type,
@@ -73,9 +89,9 @@ export default function ActivityFeed({
             const uniqueItems = newItems.filter(
               (item: FeedItemType) => !existingIds.has(item.id),
             );
-            return [...prev, ...uniqueItems];
+            return capFeedItems([...prev, ...uniqueItems]);
           }
-          return newItems;
+          return capFeedItems(newItems);
         });
         setHasMore(data.hasMore);
         setError(null);
@@ -92,7 +108,7 @@ export default function ActivityFeed({
                 for (const [mediaId, url] of Object.entries(result.urls!)) {
                   newUrls.set(mediaId, url as string);
                 }
-                return newUrls;
+                return capImageUrls(newUrls);
               });
             }
           } catch (err) {
@@ -132,8 +148,11 @@ export default function ActivityFeed({
       return;
     }
     let reconnectAttempt = 0;
+    let disposed = false;
     const maxReconnectDelay = 30000;
     const connect = () => {
+      if (disposed) return;
+      eventSourceRef.current?.close();
       const eventSource = new EventSource("/api/feed/stream");
       eventSourceRef.current = eventSource;
       eventSource.onopen = () => {
@@ -165,7 +184,7 @@ export default function ActivityFeed({
                   return next;
                 });
               }, 5000);
-              return [data.item, ...prev];
+              return capFeedItems([data.item, ...prev]);
             });
             if (data.item.media) {
               import("@/app/actions/media").then(({ getMediaUrls }) => {
@@ -178,7 +197,7 @@ export default function ActivityFeed({
                           data.item.media.id,
                           result.urls![data.item.media.id],
                         );
-                        return newUrls;
+                        return capImageUrls(newUrls);
                       });
                     }
                   })
@@ -205,9 +224,13 @@ export default function ActivityFeed({
         }
       };
       eventSource.onerror = (err) => {
+        if (disposed || eventSourceRef.current !== eventSource) return;
         logger.error("[ActivityFeed] SSE error:", err);
         setIsLive(false);
-        if (eventSource.readyState === EventSource.CLOSED) {
+        if (
+          eventSource.readyState === EventSource.CLOSED &&
+          !reconnectTimeoutRef.current
+        ) {
           reconnectAttempt++;
           setReconnectAttempts(reconnectAttempt);
           const delay = Math.min(
@@ -215,6 +238,7 @@ export default function ActivityFeed({
             maxReconnectDelay,
           );
           reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectTimeoutRef.current = null;
             connect();
           }, delay) as unknown as NodeJS.Timeout;
         }
@@ -222,6 +246,7 @@ export default function ActivityFeed({
     };
     connect();
     return () => {
+      disposed = true;
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
@@ -250,7 +275,7 @@ export default function ActivityFeed({
             (item: FeedItemType) => !existingIds.has(item.id),
           );
           if (uniqueNewItems.length > 0) {
-            setItems((prev) => [...uniqueNewItems, ...prev]);
+            setItems((prev) => capFeedItems([...uniqueNewItems, ...prev]));
             const mediaIds = uniqueNewItems
               .filter((item: FeedItemType) => item.media)
               .map((item: FeedItemType) => item.media?.id);
@@ -263,7 +288,7 @@ export default function ActivityFeed({
                   for (const [mediaId, url] of Object.entries(result.urls!)) {
                     newUrls.set(mediaId, url as string);
                   }
-                  return newUrls;
+                  return capImageUrls(newUrls);
                 });
               }
             }

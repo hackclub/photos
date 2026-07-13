@@ -44,10 +44,52 @@ const requireEnv = (name: string): string => {
 const s3BucketName = requireEnv("S3_BUCKET_NAME");
 const s3AccessKeyId = requireEnv("S3_ACCESS_KEY_ID");
 const s3SecretAccessKey = requireEnv("S3_SECRET_ACCESS_KEY");
+const configuredMaxSockets = Number(process.env.S3_MAX_SOCKETS ?? 100);
+const maxSockets = Number.isFinite(configuredMaxSockets)
+  ? Math.max(10, Math.min(200, Math.floor(configuredMaxSockets)))
+  : 100;
+const timeoutFromEnv = (name: string, fallback: number, maximum: number) => {
+  const configured = Number(process.env[name] ?? fallback);
+  return Number.isFinite(configured)
+    ? Math.max(1_000, Math.min(maximum, Math.floor(configured)))
+    : fallback;
+};
+const connectionTimeout = timeoutFromEnv(
+  "S3_CONNECTION_TIMEOUT_MS",
+  10_000,
+  60_000,
+);
+const socketTimeout = timeoutFromEnv(
+  "S3_SOCKET_TIMEOUT_MS",
+  120_000,
+  10 * 60_000,
+);
+const requestTimeout = timeoutFromEnv(
+  "S3_REQUEST_TIMEOUT_MS",
+  10 * 60_000,
+  60 * 60_000,
+);
+const globalS3 = globalThis as typeof globalThis & {
+  __photosS3Agent?: Agent;
+  __photosS3Client?: S3Client;
+};
+const httpsAgent =
+  globalS3.__photosS3Agent ??
+  new Agent({
+    keepAlive: true,
+    maxFreeSockets: Math.min(10, maxSockets),
+    maxSockets,
+    maxTotalSockets: maxSockets,
+  });
+globalS3.__photosS3Agent = httpsAgent;
 
 const s3Config: S3ClientConfig = {
   requestHandler: new NodeHttpHandler({
-    httpsAgent: new Agent({ maxSockets: 1000 }),
+    httpsAgent,
+    connectionTimeout,
+    requestTimeout,
+    socketTimeout,
+    throwOnRequestTimeout: true,
     socketAcquisitionWarningTimeout: 10000,
   }),
   region: resolveS3Region(),
@@ -73,7 +115,8 @@ if (forcePathStyleFromEnv) {
 if (!forcePathStyleFromEnv && endpoint?.includes(".r2.cloudflarestorage.com")) {
   s3Config.forcePathStyle = true;
 }
-const s3Client = new S3Client(s3Config);
+const s3Client = globalS3.__photosS3Client ?? new S3Client(s3Config);
+globalS3.__photosS3Client = s3Client;
 export const S3_BUCKET_NAME = s3BucketName;
 
 async function traceStorageOperation<T>(
@@ -476,13 +519,10 @@ export async function getDetailedStorageStats(): Promise<{
 }
 export function getMediaProxyUrl(
   mediaId: string,
-  variant: "original" | "thumbnail" | "display" = "original",
+  variant: "original" | "thumbnail" = "original",
 ): string {
   if (variant === "thumbnail") {
     return `/media/${mediaId}/thumbnail`;
-  }
-  if (variant === "display") {
-    return `/media/${mediaId}/display`;
   }
   return `/media/${mediaId}`;
 }

@@ -56,7 +56,7 @@ export async function GET(
     });
     let s3Response: GetObjectCommandOutput;
     try {
-      s3Response = await s3Client.send(command);
+      s3Response = await s3Client.send(command, { abortSignal: req.signal });
     } catch (error) {
       logger.error("Failed to fetch export file from S3:", error);
       return NextResponse.json(

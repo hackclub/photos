@@ -34,9 +34,9 @@ export async function GET(
     return new Response("Not Found", { status: 404 });
   }
   const searchParams = req.nextUrl.searchParams;
-  const variant = searchParams.get("variant") || "display";
+  const variant = searchParams.get("variant") || "original";
   const type = searchParams.get("type") || "media";
-  if (!["display", "thumbnail", "original"].includes(variant)) {
+  if (!["thumbnail", "original"].includes(variant)) {
     return new Response("Invalid variant", { status: 400 });
   }
   try {

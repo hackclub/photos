@@ -4,14 +4,28 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Readable } from "node:stream";
+import { finished } from "node:stream/promises";
 import { ZipArchive } from "archiver";
-import { and, eq, gt } from "drizzle-orm";
+import { and, count, eq, gt, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
+import { withDataExportSlot } from "@/lib/concurrency";
 import { db } from "@/lib/db";
-import { dataExports, users } from "@/lib/db/schema";
+import {
+  apiKeys,
+  dataExports,
+  eventParticipants,
+  events,
+  media,
+  mediaComments,
+  mediaLikes,
+  mediaMentions,
+  series,
+  users,
+} from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { deleteFromS3, uploadToS3 } from "@/lib/media/s3";
 import { getUserContext } from "@/lib/policy";
@@ -24,6 +38,7 @@ const DATA_EXPORT_REDACTED_KEYS = new Set([
 ]);
 const MAX_EXPORT_MEDIA_FILES = 5000;
 const MAX_EXPORT_MEDIA_BYTES = 20 * 1024 * 1024 * 1024;
+const MAX_EXPORT_METADATA_RECORDS = 50_000;
 
 function redactDataExportValue(key: string, value: unknown) {
   if (DATA_EXPORT_REDACTED_KEYS.has(key)) return undefined;
@@ -83,7 +98,17 @@ export async function requestDataExport() {
       status: "pending",
     });
     after(async () => {
-      await processDataExport(newExport.id, user.id);
+      try {
+        await withDataExportSlot(() =>
+          processDataExport(newExport.id, user.id),
+        );
+      } catch (error) {
+        logger.error("Data export admission failed:", error);
+        await db
+          .update(dataExports)
+          .set({ status: "failed" })
+          .where(eq(dataExports.id, newExport.id));
+      }
     });
     revalidatePath("/settings");
     return { success: true };
@@ -93,11 +118,44 @@ export async function requestDataExport() {
   }
 }
 async function processDataExport(exportId: string, userId: string) {
+  let cleanupTempPath: string | undefined;
+  let activeOutput: ReturnType<typeof createWriteStream> | undefined;
+  let activeArchive: ZipArchive | undefined;
   try {
     await db
       .update(dataExports)
       .set({ status: "processing" })
       .where(eq(dataExports.id, exportId));
+    const [mediaSummary] = await db
+      .select({
+        fileCount: count(),
+        totalBytes: sql<number>`COALESCE(SUM(${media.fileSize}), 0)`.mapWith(
+          Number,
+        ),
+      })
+      .from(media)
+      .where(eq(media.uploadedById, userId));
+    if (
+      (mediaSummary?.fileCount ?? 0) > MAX_EXPORT_MEDIA_FILES ||
+      (mediaSummary?.totalBytes ?? 0) > MAX_EXPORT_MEDIA_BYTES
+    ) {
+      throw new Error("Data export too large");
+    }
+    const metadataCounts = await Promise.all([
+      db.$count(series, eq(series.createdById, userId)),
+      db.$count(events, eq(events.createdById, userId)),
+      db.$count(eventParticipants, eq(eventParticipants.userId, userId)),
+      db.$count(mediaLikes, eq(mediaLikes.userId, userId)),
+      db.$count(mediaComments, eq(mediaComments.userId, userId)),
+      db.$count(mediaMentions, eq(mediaMentions.userId, userId)),
+      db.$count(apiKeys, eq(apiKeys.userId, userId)),
+    ]);
+    if (
+      metadataCounts.reduce((sum, value) => sum + value, 0) >
+      MAX_EXPORT_METADATA_RECORDS
+    ) {
+      throw new Error("Data export metadata is too large");
+    }
     const userData = await db.query.users.findFirst({
       where: eq(users.id, userId),
       columns: {
@@ -135,17 +193,41 @@ async function processDataExport(exportId: string, userId: string) {
         },
         mediaLikes: {
           with: {
-            media: true,
+            media: {
+              columns: {
+                id: true,
+                eventId: true,
+                filename: true,
+                mimeType: true,
+                uploadedAt: true,
+              },
+            },
           },
         },
         mediaComments: {
           with: {
-            media: true,
+            media: {
+              columns: {
+                id: true,
+                eventId: true,
+                filename: true,
+                mimeType: true,
+                uploadedAt: true,
+              },
+            },
           },
         },
         mentions: {
           with: {
-            media: true,
+            media: {
+              columns: {
+                id: true,
+                eventId: true,
+                filename: true,
+                mimeType: true,
+                uploadedAt: true,
+              },
+            },
           },
         },
         apiKeys: true,
@@ -154,38 +236,36 @@ async function processDataExport(exportId: string, userId: string) {
     if (!userData) {
       throw new Error("User not found");
     }
-    const safeUserData = JSON.parse(
-      JSON.stringify(
-        {
-          ...userData,
-          apiKeys: userData.apiKeys.map((key) => ({
-            ...key,
-            key: `${key.key.substring(0, 8)}...`,
-          })),
-        },
-        redactDataExportValue,
-      ),
-    );
     const downloadId = randomBytes(16).toString("hex");
     const tempPath = join(tmpdir(), `data-export-${downloadId}.zip`);
     const output = createWriteStream(tempPath);
     const archive = new ZipArchive({ zlib: { level: 6 } });
+    cleanupTempPath = tempPath;
+    activeOutput = output;
+    activeArchive = archive;
     archive.pipe(output);
-    const jsonContent = JSON.stringify(safeUserData, null, 2);
+    const outputCompleted = new Promise<void>((resolve, reject) => {
+      output.once("close", resolve);
+      output.once("error", reject);
+      archive.once("error", reject);
+    }).then(
+      () => null,
+      (error: unknown) =>
+        error instanceof Error ? error : new Error(String(error)),
+    );
+    const jsonContent = JSON.stringify(
+      {
+        ...userData,
+        apiKeys: userData.apiKeys.map((key) => ({
+          ...key,
+          key: `${key.key.substring(0, 8)}...`,
+        })),
+      },
+      redactDataExportValue,
+      2,
+    );
     archive.append(jsonContent, { name: "user-data.json" });
     const mediaItems = userData.uploadedMedia || [];
-    const totalMediaBytes = mediaItems.reduce(
-      (sum, item) => sum + (item.fileSize || 0),
-      0,
-    );
-    if (
-      mediaItems.length > MAX_EXPORT_MEDIA_FILES ||
-      totalMediaBytes > MAX_EXPORT_MEDIA_BYTES
-    ) {
-      archive.abort();
-      await unlink(tempPath).catch(() => {});
-      throw new Error("Data export too large");
-    }
     for (const [index, item] of mediaItems.entries()) {
       if (index % 5 === 0) {
         const currentExport = await db.query.dataExports.findFirst({
@@ -194,6 +274,7 @@ async function processDataExport(exportId: string, userId: string) {
         });
         if (currentExport?.status === "cancelled") {
           archive.abort();
+          output.destroy();
           await unlink(tempPath).catch(() => {});
           return;
         }
@@ -211,24 +292,23 @@ async function processDataExport(exportId: string, userId: string) {
             ? "photos"
             : "videos";
           const zipPath = `media/${folder}/${safeFilename(item.filename)}`;
-          archive.append(response.Body as NodeJS.ReadableStream & any, {
+          const source = response.Body as Readable;
+          archive.append(source, {
             name: zipPath,
             date:
               item.uploadedAt instanceof Date
                 ? item.uploadedAt
                 : new Date(item.uploadedAt),
           });
+          await finished(source, { cleanup: true });
         }
       } catch (err) {
         logger.error(`Failed to add media ${item.id} to export:`, err);
       }
     }
     await archive.finalize();
-    await new Promise<void>((resolve, reject) => {
-      output.on("close", resolve);
-      output.on("error", reject);
-      archive.on("error", reject);
-    });
+    const outputError = await outputCompleted;
+    if (outputError) throw outputError;
     const s3Key = `exports/${exportId}/archive.zip`;
     const fileStats = await stat(tempPath);
     await uploadToS3(
@@ -261,6 +341,9 @@ async function processDataExport(exportId: string, userId: string) {
       logger.error("Failed to remove temporary export file:", error);
     });
   } catch (error) {
+    activeArchive?.abort();
+    activeOutput?.destroy();
+    if (cleanupTempPath) await unlink(cleanupTempPath).catch(() => {});
     logger.error("Data export failed:", error);
     const currentExport = await db.query.dataExports.findFirst({
       where: eq(dataExports.id, exportId),

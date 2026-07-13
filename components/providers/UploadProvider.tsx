@@ -14,6 +14,8 @@ import { finalizeUpload, getPresignedUrl } from "@/app/actions/upload";
 import { trackRybbitEvent } from "@/components/analytics/RybbitUserIdentifier";
 import { logger } from "@/lib/client-logger";
 import {
+  ALLOWED_IMAGE_TYPES,
+  ALLOWED_VIDEO_TYPES,
   extractMetadata,
   generateThumbnail,
   getAdaptiveUploadLimits,
@@ -93,6 +95,13 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     const validFiles: File[] = [];
     const rejectedFiles: string[] = [];
     newFiles.forEach((file) => {
+      if (
+        !ALLOWED_IMAGE_TYPES.includes(file.type) &&
+        !ALLOWED_VIDEO_TYPES.includes(file.type)
+      ) {
+        rejectedFiles.push(`${file.name} (unsupported file type)`);
+        return;
+      }
       if (file.type.startsWith("image/") && file.size > MAX_IMAGE_SIZE) {
         rejectedFiles.push(`${file.name} (image too large > 50MB)`);
         return;
@@ -222,7 +231,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         takenAt: null,
       };
       const [thumbnailResult, extractedMetadata] = await Promise.allSettled([
-        generateThumbnail(fileObj.file),
+        generateThumbnail(fileObj.file, abortController.signal),
         extractMetadata(fileObj.file),
       ]);
       if (thumbnailResult.status === "fulfilled") {

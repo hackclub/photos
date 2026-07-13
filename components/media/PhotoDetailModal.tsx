@@ -54,7 +54,6 @@ import {
 import { searchUsers } from "@/app/actions/users";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import UserAvatar from "@/components/ui/UserAvatar";
-import { useHeicUrl } from "@/hooks/useHeicUrl";
 import { logger } from "@/lib/client-logger";
 import {
   formatAperture,
@@ -242,7 +241,7 @@ export default function PhotoDetailModal({
   >("idle");
 
   const MAX_IMAGE_AUTO_RETRIES = 2;
-  const { displayUrl } = useHeicUrl(fullSizeUrl ?? "", media.filename);
+  const resolvedUrl = fullSizeUrl ?? "";
   useEffect(() => {
     setBlurRegions(blurDraft?.regions ?? []);
     setBlurStart(null);
@@ -250,17 +249,17 @@ export default function PhotoDetailModal({
     setBlurSaveState(blurDraft ? "saved" : "idle");
   }, [blurDraft]);
   const effectiveUrl = useMemo(() => {
-    if (!displayUrl) return null;
-    if (retryCount === 0) return displayUrl;
+    if (!resolvedUrl) return null;
+    if (retryCount === 0) return resolvedUrl;
     try {
-      const url = new URL(displayUrl, window.location.origin);
+      const url = new URL(resolvedUrl, window.location.origin);
       url.searchParams.set("t", Date.now().toString());
       return url.toString();
     } catch (_e) {
-      return displayUrl;
+      return resolvedUrl;
     }
-  }, [displayUrl, retryCount]);
-  const imageIdentity = `${media.id}:${displayUrl ?? ""}`;
+  }, [resolvedUrl, retryCount]);
+  const imageIdentity = `${media.id}:${resolvedUrl}`;
   useEffect(() => {
     if (!imageIdentity) return;
     setImageLoaded(false);
@@ -1198,13 +1197,6 @@ export default function PhotoDetailModal({
                     <p>ID: {media.id}</p>
                     <p>MIME: {media.mimeType}</p>
                     <p>URL: {effectiveUrl}</p>
-                    <p>
-                      HEIC:{" "}
-                      {media.mimeType === "image/heic" ||
-                      media.mimeType === "image/heif"
-                        ? "Yes"
-                        : "No"}
-                    </p>
                   </div>
                 </div>
 
@@ -1315,10 +1307,7 @@ export default function PhotoDetailModal({
                   <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black/10 pointer-events-none">
                     <LoadingSpinner size="xl" label="Loading image..." center />
                     <div className="rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-xs text-zinc-300 shadow-lg backdrop-blur-md">
-                      {media.mimeType === "image/heic" ||
-                      media.mimeType === "image/heif"
-                        ? "Converting HEIC..."
-                        : "Loading photo..."}
+                      Loading photo...
                     </div>
                   </div>
                 )}

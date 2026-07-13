@@ -4,33 +4,73 @@ import {
 } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-import sharp from "sharp";
 import { verifySessionToken } from "@/lib/auth";
 import { getUserContext } from "@/lib/auth-api";
 import { db } from "@/lib/db";
 import { media, users } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
-import { convertHeicToJpeg } from "@/lib/media/heic";
+import {
+  createSharp,
+  MAX_BUFFERED_IMAGE_BYTES,
+  withMediaBufferingSlot,
+} from "@/lib/media/image-processing";
 import { S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
 import {
   generateAndUploadThumbnail,
   getThumbnailS3Key,
 } from "@/lib/media/thumbnail";
+import { ALLOWED_IMAGE_TYPES } from "@/lib/media/validation";
 import { can } from "@/lib/policy";
 import { contentDispositionFilename } from "@/lib/safe-filename";
 
-async function streamToBuffer(stream: AsyncIterable<Uint8Array>) {
+const MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024;
+const mediaRouteGlobal = globalThis as typeof globalThis & {
+  __photosPendingMissingThumbnails?: Map<string, Promise<string | null>>;
+  __photosFailedThumbnailUntil?: Map<string, number>;
+};
+const pendingMissingThumbnails =
+  mediaRouteGlobal.__photosPendingMissingThumbnails ?? new Map();
+const failedThumbnailUntil =
+  mediaRouteGlobal.__photosFailedThumbnailUntil ?? new Map();
+mediaRouteGlobal.__photosPendingMissingThumbnails = pendingMissingThumbnails;
+mediaRouteGlobal.__photosFailedThumbnailUntil = failedThumbnailUntil;
+const THUMBNAIL_FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
+const MAX_FAILURE_COOLDOWNS = 1_000;
+
+function rememberThumbnailFailure(mediaId: string) {
+  const now = Date.now();
+  for (const [id, expiresAt] of failedThumbnailUntil) {
+    if (expiresAt <= now) failedThumbnailUntil.delete(id);
+  }
+  while (failedThumbnailUntil.size >= MAX_FAILURE_COOLDOWNS) {
+    const oldestId = failedThumbnailUntil.keys().next().value;
+    if (!oldestId) break;
+    failedThumbnailUntil.delete(oldestId);
+  }
+  failedThumbnailUntil.set(mediaId, now + THUMBNAIL_FAILURE_COOLDOWN_MS);
+}
+
+async function streamToBuffer(
+  stream: AsyncIterable<Uint8Array> & { destroy?: (error?: Error) => void },
+  maxBytes: number,
+) {
   const chunks: Uint8Array[] = [];
+  let size = 0;
   for await (const chunk of stream) {
+    size += chunk.length;
+    if (size > maxBytes) {
+      stream.destroy?.(new Error("Media object exceeds processing limit"));
+      throw new Error("Media object exceeds processing limit");
+    }
     chunks.push(chunk);
   }
-  return Buffer.concat(chunks);
+  return Buffer.concat(chunks, size);
 }
 
 async function isValidThumbnailBuffer(buffer: Buffer) {
   if (buffer.length < 32) return false;
   try {
-    const metadata = await sharp(buffer, { failOn: "none" }).metadata();
+    const metadata = await createSharp(buffer, { failOn: "none" }).metadata();
     return Boolean(metadata.width && metadata.height && metadata.format);
   } catch {
     return false;
@@ -52,6 +92,7 @@ async function fetchMediaObject(
         ? new Date(request.headers.get("if-modified-since") as string)
         : undefined,
     }),
+    { abortSignal: request.signal },
   );
 }
 
@@ -62,13 +103,16 @@ async function fetchValidThumbnail(
   const response = await fetchMediaObject(key, request);
   if (!response.Body) return null;
   const buffer = await streamToBuffer(
-    response.Body as AsyncIterable<Uint8Array>,
+    response.Body as AsyncIterable<Uint8Array> & {
+      destroy?: (error?: Error) => void;
+    },
+    MAX_THUMBNAIL_BYTES,
   );
   if (!(await isValidThumbnailBuffer(buffer))) return null;
   return { response, buffer };
 }
 
-async function generateMissingImageThumbnail(
+async function generateMissingImageThumbnailInternal(
   mediaItem: typeof media.$inferSelect,
 ) {
   if (!mediaItem.mimeType.startsWith("image/")) return null;
@@ -81,7 +125,10 @@ async function generateMissingImageThumbnail(
     );
     if (!source.Body) throw new Error("S3 object had no body");
     const buffer = await streamToBuffer(
-      source.Body as AsyncIterable<Uint8Array>,
+      source.Body as AsyncIterable<Uint8Array> & {
+        destroy?: (error?: Error) => void;
+      },
+      MAX_BUFFERED_IMAGE_BYTES,
     );
     const thumbnailS3Key = await generateAndUploadThumbnail(
       buffer,
@@ -104,6 +151,34 @@ async function generateMissingImageThumbnail(
       "thumbnail generation failed",
     );
     return null;
+  }
+}
+
+async function generateMissingImageThumbnail(
+  mediaItem: typeof media.$inferSelect,
+) {
+  const failureExpiresAt = failedThumbnailUntil.get(mediaItem.id);
+  if (failureExpiresAt && failureExpiresAt > Date.now()) return null;
+  if (failureExpiresAt) failedThumbnailUntil.delete(mediaItem.id);
+  const existing = pendingMissingThumbnails.get(mediaItem.id);
+  if (existing) return await existing;
+
+  const generation = withMediaBufferingSlot(() =>
+    generateMissingImageThumbnailInternal(mediaItem),
+  );
+  pendingMissingThumbnails.set(mediaItem.id, generation);
+  try {
+    const thumbnailS3Key = await generation;
+    if (thumbnailS3Key) {
+      failedThumbnailUntil.delete(mediaItem.id);
+    } else {
+      rememberThumbnailFailure(mediaItem.id);
+    }
+    return thumbnailS3Key;
+  } finally {
+    if (pendingMissingThumbnails.get(mediaItem.id) === generation) {
+      pendingMissingThumbnails.delete(mediaItem.id);
+    }
   }
 }
 
@@ -133,7 +208,7 @@ export async function GET(
     return new NextResponse("Media not found", { status: 404 });
   }
   const variant = variantPath?.[0];
-  if (variant && !["thumbnail", "display", "original"].includes(variant)) {
+  if (variant && !["thumbnail", "original"].includes(variant)) {
     return new NextResponse("Not found", { status: 404 });
   }
   const searchParams = request.nextUrl.searchParams;
@@ -201,30 +276,12 @@ export async function GET(
     return new NextResponse("Unauthorized", { status: 401 });
   }
   if (
-    variant === "display" &&
-    (mediaItem.mimeType === "image/heic" || mediaItem.mimeType === "image/heif")
+    mediaItem.mimeType.startsWith("image/") &&
+    !ALLOWED_IMAGE_TYPES.includes(mediaItem.mimeType)
   ) {
-    try {
-      const jpegBuffer = await convertHeicToJpeg(mediaItem.s3Key);
-      const headers = new Headers();
-      headers.set("Content-Type", "image/jpeg");
-      headers.set("Content-Length", String(jpegBuffer.length));
-      if (mediaItem.event.visibility === "public") {
-        headers.set("Cache-Control", "public, max-age=3600, s-maxage=31536000");
-      } else {
-        headers.set("Cache-Control", "private, max-age=3600");
-      }
-      const jpgFilename = contentDispositionFilename(
-        mediaItem.filename.replace(/\.(heic|heif)$/i, ".jpg"),
-      );
-      headers.set("Content-Disposition", `inline; filename="${jpgFilename}"`);
-      return new NextResponse(jpegBuffer as unknown as BodyInit, {
-        status: 200,
-        headers,
-      });
-    } catch (error) {
-      logger.error("HEIC conversion failed:", error);
-    }
+    return new NextResponse("Unsupported image format", {
+      status: 415,
+    });
   }
   let s3Key = mediaItem.s3Key;
   let filename = contentDispositionFilename(mediaItem.filename);

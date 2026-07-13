@@ -11,6 +11,9 @@ import { logger, recordException, serializeError } from "@/lib/logger";
 import { deleteFromS3Batch, s3Client } from "@/lib/media/s3";
 import { recordCronJob } from "@/lib/telemetry";
 export const maxDuration = 300;
+const cleanupState = globalThis as typeof globalThis & {
+  __ghostFileCleanupRunning?: boolean;
+};
 export async function GET(req: NextRequest) {
   const startedAt = Date.now();
   const authHeader = req.headers.get("authorization");
@@ -21,6 +24,13 @@ export async function GET(req: NextRequest) {
     recordCronJob("cleanup_ghost_files", "unauthorized", startedAt);
     return new NextResponse("Unauthorized", { status: 401 });
   }
+  if (cleanupState.__ghostFileCleanupRunning) {
+    return NextResponse.json(
+      { error: "Ghost file cleanup is already running" },
+      { status: 409 },
+    );
+  }
+  cleanupState.__ghostFileCleanupRunning = true;
   const { searchParams } = new URL(req.url);
   const force = searchParams.get("force") === "true";
   const cursor = searchParams.get("cursor") || undefined;
@@ -147,5 +157,7 @@ export async function GET(req: NextRequest) {
       { success: false, error: String(error) },
       { status: 500 },
     );
+  } finally {
+    cleanupState.__ghostFileCleanupRunning = false;
   }
 }

@@ -54,6 +54,7 @@ interface EventLocation {
   country: string | null;
   lat: number | null;
   lng: number | null;
+  photoCount?: number;
   photos?: SimplePhoto[];
 }
 interface MapData {
@@ -447,7 +448,7 @@ export default function PhotoMap() {
       .join("");
     const gridSize =
       Math.min(3, Math.ceil(Math.sqrt(photosToShow.length))) * 20;
-    const totalPhotos = eventPhotos.length;
+    const totalPhotos = event.photoCount ?? eventPhotos.length;
     const badge =
       totalPhotos > 9
         ? `<div style="

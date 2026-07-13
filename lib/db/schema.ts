@@ -196,7 +196,7 @@ export const media = pgTable(
     blurStatus: blurRequestStatusEnum("blur_status"),
     filename: text("filename").notNull(),
     mimeType: text("mime_type").notNull(),
-    fileSize: integer("file_size").notNull(),
+    fileSize: bigint("file_size", { mode: "number" }).notNull(),
     width: integer("width"),
     height: integer("height"),
     latitude: doublePrecision("latitude"),

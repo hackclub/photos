@@ -59,6 +59,7 @@ export async function getReports() {
   }
   try {
     const allReports = await db.query.reports.findMany({
+      limit: 500,
       with: {
         media: {
           with: {
@@ -138,6 +139,7 @@ export async function getUserReports() {
   try {
     const userReports = await db.query.reports.findMany({
       where: eq(reports.reporterId, user.id),
+      limit: 200,
       with: {
         media: true,
       },

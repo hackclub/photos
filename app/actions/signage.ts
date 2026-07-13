@@ -29,12 +29,20 @@ function toSignageMedia(item: any, url: string) {
     thumbnailUrl: getMediaProxyUrl(item.id, "thumbnail"),
   };
 }
+
+function clampLimit(limit: number, fallback: number) {
+  return Number.isFinite(limit)
+    ? Math.max(1, Math.min(100, Math.floor(limit)))
+    : fallback;
+}
+
 export type SignageFilter = {
   seriesId?: string;
   eventId?: string;
 };
 export async function getRandomMedia(filter: SignageFilter = {}, limit = 50) {
   try {
+    const safeLimit = clampLimit(limit, 50);
     const session = await getSession();
     const user = await getUserContext(session?.id);
     if (user?.isBanned) {
@@ -66,7 +74,7 @@ export async function getRandomMedia(filter: SignageFilter = {}, limit = 50) {
     const randomMedia = await db.query.media.findMany({
       where: and(...conditions),
       orderBy: [sql`random()`],
-      limit: limit,
+      limit: safeLimit,
       with: {
         event: true,
         uploadedBy: {
@@ -81,13 +89,7 @@ export async function getRandomMedia(filter: SignageFilter = {}, limit = 50) {
     });
     const mediaWithUrls = await Promise.all(
       randomMedia.map(async (item) => {
-        let url: string;
-        if (item.mimeType === "image/heic" || item.mimeType === "image/heif") {
-          url = getMediaProxyUrl(item.id, "display");
-        } else {
-          url = getMediaProxyUrl(item.id);
-        }
-        return toSignageMedia(item, url);
+        return toSignageMedia(item, getMediaProxyUrl(item.id));
       }),
     );
     return { success: true, media: mediaWithUrls };
@@ -98,6 +100,7 @@ export async function getRandomMedia(filter: SignageFilter = {}, limit = 50) {
 }
 export async function getLatestMedia(limit = 1) {
   try {
+    const safeLimit = clampLimit(limit, 1);
     const session = await getSession();
     const user = await getUserContext(session?.id);
     if (user?.isBanned) {
@@ -113,7 +116,7 @@ export async function getLatestMedia(limit = 1) {
         sql`${media.mimeType} LIKE 'image/%'`,
       ),
       orderBy: [desc(media.uploadedAt)],
-      limit: limit,
+      limit: safeLimit,
       with: {
         event: true,
         uploadedBy: {
@@ -128,13 +131,7 @@ export async function getLatestMedia(limit = 1) {
     });
     const mediaWithUrls = await Promise.all(
       latestMedia.map(async (item) => {
-        let url: string;
-        if (item.mimeType === "image/heic" || item.mimeType === "image/heif") {
-          url = getMediaProxyUrl(item.id, "display");
-        } else {
-          url = getMediaProxyUrl(item.id);
-        }
-        return toSignageMedia(item, url);
+        return toSignageMedia(item, getMediaProxyUrl(item.id));
       }),
     );
     return { success: true, media: mediaWithUrls };
@@ -146,6 +143,7 @@ export async function getLatestMedia(limit = 1) {
 
 export async function getRandomMediaIds(limit = 12) {
   try {
+    const safeLimit = clampLimit(limit, 12);
     const session = await getSession();
     const user = await getUserContext(session?.id);
     if (user?.isBanned) return { success: true, ids: [] as string[] };
@@ -158,7 +156,7 @@ export async function getRandomMediaIds(limit = 12) {
         sql`${media.mimeType} LIKE 'image/%'`,
       ),
       orderBy: [sql`random()`],
-      limit,
+      limit: safeLimit,
       columns: { id: true },
     });
     return { success: true, ids: rows.map((row) => row.id) };

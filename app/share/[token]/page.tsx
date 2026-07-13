@@ -44,11 +44,7 @@ export async function generateMetadata({
     ? `Shared from ${media.event.name} on Hack Club Photos`
     : `Shared by ${sharerName} on Hack Club Photos`;
   const rawPath = `/share/${token}/raw`;
-  const imagePath =
-    media.mimeType === "image/heic" || media.mimeType === "image/heif"
-      ? `${rawPath}?variant=display`
-      : rawPath;
-  const imageUrl = new URL(imagePath, APP_URL).toString();
+  const imageUrl = new URL(rawPath, APP_URL).toString();
   const pageUrl = new URL(`/share/${token}`, APP_URL).toString();
 
   return {
@@ -99,10 +95,6 @@ export default async function SharedMediaPage({
   const hasLocation = false;
   const hasTakenDate = exif.dateTimeOriginal;
   const rawUrl = `/share/${token}/raw`;
-  const displayUrl =
-    media.mimeType === "image/heic" || media.mimeType === "image/heif"
-      ? `${rawUrl}?variant=display`
-      : rawUrl;
   return (
     <div className="min-h-screen bg-black text-zinc-100 flex flex-col">
       <header className="bg-zinc-900 border-b border-zinc-800 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
@@ -138,7 +130,7 @@ export default async function SharedMediaPage({
           ) : (
             <div className="relative w-full h-full">
               <Image
-                src={displayUrl}
+                src={rawUrl}
                 alt={media.filename}
                 fill
                 className="object-contain shadow-2xl"

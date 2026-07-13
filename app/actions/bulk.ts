@@ -87,8 +87,15 @@ export async function bulkDeleteMedia(mediaIds: string[]) {
   if (!user) {
     return { success: false, error: "Unauthorized" };
   }
-  if (!Array.isArray(mediaIds) || mediaIds.length === 0) {
-    return { success: false, error: "mediaIds must be a non-empty array" };
+  if (
+    !Array.isArray(mediaIds) ||
+    mediaIds.length === 0 ||
+    mediaIds.length > 500
+  ) {
+    return {
+      success: false,
+      error: "mediaIds must contain between 1 and 500 items",
+    };
   }
   try {
     const mediaItems = await db.query.media.findMany({
@@ -168,6 +175,9 @@ export async function bulkCreateEvents(
   const user = await getUserContext(session?.id);
   if (!user) {
     return { success: false, error: "Unauthorized" };
+  }
+  if (!Array.isArray(eventsData) || eventsData.length > 500) {
+    return { success: false, error: "Too many events requested" };
   }
   const seriesData = await db.query.series.findFirst({
     where: eq(series.id, seriesId),

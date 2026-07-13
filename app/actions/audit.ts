@@ -10,6 +10,12 @@ export async function searchAuditLogs(query: string, offset = 0, limit = 50) {
     if (!user || !user.isGlobalAdmin) {
       return { success: false, error: "Unauthorized" };
     }
+    const safeLimit = Number.isFinite(limit)
+      ? Math.max(1, Math.min(100, Math.floor(limit)))
+      : 50;
+    const safeOffset = Number.isFinite(offset)
+      ? Math.max(0, Math.min(100_000, Math.floor(offset)))
+      : 0;
     const searchConditions = query
       ? or(
           sql`cast(${auditLogs.action} as text) ilike ${`%${query}%`}`,
@@ -27,8 +33,8 @@ export async function searchAuditLogs(query: string, offset = 0, limit = 50) {
     const logs = await db.query.auditLogs.findMany({
       where: searchConditions,
       orderBy: [desc(auditLogs.createdAt)],
-      limit,
-      offset,
+      limit: safeLimit,
+      offset: safeOffset,
       with: {
         user: {
           columns: {

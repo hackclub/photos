@@ -1,30 +1,41 @@
-import { existsSync } from "node:fs";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { createWriteStream, existsSync } from "node:fs";
+import { mkdir, readFile, unlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { eq, gt } from "drizzle-orm";
 import ffmpeg from "fluent-ffmpeg";
 import { type NextRequest, NextResponse } from "next/server";
-import sharp from "sharp";
 import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
 import { logger, recordException, serializeError } from "@/lib/logger";
+import { runFfmpegCommand } from "@/lib/media/ffmpeg";
+import {
+  createSharp,
+  MAX_BUFFERED_IMAGE_BYTES,
+} from "@/lib/media/image-processing";
 import { s3Client, uploadToS3 } from "@/lib/media/s3";
 import {
   generateAndUploadThumbnail,
   getThumbnailS3Key,
 } from "@/lib/media/thumbnail";
+import { ALLOWED_IMAGE_TYPES } from "@/lib/media/validation";
 import { recordCronJob } from "@/lib/telemetry";
 
 const BATCH_SIZE = 500;
-const REPAIR_CONCURRENCY = 8;
+const REPAIR_CONCURRENCY = 2;
+const MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024;
+const repairState = globalThis as typeof globalThis & {
+  __thumbnailRepairRunning?: boolean;
+};
 
 async function thumbnailIsValid(key: string) {
   try {
-    const buffer = await getObjectBuffer([key]);
+    const buffer = await getObjectBuffer([key], MAX_THUMBNAIL_BYTES);
     if (buffer.length < 32) return false;
-    const metadata = await sharp(buffer, { failOn: "none" }).metadata();
+    const metadata = await createSharp(buffer, { failOn: "none" }).metadata();
     return Boolean(metadata.width && metadata.height && metadata.format);
   } catch {
     return false;
@@ -50,7 +61,7 @@ async function mapLimit<T, R>(
   return results;
 }
 
-async function getObjectBuffer(keys: string[]) {
+async function getObjectBuffer(keys: string[], maxBytes: number) {
   let lastError: unknown;
   for (const key of keys) {
     try {
@@ -59,12 +70,44 @@ async function getObjectBuffer(keys: string[]) {
       );
       if (!response.Body) throw new Error("S3 object had no body");
       const chunks: Uint8Array[] = [];
-      for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
+      let size = 0;
+      const body = response.Body as AsyncIterable<Uint8Array> & {
+        destroy?: (error?: Error) => void;
+      };
+      for await (const chunk of body) {
+        size += chunk.length;
+        if (size > maxBytes) {
+          body.destroy?.(new Error("S3 object exceeds processing limit"));
+          throw new Error("S3 object exceeds processing limit");
+        }
         chunks.push(chunk);
       }
-      return Buffer.concat(chunks);
+      return Buffer.concat(chunks, size);
     } catch (error) {
       lastError = error;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("No source object found");
+}
+
+async function downloadObjectToFile(keys: string[], outputPath: string) {
+  let lastError: unknown;
+  for (const key of keys) {
+    try {
+      const response = await s3Client.send(
+        new GetObjectCommand({ Bucket: process.env.S3_BUCKET_NAME, Key: key }),
+      );
+      if (!response.Body) throw new Error("S3 object had no body");
+      await pipeline(
+        response.Body as Readable,
+        createWriteStream(outputPath, { flags: "w" }),
+      );
+      return;
+    } catch (error) {
+      lastError = error;
+      await unlink(outputPath).catch(() => {});
     }
   }
   throw lastError instanceof Error
@@ -79,26 +122,26 @@ async function fallbackImageThumbnail(
 ) {
   const attempts = [
     () =>
-      sharp(buffer, { failOn: "none", animated: true, limitInputPixels: false })
+      createSharp(buffer, { failOn: "none" })
         .rotate()
         .flatten({ background: "#ffffff" })
         .resize(400, 400, { fit: "cover", position: "attention" })
         .jpeg({ quality: 82, mozjpeg: true })
         .toBuffer(),
     () =>
-      sharp(buffer, { failOn: "none", limitInputPixels: false })
+      createSharp(buffer, { failOn: "none" })
         .rotate()
         .flatten({ background: "#ffffff" })
         .resize(400, 400, { fit: "cover", position: "center" })
         .jpeg({ quality: 82, mozjpeg: true })
         .toBuffer(),
     () =>
-      sharp(buffer, { failOn: "none", limitInputPixels: false })
+      createSharp(buffer, { failOn: "none" })
         .resize(400, 400, { fit: "cover", position: "center" })
         .jpeg({ quality: 82, mozjpeg: true })
         .toBuffer(),
     () =>
-      sharp(buffer, { failOn: "none", limitInputPixels: false })
+      createSharp(buffer, { failOn: "none" })
         .resize(400, 400, { fit: "contain", background: "#ffffff" })
         .jpeg({ quality: 82, mozjpeg: true })
         .toBuffer(),
@@ -124,30 +167,28 @@ async function fallbackImageThumbnail(
 }
 
 async function fallbackVideoThumbnail(
-  buffer: Buffer,
+  inputPath: string,
   mediaId: string,
   tags: Record<string, string>,
 ) {
   const tempDir = path.join(os.tmpdir(), "repair-thumbnails");
   await mkdir(tempDir, { recursive: true });
-  const inputPath = path.join(tempDir, `${mediaId}-source`);
   const outputPath = path.join(tempDir, `${mediaId}-thumb.jpg`);
-  await writeFile(inputPath, buffer);
   const timestamps = ["00:00:01.000", "00:00:00.000", "00:00:02.000", "10%"];
   try {
     for (const timestamp of timestamps) {
       try {
-        await new Promise<void>((resolve, reject) => {
-          ffmpeg(inputPath)
-            .outputOptions(["-frames:v 1", "-q:v 3"])
-            .screenshots({
-              count: 1,
-              folder: tempDir,
-              filename: `${mediaId}-thumb.jpg`,
-              timestamps: [timestamp],
-            })
-            .on("end", () => resolve())
-            .on("error", reject);
+        const command = ffmpeg(inputPath).outputOptions([
+          "-frames:v 1",
+          "-q:v 3",
+        ]);
+        await runFfmpegCommand(command, () => {
+          command.screenshots({
+            count: 1,
+            folder: tempDir,
+            filename: `${mediaId}-thumb.jpg`,
+            timestamps: [timestamp],
+          });
         });
         if (existsSync(outputPath)) break;
       } catch {
@@ -156,7 +197,7 @@ async function fallbackVideoThumbnail(
     }
     if (!existsSync(outputPath))
       throw new Error("No video thumbnail extracted");
-    const thumbnailBuffer = await sharp(await readFile(outputPath), {
+    const thumbnailBuffer = await createSharp(await readFile(outputPath), {
       failOn: "none",
     })
       .resize(400, 400, { fit: "cover", position: "center" })
@@ -172,7 +213,6 @@ async function fallbackVideoThumbnail(
     );
     return thumbnailS3Key;
   } finally {
-    await unlink(inputPath).catch(() => {});
     await unlink(outputPath).catch(() => {});
   }
 }
@@ -187,6 +227,13 @@ export async function GET(request: NextRequest) {
     recordCronJob("repair_thumbnails", "unauthorized", startedAt);
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (repairState.__thumbnailRepairRunning) {
+    return NextResponse.json(
+      { error: "Thumbnail repair is already running" },
+      { status: 409 },
+    );
+  }
+  repairState.__thumbnailRepairRunning = true;
   try {
     const cursor = request.nextUrl.searchParams.get("cursor") || undefined;
     logger.info({ cursor }, "thumbnail repair started");
@@ -196,6 +243,12 @@ export async function GET(request: NextRequest) {
       limit: BATCH_SIZE,
     });
     const results = await mapLimit(rows, REPAIR_CONCURRENCY, async (item) => {
+      if (
+        item.mimeType.startsWith("image/") &&
+        !ALLOWED_IMAGE_TYPES.includes(item.mimeType)
+      ) {
+        return { repaired: 0, failed: 0 };
+      }
       const hasThumbnail = item.thumbnailS3Key
         ? await thumbnailIsValid(item.thumbnailS3Key)
         : false;
@@ -217,20 +270,50 @@ export async function GET(request: NextRequest) {
           item.blurredS3Key,
           item.originalS3Key,
         ].filter((key): key is string => Boolean(key));
-        const buffer = await getObjectBuffer(sourceKeys);
         const tags = { uploadedBy: item.uploadedById, eventId: item.eventId };
-        let thumbnailS3Key = await generateAndUploadThumbnail(
-          buffer,
-          item.mimeType,
-          item.id,
-          undefined,
-          tags,
-        );
-        if (!thumbnailS3Key && item.mimeType.startsWith("image/")) {
-          thumbnailS3Key = await fallbackImageThumbnail(buffer, item.id, tags);
-        }
-        if (!thumbnailS3Key && item.mimeType.startsWith("video/")) {
-          thumbnailS3Key = await fallbackVideoThumbnail(buffer, item.id, tags);
+        let thumbnailS3Key: string | null = null;
+        if (item.mimeType.startsWith("video/")) {
+          const tempDir = path.join(os.tmpdir(), "repair-thumbnails");
+          await mkdir(tempDir, { recursive: true });
+          const sourcePath = path.join(tempDir, `${item.id}-source`);
+          try {
+            await downloadObjectToFile(sourceKeys, sourcePath);
+            thumbnailS3Key = await generateAndUploadThumbnail(
+              sourcePath,
+              item.mimeType,
+              item.id,
+              undefined,
+              tags,
+            );
+            if (!thumbnailS3Key) {
+              thumbnailS3Key = await fallbackVideoThumbnail(
+                sourcePath,
+                item.id,
+                tags,
+              );
+            }
+          } finally {
+            await unlink(sourcePath).catch(() => {});
+          }
+        } else {
+          const buffer = await getObjectBuffer(
+            sourceKeys,
+            MAX_BUFFERED_IMAGE_BYTES,
+          );
+          thumbnailS3Key = await generateAndUploadThumbnail(
+            buffer,
+            item.mimeType,
+            item.id,
+            undefined,
+            tags,
+          );
+          if (!thumbnailS3Key && item.mimeType.startsWith("image/")) {
+            thumbnailS3Key = await fallbackImageThumbnail(
+              buffer,
+              item.id,
+              tags,
+            );
+          }
         }
         if (!thumbnailS3Key)
           throw new Error("Thumbnail generation returned null");
@@ -283,5 +366,7 @@ export async function GET(request: NextRequest) {
       { success: false, error: String(error) },
       { status: 500 },
     );
+  } finally {
+    repairState.__thumbnailRepairRunning = false;
   }
 }

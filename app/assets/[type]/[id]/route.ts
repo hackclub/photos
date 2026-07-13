@@ -70,7 +70,9 @@ export async function GET(
     });
     let s3Response: GetObjectCommandOutput;
     try {
-      s3Response = await s3Client.send(command);
+      s3Response = await s3Client.send(command, {
+        abortSignal: req.signal,
+      });
     } catch (error: any) {
       if (error?.$metadata?.httpStatusCode === 304) {
         return new NextResponse(null, { status: 304 });

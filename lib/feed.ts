@@ -64,6 +64,12 @@ export async function fetchFeedItems(
   if (accessibleEventIds.length === 0) {
     return { items: [], hasMore: false };
   }
+  const safeLimit = Number.isFinite(limit)
+    ? Math.max(1, Math.min(100, Math.floor(limit)))
+    : 50;
+  const safeOffset = Number.isFinite(offset)
+    ? Math.max(0, Math.min(500, Math.floor(offset)))
+    : 0;
   const recentMedia = await db
     .select({
       id: media.id,
@@ -84,7 +90,7 @@ export async function fetchFeedItems(
       and(inArray(media.eventId, accessibleEventIds), isNull(media.blurStatus)),
     )
     .orderBy(desc(media.uploadedAt))
-    .limit(limit + offset);
+    .limit(safeLimit + safeOffset);
   const recentComments = await db
     .select({
       id: mediaComments.id,
@@ -99,7 +105,7 @@ export async function fetchFeedItems(
       and(inArray(media.eventId, accessibleEventIds), isNull(media.blurStatus)),
     )
     .orderBy(desc(mediaComments.createdAt))
-    .limit(limit + offset);
+    .limit(safeLimit + safeOffset);
   const recentLikes = await db
     .select({
       id: mediaLikes.id,
@@ -113,14 +119,17 @@ export async function fetchFeedItems(
       and(inArray(media.eventId, accessibleEventIds), isNull(media.blurStatus)),
     )
     .orderBy(desc(mediaLikes.createdAt))
-    .limit(limit + offset);
+    .limit(safeLimit + safeOffset);
   const allActivities = [
     ...recentMedia.map((m) => ({ ...m, activityType: "photo" as const })),
     ...recentComments.map((c) => ({ ...c, activityType: "comment" as const })),
     ...recentLikes.map((l) => ({ ...l, activityType: "like" as const })),
   ];
   allActivities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-  const slicedActivities = allActivities.slice(offset, offset + limit);
+  const slicedActivities = allActivities.slice(
+    safeOffset,
+    safeOffset + safeLimit,
+  );
   const userIds = [...new Set(slicedActivities.map((a) => a.userId))];
   const mediaIds = [
     ...new Set([
@@ -347,6 +356,6 @@ export async function fetchFeedItems(
   });
   return {
     items: feedItems,
-    hasMore: feedItems.length === limit,
+    hasMore: feedItems.length === safeLimit && safeOffset < 500,
   };
 }

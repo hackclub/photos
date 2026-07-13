@@ -17,7 +17,6 @@ import {
 } from "@/app/actions/signage";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import UserAvatar from "@/components/ui/UserAvatar";
-import { useHeicUrl } from "@/hooks/useHeicUrl";
 import { logger } from "@/lib/client-logger";
 
 type MediaItem = {
@@ -79,7 +78,6 @@ export default function RandomSignagePage() {
     }[];
   }>({ series: [], events: [] });
   const [currentMedia, setCurrentMedia] = useState<MediaItem | null>(null);
-  const { displayUrl } = useHeicUrl(currentMedia?.url || "");
   const [nextMedia, setNextMedia] = useState<MediaItem | null>(null);
   const [loading, setLoading] = useState(false);
   const [_error, setError] = useState("");
@@ -165,7 +163,7 @@ export default function RandomSignagePage() {
         {currentMedia ? (
           <div className="relative w-full h-full animate-fade-in">
             <Image
-              src={displayUrl || ""}
+              src={currentMedia.url}
               alt="Random"
               fill
               className={`${config.fitToScreen ? "object-cover" : "object-contain"}`}

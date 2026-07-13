@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react";
 import { HiArrowLeft } from "react-icons/hi2";
 import { getLatestMedia } from "@/app/actions/signage";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
-import { useHeicUrl } from "@/hooks/useHeicUrl";
 import { logger } from "@/lib/client-logger";
 
 type MediaItem = {
@@ -23,7 +22,6 @@ export default function LiveFeedPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [currentMedia, setCurrentMedia] = useState<MediaItem | null>(null);
-  const { displayUrl } = useHeicUrl(currentMedia?.url || "");
   const [isStarted, setIsStarted] = useState(false);
   const lastMediaId = useRef<string | null>(null);
   useEffect(() => {
@@ -92,7 +90,7 @@ export default function LiveFeedPage() {
       {currentMedia ? (
         <div className="relative w-full h-full animate-fade-in key-{currentMedia.id}">
           <Image
-            src={displayUrl || ""}
+            src={currentMedia.url}
             alt="Live Feed"
             fill
             className="object-contain"

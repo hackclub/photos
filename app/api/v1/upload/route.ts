@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { type NextRequest, NextResponse } from "next/server";
 import { auditLog } from "@/lib/audit";
 import { unauthorizedResponse, validateApiKey } from "@/lib/auth-api";
+import { withDirectUploadSlot } from "@/lib/concurrency";
 import { db } from "@/lib/db";
 import {
   eventParticipants,
@@ -22,10 +23,13 @@ import {
   generateAndUploadThumbnail,
   processImageUpload,
 } from "@/lib/media/thumbnail";
-import { validateMediaFile } from "@/lib/media/validation";
+import {
+  isUnsupportedImageBuffer,
+  validateMediaFile,
+} from "@/lib/media/validation";
 import { extractVideoMetadata } from "@/lib/media/video-metadata";
-import { can, getUserContext } from "@/lib/policy";
 import { PENDING_REGISTRATION_USER_ID } from "@/lib/pending-ownership";
+import { can, getUserContext } from "@/lib/policy";
 import { publicMedia } from "@/lib/public-data";
 import { isValidSlackId, normalizeSlackId } from "@/lib/slack-id";
 import { checkStorageLimit } from "@/lib/storage";
@@ -61,7 +65,7 @@ function parseTagNames(value: FormDataEntryValue | null) {
   ).slice(0, 25);
 }
 
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   try {
     const auth = await validateApiKey(true);
     if (!auth) {
@@ -231,6 +235,15 @@ export async function POST(req: NextRequest) {
     }
     const bytes = await file.arrayBuffer();
     const originalBuffer = Buffer.from(bytes);
+    if (isUnsupportedImageBuffer(originalBuffer)) {
+      return NextResponse.json(
+        {
+          error:
+            "Unsupported image format. Convert the file to JPEG before uploading.",
+        },
+        { status: 400 },
+      );
+    }
     const mimeType = file.type;
     const mediaId = randomUUID();
     const fileExtension = safeFileExtension(file.name);
@@ -436,6 +449,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    return await withDirectUploadSlot(() => handlePost(req), req.signal);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Upload rejected";
+    return NextResponse.json(
+      { error: message },
+      { status: req.signal.aborted ? 499 : 503 },
     );
   }
 }

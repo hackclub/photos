@@ -13,18 +13,61 @@ import { logger } from "@/lib/logger";
 import { can, getUserContext } from "@/lib/policy";
 import { toPublicUser } from "@/lib/user-display";
 
-const clients = new Map<ReadableStreamDefaultController, string | undefined>();
+type FeedClient = {
+  userId?: string;
+  heartbeat: ReturnType<typeof setInterval>;
+  expires: ReturnType<typeof setTimeout>;
+  abortSignal: AbortSignal;
+  onAbort: () => void;
+};
+
+const feedGlobal = globalThis as typeof globalThis & {
+  __photosFeedClients?: Map<ReadableStreamDefaultController, FeedClient>;
+};
+const clients = feedGlobal.__photosFeedClients ?? new Map();
+feedGlobal.__photosFeedClients = clients;
+const MAX_FEED_CLIENTS = 1_000;
+const MAX_FEED_CONNECTION_AGE_MS = 6 * 60 * 60 * 1000;
+
+function removeClient(
+  controller: ReadableStreamDefaultController,
+  close = false,
+) {
+  const client = clients.get(controller);
+  if (!client) return;
+  clearInterval(client.heartbeat);
+  clearTimeout(client.expires);
+  client.abortSignal.removeEventListener("abort", client.onAbort);
+  clients.delete(controller);
+  if (close) {
+    try {
+      controller.close();
+    } catch (_error) {}
+  }
+}
+
+function enqueueForClient(
+  controller: ReadableStreamDefaultController,
+  data: string,
+) {
+  if (controller.desiredSize !== null && controller.desiredSize <= 0) {
+    removeClient(controller, true);
+    return false;
+  }
+  controller.enqueue(data);
+  return true;
+}
+
 export async function notifyFeedUpdate(activityData: Record<string, unknown>) {
   const data = JSON.stringify(activityData);
   if (activityData.type === "photo_deleted") {
     let _sent = 0;
     for (const [controller] of clients.entries()) {
       try {
-        controller.enqueue(`data: ${data}\n\n`);
-        _sent++;
+        if (enqueueForClient(controller, `data: ${data}\n\n`)) _sent++;
       } catch (err) {
         logger.error("[SSE] Error sending to client (removing):", err);
-        clients.delete(controller);
+        removeClient(controller);
       }
     }
     return;
@@ -36,23 +79,22 @@ export async function notifyFeedUpdate(activityData: Record<string, unknown>) {
   }
   let _sentCount = 0;
   let _skipCount = 0;
-  for (const [controller, userId] of clients.entries()) {
+  for (const [controller, client] of clients.entries()) {
     try {
-      const user = await getUserContext(userId);
+      const user = await getUserContext(client.userId);
       if (user?.isBanned) {
         _skipCount++;
         continue;
       }
       const hasAccess = await can(user, "view", "event", event);
       if (hasAccess) {
-        controller.enqueue(`data: ${data}\n\n`);
-        _sentCount++;
+        if (enqueueForClient(controller, `data: ${data}\n\n`)) _sentCount++;
       } else {
         _skipCount++;
       }
     } catch (err) {
       logger.error("[SSE] Error sending to client (removing):", err);
-      clients.delete(controller);
+      removeClient(controller);
     }
   }
 }
@@ -62,26 +104,41 @@ export async function GET(request: NextRequest) {
   if (user?.isBanned) {
     return new Response("Forbidden", { status: 403 });
   }
+  let streamController: ReadableStreamDefaultController | undefined;
   const stream = new ReadableStream({
     start(controller) {
-      clients.set(controller, session?.id);
+      streamController = controller;
       controller.enqueue(`: connected\n\n`);
       const heartbeat = setInterval(() => {
         try {
-          controller.enqueue(`: heartbeat\n\n`);
+          enqueueForClient(controller, `: heartbeat\n\n`);
         } catch (_err) {
-          clearInterval(heartbeat);
+          removeClient(controller);
         }
       }, 30000);
-      request.signal.addEventListener("abort", () => {
-        clearInterval(heartbeat);
-        clients.delete(controller);
-        try {
-          controller.close();
-        } catch (_err) {}
+      const onAbort = () => removeClient(controller, true);
+      while (clients.size >= MAX_FEED_CLIENTS) {
+        const oldestController = clients.keys().next().value;
+        if (!oldestController) break;
+        removeClient(oldestController, true);
+      }
+      const expires = setTimeout(
+        () => removeClient(controller, true),
+        MAX_FEED_CONNECTION_AGE_MS,
+      );
+      clients.set(controller, {
+        userId: session?.id,
+        heartbeat,
+        expires,
+        abortSignal: request.signal,
+        onAbort,
       });
+      request.signal.addEventListener("abort", onAbort, { once: true });
+      if (request.signal.aborted) onAbort();
     },
-    cancel() {},
+    cancel() {
+      if (streamController) removeClient(streamController);
+    },
   });
   return new Response(stream, {
     headers: {

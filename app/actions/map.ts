@@ -1,5 +1,5 @@
 "use server";
-import { and, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/db/schema";
@@ -19,7 +19,7 @@ export async function getMapData(eventSlug?: string | null) {
         },
       };
     }
-    const query = db
+    const results = await db
       .select({
         id: media.id,
         filename: media.filename,
@@ -38,23 +38,27 @@ export async function getMapData(eventSlug?: string | null) {
       .innerJoin(events, eq(media.eventId, events.id))
       .where(
         and(
-          sql`${media.latitude} IS NOT NULL`,
-          sql`${media.longitude} IS NOT NULL`,
+          isNotNull(media.latitude),
+          isNotNull(media.longitude),
+          eventSlug ? eq(events.slug, eventSlug) : undefined,
         ),
-      );
-    const results = await query;
-    const uniqueEvents = Array.from(
-      new Set(
-        results.map((item) => ({
-          id: item.eventId,
-          visibility: item.eventVisibility,
-          seriesId: item.eventSeriesId,
-        })),
-      ),
-    );
-    const uniqueEventsMap = new Map();
-    for (const e of uniqueEvents) {
-      uniqueEventsMap.set(e.id, e);
+      )
+      .orderBy(desc(media.uploadedAt))
+      .limit(5_000);
+    const uniqueEventsMap = new Map<
+      string,
+      {
+        id: string;
+        visibility: (typeof events.$inferSelect)["visibility"];
+        seriesId: string | null;
+      }
+    >();
+    for (const item of results) {
+      uniqueEventsMap.set(item.eventId, {
+        id: item.eventId,
+        visibility: item.eventVisibility,
+        seriesId: item.eventSeriesId,
+      });
     }
     const uniqueEventsList = Array.from(uniqueEventsMap.values());
     const accessibleEventIds = await getAccessibleEventIds(
@@ -89,72 +93,82 @@ export async function getMapData(eventSlug?: string | null) {
         }
       }
     }
-    let filteredMedia = accessibleMedia;
-    if (eventSlug) {
-      filteredMedia = accessibleMedia.filter((m) => m.event.slug === eventSlug);
-    }
-    const eventsWithLocation = await db
-      .select({
-        id: events.id,
-        name: events.name,
-        slug: events.slug,
-        locationCity: events.locationCity,
-        locationCountry: events.locationCountry,
-        latitude: events.latitude,
-        longitude: events.longitude,
-        visibility: events.visibility,
-        seriesId: events.seriesId,
-      })
-      .from(events)
-      .where(
-        and(
-          sql`${events.latitude} IS NOT NULL`,
-          sql`${events.longitude} IS NOT NULL`,
-        ),
-      );
+    const eventsWithLocation = await db.query.events.findMany({
+      where: and(
+        isNotNull(events.latitude),
+        isNotNull(events.longitude),
+        eventSlug ? eq(events.slug, eventSlug) : undefined,
+      ),
+      columns: {
+        id: true,
+        name: true,
+        slug: true,
+        locationCity: true,
+        locationCountry: true,
+        latitude: true,
+        longitude: true,
+        visibility: true,
+        seriesId: true,
+      },
+      with: {
+        media: {
+          columns: {
+            id: true,
+            filename: true,
+            mimeType: true,
+            uploadedAt: true,
+          },
+          orderBy: [desc(media.uploadedAt)],
+          limit: 9,
+        },
+      },
+      orderBy: [desc(events.createdAt)],
+      limit: 500,
+    });
     const accessibleLocationEventIds = await getAccessibleEventIds(
       user?.id,
       eventsWithLocation,
     );
+    const visibleLocationEvents = eventsWithLocation.filter((event) =>
+      accessibleLocationEventIds.has(event.id),
+    );
+    const locationEventIds = visibleLocationEvents.map((event) => event.id);
+    const eventMediaCounts =
+      locationEventIds.length > 0
+        ? await db
+            .select({ eventId: media.eventId, count: count() })
+            .from(media)
+            .where(inArray(media.eventId, locationEventIds))
+            .groupBy(media.eventId)
+        : [];
+    const mediaCountByEventId = new Map(
+      eventMediaCounts.map((item) => [item.eventId, item.count]),
+    );
     const accessibleEvents = [];
-    for (const event of eventsWithLocation) {
-      if (accessibleLocationEventIds.has(event.id)) {
-        const lat = Number(event.latitude);
-        const lng = Number(event.longitude);
-        if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
-
-        const eventPhotos = await db
-          .select({
-            id: media.id,
-            filename: media.filename,
-            mimeType: media.mimeType,
-            thumbnailUrl: sql<string>`'/media/' || ${media.id} || '/thumbnail'`,
-            uploadedAt: media.uploadedAt,
-          })
-          .from(media)
-          .where(eq(media.eventId, event.id))
-          .orderBy(media.uploadedAt);
-        accessibleEvents.push({
-          id: event.id,
-          name: event.name,
-          slug: event.slug,
-          city: event.locationCity,
-          country: event.locationCountry,
-          lat: lat,
-          lng: lng,
-          photos: eventPhotos,
-        });
-      }
-    }
-    let filteredEvents = accessibleEvents;
-    if (eventSlug) {
-      filteredEvents = accessibleEvents.filter((e) => e.slug === eventSlug);
+    for (const event of visibleLocationEvents) {
+      const lat = Number(event.latitude);
+      const lng = Number(event.longitude);
+      if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
+      accessibleEvents.push({
+        id: event.id,
+        name: event.name,
+        slug: event.slug,
+        city: event.locationCity,
+        country: event.locationCountry,
+        lat,
+        lng,
+        photoCount: mediaCountByEventId.get(event.id) ?? 0,
+        photos: event.media.map((item) => ({
+          ...item,
+          thumbnailUrl: getMediaProxyUrl(item.id, "thumbnail"),
+        })),
+      });
     }
     return {
       success: true,
       data: {
-        photos: filteredMedia,
-        events: filteredEvents,
+        photos: accessibleMedia,
+        events: accessibleEvents,
       },
     };
   } catch (error) {

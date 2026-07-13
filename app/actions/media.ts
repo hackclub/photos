@@ -4,6 +4,7 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
+import { withDirectUploadSlot } from "@/lib/concurrency";
 import { db } from "@/lib/db";
 import { eventParticipants, events, media, series } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
@@ -15,13 +16,17 @@ import {
   processBanner,
   processImageUpload,
 } from "@/lib/media/thumbnail";
-import { validateBannerFile, validateMediaFile } from "@/lib/media/validation";
+import {
+  isUnsupportedImageBuffer,
+  validateBannerFile,
+  validateMediaFile,
+} from "@/lib/media/validation";
 import { extractVideoMetadata } from "@/lib/media/video-metadata";
 import { can, getUserContext } from "@/lib/policy";
 import { publicMedia } from "@/lib/public-data";
 import { checkStorageLimit } from "@/lib/storage";
 
-const MAX_DIRECT_ACTION_UPLOAD_BYTES = 100 * 1024 * 1024;
+const MAX_DIRECT_ACTION_UPLOAD_BYTES = 10 * 1024 * 1024;
 export async function uploadBanner(
   entityType: "event" | "series",
   entityId: string,
@@ -49,7 +54,14 @@ export async function uploadBanner(
     if (!file) return { success: false, error: "No file provided" };
     const validation = validateBannerFile(file);
     if (!validation.valid) return { success: false, error: validation.error };
-    const buffer = await processBanner(Buffer.from(await file.arrayBuffer()));
+    const sourceBuffer = Buffer.from(await file.arrayBuffer());
+    if (isUnsupportedImageBuffer(sourceBuffer)) {
+      return {
+        success: false,
+        error: "Unsupported image format.",
+      };
+    }
+    const buffer = await processBanner(sourceBuffer);
     const key = `${entityType === "event" ? "events" : "series"}/${entityId}/banner.jpg`;
     await uploadToS3(buffer, key, "image/jpeg", undefined, {
       [`${entityType}Id`]: entityId,
@@ -155,11 +167,17 @@ export async function getMediaUrls(
     const s3KeysToFetch = new Set<string>();
     if (mediaIdsOrId) {
       const ids = Array.isArray(mediaIdsOrId) ? mediaIdsOrId : [mediaIdsOrId];
+      if (ids.length > 1_000) {
+        return { success: false, error: "Too many media IDs" };
+      }
       for (const id of ids) {
         mediaIdsToFetch.add(id);
       }
     }
     if (s3Keys) {
+      if (s3Keys.length > 1_000) {
+        return { success: false, error: "Too many storage keys" };
+      }
       for (const key of s3Keys) {
         s3KeysToFetch.add(key);
       }
@@ -193,19 +211,12 @@ export async function getMediaUrls(
       accessibleMedia.map(async (item) => {
         try {
           if (mediaIdsToFetch.has(item.id)) {
-            if (
-              item.mimeType === "image/heic" ||
-              item.mimeType === "image/heif"
-            ) {
-              urls[item.id] = `/api/v1/view/${item.id}`;
-            } else {
-              const url = getMediaProxyUrl(item.id);
-              const versionedUrl =
-                item.blurStatus === "approved" && item.s3Key
-                  ? `${url}?v=${encodeURIComponent(item.s3Key)}`
-                  : url;
-              urls[item.id] = versionedUrl;
-            }
+            const url = getMediaProxyUrl(item.id);
+            const versionedUrl =
+              item.blurStatus === "approved" && item.s3Key
+                ? `${url}?v=${encodeURIComponent(item.s3Key)}`
+                : url;
+            urls[item.id] = versionedUrl;
             if (item.thumbnailS3Key) {
               const thumbUrl = getMediaProxyUrl(item.id, "thumbnail");
               urls[item.thumbnailS3Key] =
@@ -274,7 +285,7 @@ export async function updateMediaCaption(mediaId: string, caption: string) {
     return { success: false, error: "Failed to update caption" };
   }
 }
-export async function uploadMedia(formData: FormData) {
+async function uploadMediaInternal(formData: FormData) {
   try {
     const session = await getSession();
     if (!session) {
@@ -297,7 +308,7 @@ export async function uploadMedia(formData: FormData) {
       return {
         success: false,
         error:
-          "Direct uploads are limited to 100MB. Use the normal uploader for larger files.",
+          "Direct server uploads are limited to 10MB. Use the normal uploader for larger files.",
       };
     }
     const event = await db.query.events.findFirst({
@@ -329,6 +340,13 @@ export async function uploadMedia(formData: FormData) {
     }
     const bytes = await file.arrayBuffer();
     const originalBuffer = Buffer.from(bytes);
+    if (isUnsupportedImageBuffer(originalBuffer)) {
+      return {
+        success: false,
+        error:
+          "Unsupported image format. Convert the file to JPEG before uploading.",
+      };
+    }
     const buffer = originalBuffer;
     const mimeType = file.type;
     const mediaId = randomUUID();
@@ -451,6 +469,17 @@ export async function uploadMedia(formData: FormData) {
   } catch (error) {
     logger.error("Upload error:", error);
     return { success: false, error: "Upload failed" };
+  }
+}
+
+export async function uploadMedia(formData: FormData) {
+  try {
+    return await withDirectUploadSlot(() => uploadMediaInternal(formData));
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Upload rejected",
+    };
   }
 }
 export async function getDownloadUrl(mediaId: string) {

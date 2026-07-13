@@ -8,7 +8,8 @@ function createRedisClient() {
 
   const client = new Redis(url, {
     lazyConnect: true,
-
+    commandTimeout: 5_000,
+    connectTimeout: 5_000,
     maxRetriesPerRequest: 1,
     enableReadyCheck: true,
     retryStrategy: () => null,
@@ -21,7 +22,13 @@ function createRedisClient() {
   return client;
 }
 
-const redis = createRedisClient();
+const redisGlobal = globalThis as typeof globalThis & {
+  __photosRateLimitRedis?: Redis | null;
+};
+if (!("__photosRateLimitRedis" in redisGlobal)) {
+  redisGlobal.__photosRateLimitRedis = createRedisClient();
+}
+const redis = redisGlobal.__photosRateLimitRedis ?? null;
 
 export interface RateLimitConfig {
   limit: number;

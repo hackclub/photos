@@ -1,6 +1,8 @@
 import { Readable } from "node:stream";
 import ffmpeg from "fluent-ffmpeg";
 import { logger } from "@/lib/logger";
+import { MEDIA_PROCESS_TIMEOUT_MS } from "@/lib/media/ffmpeg";
+import { withImageProcessingSlot } from "@/lib/media/image-processing";
 export interface VideoMetadata {
   [key: string]: unknown;
   duration?: number;
@@ -33,10 +35,25 @@ function toJsonSafeValue(value: unknown): unknown {
   }
   return value;
 }
-export async function extractVideoMetadata(
+async function extractVideoMetadataInternal(
   input: Buffer | string,
+  options: { timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<VideoMetadata | null> {
   return new Promise((resolve) => {
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const finish = (value: VideoMetadata | null) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
+      options.signal?.removeEventListener("abort", abort);
+      resolve(value);
+    };
+    let command: ReturnType<typeof ffmpeg> | undefined;
+    const abort = () => {
+      command?.kill("SIGKILL");
+      finish(null);
+    };
     try {
       let stream: Readable | string;
       if (Buffer.isBuffer(input)) {
@@ -44,10 +61,20 @@ export async function extractVideoMetadata(
       } else {
         stream = input;
       }
-      ffmpeg(stream).ffprobe((err, metadata) => {
+      command = ffmpeg(stream);
+      timeout = setTimeout(
+        abort,
+        options.timeoutMs ?? MEDIA_PROCESS_TIMEOUT_MS,
+      );
+      options.signal?.addEventListener("abort", abort, { once: true });
+      if (options.signal?.aborted) {
+        abort();
+        return;
+      }
+      command.ffprobe((err, metadata) => {
         if (err) {
           logger.error("FFprobe error:", err);
-          resolve(null);
+          finish(null);
           return;
         }
         const videoStream = metadata.streams.find(
@@ -85,7 +112,7 @@ export async function extractVideoMetadata(
           streamTags["com.apple.quicktime.model"] ||
           formatTags.model ||
           streamTags.model;
-        resolve({
+        finish({
           duration: format.duration,
           width: videoStream?.width,
           height: videoStream?.height,
@@ -109,7 +136,17 @@ export async function extractVideoMetadata(
       });
     } catch (error) {
       logger.error("Video metadata extraction error:", error);
-      resolve(null);
+      finish(null);
     }
   });
+}
+
+export async function extractVideoMetadata(
+  input: Buffer | string,
+  options: { timeoutMs?: number; signal?: AbortSignal } = {},
+): Promise<VideoMetadata | null> {
+  return await withImageProcessingSlot(
+    () => extractVideoMetadataInternal(input, options),
+    options.signal,
+  );
 }

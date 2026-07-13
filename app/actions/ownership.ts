@@ -99,6 +99,9 @@ export async function transferMediaOwnership(
     const admin = await getUserContext(session?.id);
     if (!admin) return { success: false, error: "Unauthorized" };
     if (!admin.isGlobalAdmin) return { success: false, error: "Forbidden" };
+    if (!Array.isArray(mediaIds) || mediaIds.length > 500) {
+      return { success: false, error: "Too many media items" };
+    }
 
     const targetUser = await db.query.users.findFirst({
       where: eq(users.id, targetUserId),
@@ -157,6 +160,9 @@ export async function reserveMediaOwnership(
     const admin = await getUserContext(session?.id);
     if (!admin) return { success: false, error: "Unauthorized" };
     if (!admin.isGlobalAdmin) return { success: false, error: "Forbidden" };
+    if (!Array.isArray(mediaIds) || mediaIds.length > 500) {
+      return { success: false, error: "Too many media items" };
+    }
 
     const normalizedSlackId = normalizeSlackId(slackId);
     if (!isValidSlackId(normalizedSlackId))

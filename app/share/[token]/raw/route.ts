@@ -5,8 +5,8 @@ import {
 import { type NextRequest, NextResponse } from "next/server";
 import { getSharedMedia } from "@/app/actions/sharing";
 import { logger } from "@/lib/logger";
-import { convertHeicToJpeg } from "@/lib/media/heic";
 import { s3Client } from "@/lib/media/s3";
+import { ALLOWED_IMAGE_TYPES } from "@/lib/media/validation";
 import { contentDispositionFilename } from "@/lib/safe-filename";
 export async function GET(
   request: NextRequest,
@@ -19,46 +19,30 @@ export async function GET(
   },
 ) {
   const { token } = await params;
-  const searchParams = request.nextUrl.searchParams;
-  const variant = searchParams.get("variant");
   const result = await getSharedMedia(token);
   if (!result.success || !result.link || !result.link.media) {
     return new NextResponse("Not Found", { status: 404 });
   }
   const { media } = result.link;
+  if (
+    media.mimeType.startsWith("image/") &&
+    !ALLOWED_IMAGE_TYPES.includes(media.mimeType)
+  ) {
+    return new NextResponse("Unsupported image format", {
+      status: 415,
+    });
+  }
   try {
     const key = media.s3Key;
-    if (
-      (media.mimeType === "image/heic" || media.mimeType === "image/heif") &&
-      variant === "display"
-    ) {
-      try {
-        const outputBuffer = await convertHeicToJpeg(key);
-        return new Response(new Uint8Array(outputBuffer), {
-          headers: {
-            "Content-Type": "image/jpeg",
-            "Cache-Control": "public, max-age=31536000, immutable",
-            "CDN-Cache-Control":
-              "public, max-age=31536000, stale-while-revalidate=604800",
-            "Cloudflare-CDN-Cache-Control":
-              "public, max-age=31536000, stale-while-revalidate=604800",
-          },
-        });
-      } catch (e) {
-        logger.error("[HEIC Conversion] Error converting HEIC:", e);
-        return new NextResponse(
-          `Image processing failed: ${e instanceof Error ? e.message : String(e)}`,
-          { status: 500 },
-        );
-      }
-    }
     const command = new GetObjectCommand({
       Bucket: process.env.S3_BUCKET_NAME,
       Key: key,
     });
     let s3Response: GetObjectCommandOutput;
     try {
-      s3Response = await s3Client.send(command);
+      s3Response = await s3Client.send(command, {
+        abortSignal: request.signal,
+      });
     } catch (error) {
       logger.error(`Failed to fetch from S3:`, error);
       return new NextResponse("Failed to fetch media", { status: 502 });

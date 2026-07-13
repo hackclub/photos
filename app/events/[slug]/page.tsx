@@ -27,6 +27,10 @@ import { getAssetProxyUrl } from "@/lib/media/s3";
 import { createOgMetadata } from "@/lib/metadata";
 import { can, getUserContext } from "@/lib/policy";
 import { toPublicUser } from "@/lib/user-display";
+
+const MAX_EVENT_PAGE_MEDIA = 2_000;
+const MAX_EVENT_PAGE_PARTICIPANTS = 500;
+
 export async function generateMetadata({
   params,
   searchParams,
@@ -60,11 +64,7 @@ export async function generateMetadata({
       photoMedia?.eventId === event.id &&
       (await can(ctx, "view", "media", photoMedia))
     ) {
-      const imagePath =
-        photoMedia.mimeType === "image/heic" ||
-        photoMedia.mimeType === "image/heif"
-          ? `/media/${photoMedia.id}/display`
-          : `/media/${photoMedia.id}`;
+      const imagePath = `/media/${photoMedia.id}`;
       return createOgMetadata({
         title: `${photoMedia.caption || photoMedia.filename} | ${event.name}`,
         description,
@@ -116,6 +116,7 @@ export default async function EventPage({
           },
         },
         orderBy: (media, { desc }) => [desc(media.uploadedAt)],
+        limit: MAX_EVENT_PAGE_MEDIA,
       },
     },
   });
@@ -150,6 +151,7 @@ export default async function EventPage({
   }
   const participants = await db.query.eventParticipants.findMany({
     where: eq(eventParticipants.eventId, event.id),
+    limit: MAX_EVENT_PAGE_PARTICIPANTS,
     with: {
       user: {
         columns: {
@@ -161,7 +163,10 @@ export default async function EventPage({
       },
     },
   });
-  participantCount = participants.length;
+  participantCount = await db.$count(
+    eventParticipants,
+    eq(eventParticipants.eventId, event.id),
+  );
   const visibleEventMedia =
     event.media?.filter((m) => m.blurStatus !== "pending") || [];
   const photoCount =

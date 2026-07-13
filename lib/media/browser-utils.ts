@@ -21,8 +21,6 @@ export const ALLOWED_IMAGE_TYPES = [
   "image/png",
   "image/webp",
   "image/gif",
-  "image/heic",
-  "image/heif",
   "image/avif",
   "image/tiff",
 ];
@@ -264,8 +262,12 @@ export async function uploadMultipartToS3(
     throw error;
   }
 }
-export async function generateThumbnail(file: File): Promise<Blob | null> {
+export async function generateThumbnail(
+  file: File,
+  signal?: AbortSignal,
+): Promise<Blob | null> {
   try {
+    throwIfAborted(signal);
     const { lowEndDevice } = getConnectionProfile();
     if (lowEndDevice && file.type.startsWith("video/")) {
       return null;
@@ -274,7 +276,7 @@ export async function generateThumbnail(file: File): Promise<Blob | null> {
       return await generateImageThumbnail(file);
     }
     if (file.type.startsWith("video/")) {
-      return await generateVideoThumbnail(file);
+      return await generateVideoThumbnail(file, signal);
     }
   } catch (error) {
     logger.warn("Client thumbnail generation failed:", error);
@@ -296,7 +298,39 @@ async function generateImageThumbnail(file: File): Promise<Blob | null> {
   }
 }
 
-async function generateVideoThumbnail(file: File): Promise<Blob | null> {
+function waitForVideoEvent(
+  video: HTMLVideoElement,
+  eventName: "loadedmetadata" | "seeked",
+  signal?: AbortSignal,
+) {
+  return new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timeout);
+      video.removeEventListener(eventName, onReady);
+      video.removeEventListener("error", onError);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const finish = (error?: Error) => {
+      cleanup();
+      if (error) reject(error);
+      else resolve();
+    };
+    const onReady = () => finish();
+    const onError = () =>
+      finish(new Error(`Unable to read video ${eventName}`));
+    const onAbort = () => finish(new Error("Upload cancelled"));
+    const timeout = window.setTimeout(
+      () => finish(new Error(`Video ${eventName} timed out`)),
+      15_000,
+    );
+    video.addEventListener(eventName, onReady, { once: true });
+    video.addEventListener("error", onError, { once: true });
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+  });
+}
+
+async function generateVideoThumbnail(file: File, signal?: AbortSignal) {
   const video = document.createElement("video");
   const url = URL.createObjectURL(file);
   try {
@@ -304,18 +338,13 @@ async function generateVideoThumbnail(file: File): Promise<Blob | null> {
     video.muted = true;
     video.playsInline = true;
     video.src = url;
-    await new Promise<void>((resolve, reject) => {
-      video.onloadedmetadata = () => resolve();
-      video.onerror = () => reject(new Error("Unable to read video metadata"));
-    });
+    await waitForVideoEvent(video, "loadedmetadata", signal);
     const seekTo = Number.isFinite(video.duration)
       ? Math.min(1, Math.max(0, video.duration / 10))
       : 0;
-    await new Promise<void>((resolve, reject) => {
-      video.onseeked = () => resolve();
-      video.onerror = () => reject(new Error("Unable to seek video"));
-      video.currentTime = seekTo;
-    });
+    video.currentTime = seekTo;
+    await waitForVideoEvent(video, "seeked", signal);
+    throwIfAborted(signal);
     return await drawThumbnail(
       video.videoWidth,
       video.videoHeight,

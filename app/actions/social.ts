@@ -1,5 +1,5 @@
 "use server";
-import { and, count, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import {
   broadcastNewComment,
   broadcastNewLike,
@@ -51,9 +51,10 @@ export async function toggleMediaLike(mediaId: string) {
         userId: user.id,
       });
     }
-    const likes = await db.query.mediaLikes.findMany({
-      where: eq(mediaLikes.mediaId, mediaId),
-    });
+    const likeCount = await db.$count(
+      mediaLikes,
+      eq(mediaLikes.mediaId, mediaId),
+    );
     if (!existingLike) {
       try {
         broadcastNewLike(mediaId, user.id).catch((error) => {
@@ -76,7 +77,7 @@ export async function toggleMediaLike(mediaId: string) {
     }
     return {
       success: true,
-      likeCount: likes.length,
+      likeCount,
       hasLiked: !existingLike,
     };
   } catch (error) {
@@ -99,16 +100,22 @@ export async function getMediaLikes(mediaId: string) {
       if (!user) return { success: false, error: "Unauthorized" };
       return { success: false, error: "Forbidden" };
     }
-    const likes = await db.query.mediaLikes.findMany({
-      where: eq(mediaLikes.mediaId, mediaId),
-    });
-    const hasLiked = user
-      ? likes.some((like) => like.userId === user.id)
-      : false;
+    const [likeCount, existingLike] = await Promise.all([
+      db.$count(mediaLikes, eq(mediaLikes.mediaId, mediaId)),
+      user
+        ? db.query.mediaLikes.findFirst({
+            where: and(
+              eq(mediaLikes.mediaId, mediaId),
+              eq(mediaLikes.userId, user.id),
+            ),
+            columns: { id: true },
+          })
+        : Promise.resolve(null),
+    ]);
     return {
       success: true,
-      likeCount: likes.length,
-      hasLiked,
+      likeCount,
+      hasLiked: Boolean(existingLike),
     };
   } catch (error) {
     logger.error("Error getting media likes:", error);
@@ -131,7 +138,11 @@ export async function getMediaComments(mediaId: string) {
       return { success: false, error: "Forbidden" };
     }
     const allComments = await db.query.mediaComments.findMany({
-      where: eq(mediaComments.mediaId, mediaId),
+      where: and(
+        eq(mediaComments.mediaId, mediaId),
+        isNull(mediaComments.parentCommentId),
+      ),
+      limit: 200,
       with: {
         user: {
           columns: {
@@ -153,6 +164,7 @@ export async function getMediaComments(mediaId: string) {
             },
           },
           orderBy: [desc(mediaComments.createdAt)],
+          limit: 100,
         },
       },
       orderBy: [desc(mediaComments.createdAt)],

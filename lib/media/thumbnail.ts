@@ -4,9 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import type { Readable } from "node:stream";
 import ffmpeg from "fluent-ffmpeg";
-import decode from "heic-decode";
-import sharp from "sharp";
 import { logger } from "@/lib/logger";
+import { runFfmpegCommand } from "@/lib/media/ffmpeg";
+import sharp, {
+  createSharp,
+  MAX_BUFFERED_IMAGE_BYTES,
+  withImageProcessingSlot,
+} from "@/lib/media/image-processing";
+import { ALLOWED_IMAGE_TYPES } from "@/lib/media/validation";
 import {
   durationMs,
   imageProcessingDuration,
@@ -19,9 +24,11 @@ export function getThumbnailS3Key(mediaId: string) {
   return `media/${mediaId}/thumbnail.jpg`;
 }
 
-export function isHeicMimeType(mimeType?: string | null) {
-  const normalized = mimeType?.split(";")[0]?.toLowerCase();
-  return normalized === "image/heic" || normalized === "image/heif";
+function isUnsupportedImageMimeType(mimeType?: string | null) {
+  const normalized = mimeType?.split(";")[0]?.toLowerCase() ?? "";
+  return (
+    normalized.startsWith("image/") && !ALLOWED_IMAGE_TYPES.includes(normalized)
+  );
 }
 
 export async function processImageUpload(
@@ -31,32 +38,34 @@ export async function processImageUpload(
   eventId: string,
   mimeType?: string,
 ) {
-  return await traceAsync(
-    "media.image.process",
-    { "media.mime_type": mimeType },
-    async () => {
-      const startedAt = Date.now();
-      try {
-        const result = await processImageUploadInternal(
-          input,
-          mediaId,
-          uploadedBy,
-          eventId,
-          mimeType,
-        );
-        imageProcessingDuration.record(durationMs(startedAt), {
-          status: "success",
-          source: mimeType?.startsWith("image/") ? "image" : "unknown",
-        });
-        return result;
-      } catch (error) {
-        imageProcessingDuration.record(durationMs(startedAt), {
-          status: "error",
-          source: mimeType?.startsWith("image/") ? "image" : "unknown",
-        });
-        throw error;
-      }
-    },
+  return await withImageProcessingSlot(() =>
+    traceAsync(
+      "media.image.process",
+      { "media.mime_type": mimeType },
+      async () => {
+        const startedAt = Date.now();
+        try {
+          const result = await processImageUploadInternal(
+            input,
+            mediaId,
+            uploadedBy,
+            eventId,
+            mimeType,
+          );
+          imageProcessingDuration.record(durationMs(startedAt), {
+            status: "success",
+            source: mimeType?.startsWith("image/") ? "image" : "unknown",
+          });
+          return result;
+        } catch (error) {
+          imageProcessingDuration.record(durationMs(startedAt), {
+            status: "error",
+            source: mimeType?.startsWith("image/") ? "image" : "unknown",
+          });
+          throw error;
+        }
+      },
+    ),
   );
 }
 
@@ -78,7 +87,7 @@ async function encodeJpegThumbnail(image: sharp.Sharp) {
 async function buildRobustImageThumbnail(buffer: Buffer) {
   const attempts = [
     () =>
-      sharp(buffer, { failOn: "none", animated: true, limitInputPixels: false })
+      createSharp(buffer, { failOn: "none" })
         .rotate()
         .flatten({ background: "#111111" })
         .resize(400, 400, {
@@ -91,7 +100,7 @@ async function buildRobustImageThumbnail(buffer: Buffer) {
         .jpeg({ quality: 76, mozjpeg: true, progressive: true })
         .toBuffer(),
     () =>
-      sharp(buffer, { failOn: "none", limitInputPixels: false })
+      createSharp(buffer, { failOn: "none" })
         .rotate()
         .flatten({ background: "#111111" })
         .resize(400, 400, {
@@ -104,7 +113,7 @@ async function buildRobustImageThumbnail(buffer: Buffer) {
         .jpeg({ quality: 76, mozjpeg: true, progressive: true })
         .toBuffer(),
     () =>
-      sharp(buffer, { failOn: "none", limitInputPixels: false })
+      createSharp(buffer, { failOn: "none" })
         .flatten({ background: "#111111" })
         .resize(400, 400, {
           fit: "cover",
@@ -128,88 +137,6 @@ async function buildRobustImageThumbnail(buffer: Buffer) {
     : new Error("Could not generate image thumbnail");
 }
 
-type DecodedHeicImage = {
-  width: number;
-  height: number;
-  data: Uint8Array | Uint8ClampedArray;
-};
-
-function getHeicDecoder() {
-  let decoder: any = decode;
-  if (typeof decoder !== "function" && typeof decoder?.default === "function") {
-    decoder = decoder.default;
-  }
-  return decoder;
-}
-
-function exactArrayBuffer(buffer: Buffer) {
-  return buffer.buffer.slice(
-    buffer.byteOffset,
-    buffer.byteOffset + buffer.byteLength,
-  );
-}
-
-async function decodeHeicWithFallbacks(buffer: Buffer) {
-  const decoder = getHeicDecoder();
-  const exactBuffer = exactArrayBuffer(buffer);
-  const attempts: Array<() => Promise<DecodedHeicImage>> = [
-    () => decoder({ buffer: exactBuffer }),
-    () => decoder({ buffer: Buffer.from(buffer) }),
-    async () => {
-      if (typeof decoder.all !== "function") {
-        throw new Error("HEIC decoder does not support all()");
-      }
-      const images = await decoder.all({ buffer: exactBuffer });
-      try {
-        if (!images || images.length === 0) {
-          throw new Error("HEIC decoder returned no images");
-        }
-        const decodedImages = await Promise.all(
-          images.map((image: { decode: () => Promise<DecodedHeicImage> }) =>
-            image.decode(),
-          ),
-        );
-        decodedImages.sort((a, b) => b.width * b.height - a.width * a.height);
-        return decodedImages[0];
-      } finally {
-        if (typeof images?.dispose === "function") {
-          images.dispose();
-        }
-      }
-    },
-    async () => {
-      if (typeof decoder.all !== "function") {
-        throw new Error("HEIC decoder does not support all()");
-      }
-      const images = await decoder.all({ buffer: Buffer.from(buffer) });
-      try {
-        if (!images || images.length === 0) {
-          throw new Error("HEIC decoder returned no images");
-        }
-        return await images[0].decode();
-      } finally {
-        if (typeof images?.dispose === "function") {
-          images.dispose();
-        }
-      }
-    },
-  ];
-  let lastError: unknown;
-  for (const attempt of attempts) {
-    try {
-      const decoded = await attempt();
-      if (decoded.width && decoded.height && decoded.data?.length) {
-        return decoded;
-      }
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("Could not decode HEIC image");
-}
-
 async function uploadThumbnail(
   thumbnailBuffer: Buffer,
   mediaId: string,
@@ -230,30 +157,10 @@ async function generateImageThumbnailBuffer(
   height?: number;
   exifBuffer?: Buffer;
 }> {
-  if (isHeicMimeType(mimeType)) {
-    try {
-      const image = sharp(buffer, { failOn: "none", limitInputPixels: false });
-      const metadata = await image.metadata();
-      const thumbnailBuffer = await buildRobustImageThumbnail(buffer);
-      return {
-        thumbnailBuffer,
-        width: metadata.width,
-        height: metadata.height,
-        exifBuffer: buffer,
-      };
-    } catch (sharpError) {
-      logger.info(
-        { error: sharpError },
-        "Sharp could not decode HEIC thumbnail source, using HEIC decoder",
-      );
-    }
-    const { width, height, data } = await decodeHeicWithFallbacks(buffer);
-    const thumbnailBuffer = await encodeJpegThumbnail(
-      sharp(Buffer.from(data), { raw: { width, height, channels: 4 } }),
-    );
-    return { thumbnailBuffer, width, height, exifBuffer: buffer };
+  if (isUnsupportedImageMimeType(mimeType)) {
+    throw new Error("Unsupported image format");
   }
-  const image = sharp(buffer, { failOn: "none", limitInputPixels: false });
+  const image = createSharp(buffer, { failOn: "none" });
   const metadata = await image.metadata();
   const thumbnailBuffer = await buildRobustImageThumbnail(buffer);
   return {
@@ -271,41 +178,30 @@ async function processImageUploadInternal(
   eventId: string,
   mimeType?: string,
 ) {
-  const buffer = Buffer.isBuffer(input) ? input : await streamToBuffer(input);
-  try {
-    const { thumbnailBuffer, width, height, exifBuffer } =
-      await generateImageThumbnailBuffer(buffer, mimeType);
-    const thumbnailS3Key = await uploadThumbnail(thumbnailBuffer, mediaId, {
-      uploadedBy,
-      eventId,
-    });
-    return {
-      thumbnailS3Key,
-      width,
-      height,
-      exifBuffer,
-    };
-  } catch (error: any) {
-    if (!isHeicMimeType(mimeType)) {
-      logger.info(
-        "Sharp failed with unsupported format, attempting HEIC fallback...",
-      );
-      try {
-        const { thumbnailBuffer, width, height, exifBuffer } =
-          await generateImageThumbnailBuffer(buffer, "image/heic");
-        const thumbnailS3Key = await uploadThumbnail(thumbnailBuffer, mediaId, {
-          uploadedBy,
-          eventId,
-        });
-        return { thumbnailS3Key, width, height, exifBuffer };
-      } catch (heicError) {
-        logger.error("HEIC fallback failed:", heicError);
-      }
-    }
-    throw error;
+  if (isUnsupportedImageMimeType(mimeType)) {
+    throw new Error("Unsupported image format");
   }
+  const buffer = Buffer.isBuffer(input) ? input : await streamToBuffer(input);
+  if (buffer.length > MAX_BUFFERED_IMAGE_BYTES) {
+    throw new Error("Image source exceeds the server processing limit");
+  }
+  const { thumbnailBuffer, width, height, exifBuffer } =
+    await generateImageThumbnailBuffer(buffer, mimeType);
+  const thumbnailS3Key = await uploadThumbnail(thumbnailBuffer, mediaId, {
+    uploadedBy,
+    eventId,
+  });
+  return { thumbnailS3Key, width, height, exifBuffer };
 }
-export async function generateAndUploadThumbnail(
+const thumbnailGlobal = globalThis as typeof globalThis & {
+  __photosPendingThumbnailGenerations?: Map<string, Promise<string | null>>;
+};
+const pendingThumbnailGenerations =
+  thumbnailGlobal.__photosPendingThumbnailGenerations ?? new Map();
+thumbnailGlobal.__photosPendingThumbnailGenerations =
+  pendingThumbnailGenerations;
+
+async function generateAndUploadThumbnailInternal(
   input: Buffer | string,
   mimeType: string,
   mediaId: string,
@@ -315,6 +211,10 @@ export async function generateAndUploadThumbnail(
 ): Promise<string | null> {
   const startedAt = Date.now();
   const isVideo = mimeType.startsWith("video/");
+  if (isUnsupportedImageMimeType(mimeType)) {
+    logger.warn({ mediaId, mimeType }, "Rejected unsupported thumbnail format");
+    return null;
+  }
   try {
     const result = await traceAsync(
       "media.thumbnail.generate",
@@ -327,26 +227,24 @@ export async function generateAndUploadThumbnail(
           return null;
         }
         if (isVideo) {
-          return await generateVideoThumbnail(
-            input,
-            mediaId,
+          return await withImageProcessingSlot(
+            () =>
+              generateVideoThumbnail(input, mediaId, signal, tags, duration),
             signal,
-            tags,
-            duration,
           );
         }
         if (typeof input === "string") {
           logger.error("Image thumbnail generation requires a Buffer input");
           return null;
         }
-        const { thumbnailBuffer } = await generateImageThumbnailBuffer(
-          input,
-          mimeType,
-        );
-        if (signal?.aborted) {
-          return null;
-        }
-        return await uploadThumbnail(thumbnailBuffer, mediaId, tags, signal);
+        return await withImageProcessingSlot(async () => {
+          const { thumbnailBuffer } = await generateImageThumbnailBuffer(
+            input,
+            mimeType,
+          );
+          if (signal?.aborted) return null;
+          return await uploadThumbnail(thumbnailBuffer, mediaId, tags, signal);
+        }, signal);
       },
     );
     thumbnailGenerationDuration.record(durationMs(startedAt), {
@@ -363,6 +261,36 @@ export async function generateAndUploadThumbnail(
     return null;
   }
 }
+
+export async function generateAndUploadThumbnail(
+  input: Buffer | string,
+  mimeType: string,
+  mediaId: string,
+  signal?: AbortSignal,
+  tags?: Record<string, string>,
+  duration?: number,
+): Promise<string | null> {
+  const existing = pendingThumbnailGenerations.get(mediaId);
+  if (existing) return await existing;
+
+  const generation = generateAndUploadThumbnailInternal(
+    input,
+    mimeType,
+    mediaId,
+    signal,
+    tags,
+    duration,
+  );
+  pendingThumbnailGenerations.set(mediaId, generation);
+  try {
+    return await generation;
+  } finally {
+    if (pendingThumbnailGenerations.get(mediaId) === generation) {
+      pendingThumbnailGenerations.delete(mediaId);
+    }
+  }
+}
+
 async function generateVideoThumbnail(
   input: Buffer | string,
   mediaId: string,
@@ -391,31 +319,21 @@ async function generateVideoThumbnail(
       screenshotTimestamp = "00:00:00.000";
     }
     if (signal?.aborted) return null;
-    const extractFrame = (timestamp: string) =>
-      new Promise<void>((resolve, reject) => {
-        const command = ffmpeg(inputPath);
-        if (signal) {
-          signal.addEventListener(
-            "abort",
-            () => {
-              command.kill("SIGKILL");
-              reject(new Error("Aborted"));
-            },
-            { once: true },
-          );
-        }
-        command
-          .screenshots({
+    const extractFrame = (timestamp: string) => {
+      const command = ffmpeg(inputPath);
+      return runFfmpegCommand(
+        command,
+        () => {
+          command.screenshots({
             count: 1,
             folder: tempDir,
             filename: `${mediaId}-thumb.jpg`,
             timestamps: [timestamp],
-          })
-          .on("end", () => resolve())
-          .on("error", (err) => {
-            if (!signal?.aborted) reject(err);
           });
-      });
+        },
+        { signal },
+      );
+    };
     try {
       await extractFrame(screenshotTimestamp);
     } catch (error) {
@@ -429,7 +347,7 @@ async function generateVideoThumbnail(
     const { readFile } = await import("node:fs/promises");
     const thumbnailBuffer = await readFile(tempThumbnailPath);
     const processedThumbnail = await encodeJpegThumbnail(
-      sharp(thumbnailBuffer),
+      createSharp(thumbnailBuffer),
     );
     if (signal?.aborted) return null;
     const thumbnailS3Key = getThumbnailS3Key(mediaId);
@@ -469,13 +387,18 @@ export async function deleteMediaAndThumbnail(
   }
 }
 export async function processBanner(input: Buffer): Promise<Buffer> {
-  return await sharp(input)
-    .rotate()
-    .resize(2000, null, {
-      withoutEnlargement: true,
-    })
-    .toFormat("jpeg", { quality: 80, mozjpeg: true })
-    .toBuffer();
+  if (input.length > MAX_BUFFERED_IMAGE_BYTES) {
+    throw new Error("Banner source exceeds the server processing limit");
+  }
+  return await withImageProcessingSlot(() =>
+    createSharp(input)
+      .rotate()
+      .resize(2000, null, {
+        withoutEnlargement: true,
+      })
+      .toFormat("jpeg", { quality: 80, mozjpeg: true })
+      .toBuffer(),
+  );
 }
 export async function deleteBatchMedia(
   mediaItems: {
@@ -509,8 +432,17 @@ export async function deleteBatchMedia(
 }
 async function streamToBuffer(stream: Readable): Promise<Buffer> {
   const chunks: Buffer[] = [];
+  let size = 0;
   for await (const chunk of stream) {
-    chunks.push(Buffer.from(chunk));
+    const buffer = Buffer.from(chunk);
+    size += buffer.length;
+    if (size > MAX_BUFFERED_IMAGE_BYTES) {
+      stream.destroy(
+        new Error("Image source exceeds the server processing limit"),
+      );
+      throw new Error("Image source exceeds the server processing limit");
+    }
+    chunks.push(buffer);
   }
   return Buffer.concat(chunks);
 }

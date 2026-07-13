@@ -1,5 +1,5 @@
 "use server";
-import { desc, eq } from "drizzle-orm";
+import { count, desc, eq, inArray } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
@@ -17,6 +17,10 @@ import {
   getUserContext,
 } from "@/lib/policy";
 import { toPublicUser } from "@/lib/user-display";
+
+const PROFILE_MEDIA_LIMIT = 500;
+const PROFILE_EVENT_LIMIT = 500;
+
 export async function getUserProfileData(userId: string) {
   try {
     const session = await getSession();
@@ -40,6 +44,7 @@ export async function getUserProfileData(userId: string) {
     const userUploads = await db.query.media.findMany({
       where: eq(media.uploadedById, userId),
       orderBy: [desc(media.uploadedAt)],
+      limit: PROFILE_MEDIA_LIMIT,
       with: {
         event: true,
         uploadedBy: {
@@ -50,12 +55,12 @@ export async function getUserProfileData(userId: string) {
             slackId: true,
           },
         },
-        likes: true,
       },
     });
     const userLikes = await db.query.mediaLikes.findMany({
       where: eq(mediaLikes.userId, userId),
       orderBy: [desc(mediaLikes.createdAt)],
+      limit: PROFILE_MEDIA_LIMIT,
       with: {
         media: {
           with: {
@@ -68,7 +73,6 @@ export async function getUserProfileData(userId: string) {
                 slackId: true,
               },
             },
-            likes: true,
           },
         },
       },
@@ -79,6 +83,7 @@ export async function getUserProfileData(userId: string) {
     const userMentions = await db.query.mediaMentions.findMany({
       where: eq(mediaMentions.userId, userId),
       orderBy: [desc(mediaMentions.createdAt)],
+      limit: PROFILE_MEDIA_LIMIT,
       with: {
         media: {
           with: {
@@ -91,7 +96,6 @@ export async function getUserProfileData(userId: string) {
                 slackId: true,
               },
             },
-            likes: true,
           },
         },
       },
@@ -102,22 +106,13 @@ export async function getUserProfileData(userId: string) {
     const userEvents = await db.query.eventParticipants.findMany({
       where: eq(eventParticipants.userId, userId),
       orderBy: [desc(eventParticipants.joinedAt)],
+      limit: PROFILE_EVENT_LIMIT,
       with: {
         event: {
           with: {
             series: {
               columns: {
                 name: true,
-              },
-            },
-            media: {
-              columns: {
-                id: true,
-              },
-            },
-            participants: {
-              columns: {
-                id: true,
               },
             },
           },
@@ -166,6 +161,50 @@ export async function getUserProfileData(userId: string) {
     const filteredUserEvents = userEvents.filter(
       (p) => p.event && accessibleEventIds.has(p.event.id),
     );
+    const mediaIds = Array.from(
+      new Set(
+        [...filteredUploads, ...filteredLikes, ...filteredMentions].map(
+          (item) => item.id,
+        ),
+      ),
+    );
+    const eventIds = filteredUserEvents.map((item) => item.event.id);
+    const [likeCounts, eventMediaCounts, eventParticipantCounts] =
+      await Promise.all([
+        mediaIds.length > 0
+          ? db
+              .select({ mediaId: mediaLikes.mediaId, count: count() })
+              .from(mediaLikes)
+              .where(inArray(mediaLikes.mediaId, mediaIds))
+              .groupBy(mediaLikes.mediaId)
+          : Promise.resolve([]),
+        eventIds.length > 0
+          ? db
+              .select({ eventId: media.eventId, count: count() })
+              .from(media)
+              .where(inArray(media.eventId, eventIds))
+              .groupBy(media.eventId)
+          : Promise.resolve([]),
+        eventIds.length > 0
+          ? db
+              .select({
+                eventId: eventParticipants.eventId,
+                count: count(),
+              })
+              .from(eventParticipants)
+              .where(inArray(eventParticipants.eventId, eventIds))
+              .groupBy(eventParticipants.eventId)
+          : Promise.resolve([]),
+      ]);
+    const likeCountByMediaId = new Map(
+      likeCounts.map((item) => [item.mediaId, item.count]),
+    );
+    const mediaCountByEventId = new Map(
+      eventMediaCounts.map((item) => [item.eventId, item.count]),
+    );
+    const participantCountByEventId = new Map(
+      eventParticipantCounts.map((item) => [item.eventId, item.count]),
+    );
     const [augmentedUploads, augmentedLikes, augmentedMentions] =
       await Promise.all([
         augmentMediaWithPermissions(currentUser?.id, filteredUploads),
@@ -181,8 +220,8 @@ export async function getUserProfileData(userId: string) {
         return {
           ...p.event,
           joinedAt: p.joinedAt,
-          mediaCount: p.event.media.length,
-          participantCount: p.event.participants.length,
+          mediaCount: mediaCountByEventId.get(p.event.id) ?? 0,
+          participantCount: participantCountByEventId.get(p.event.id) ?? 0,
           bannerUrl,
         };
       }),
@@ -192,15 +231,15 @@ export async function getUserProfileData(userId: string) {
       data: {
         uploads: augmentedUploads.map((u) => ({
           ...u,
-          likeCount: u.likes.length,
+          likeCount: likeCountByMediaId.get(u.id) ?? 0,
         })),
         likes: augmentedLikes.map((m) => ({
           ...m,
-          likeCount: m.likes.length,
+          likeCount: likeCountByMediaId.get(m.id) ?? 0,
         })),
         mentions: augmentedMentions.map((m) => ({
           ...m,
-          likeCount: m.likes.length,
+          likeCount: likeCountByMediaId.get(m.id) ?? 0,
         })),
         events: joinedEvents.filter((e) => e !== null),
       },
