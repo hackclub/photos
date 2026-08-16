@@ -20,7 +20,11 @@ export default async function HomePage() {
     if (onboardingSession) {
       redirect("/onboarding");
     }
-    return <LandingPage />;
+    const randomMedia = await getRandomMediaIds(24);
+    const images = (randomMedia.ids ?? []).map((id) =>
+      getMediaProxyUrl(id, "thumbnail"),
+    );
+    return <LandingPage images={images} />;
   }
   const refreshedUser = await refreshUser(session.id);
   if (refreshedUser?.isBanned) {
