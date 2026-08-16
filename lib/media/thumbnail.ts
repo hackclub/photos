@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { Readable } from "node:stream";
 import ffmpeg from "fluent-ffmpeg";
+import type { Sharp } from "sharp";
 import { logger } from "@/lib/logger";
 import { runFfmpegCommand } from "@/lib/media/ffmpeg";
 import sharp, {
@@ -12,12 +13,6 @@ import sharp, {
   withImageProcessingSlot,
 } from "@/lib/media/image-processing";
 import { ALLOWED_IMAGE_TYPES } from "@/lib/media/validation";
-import {
-  durationMs,
-  imageProcessingDuration,
-  thumbnailGenerationDuration,
-  traceAsync,
-} from "@/lib/telemetry";
 import { deleteFromS3, deleteFromS3Batch, uploadToS3 } from "./s3";
 
 export function getThumbnailS3Key(mediaId: string) {
@@ -39,37 +34,11 @@ export async function processImageUpload(
   mimeType?: string,
 ) {
   return await withImageProcessingSlot(() =>
-    traceAsync(
-      "media.image.process",
-      { "media.mime_type": mimeType },
-      async () => {
-        const startedAt = Date.now();
-        try {
-          const result = await processImageUploadInternal(
-            input,
-            mediaId,
-            uploadedBy,
-            eventId,
-            mimeType,
-          );
-          imageProcessingDuration.record(durationMs(startedAt), {
-            status: "success",
-            source: mimeType?.startsWith("image/") ? "image" : "unknown",
-          });
-          return result;
-        } catch (error) {
-          imageProcessingDuration.record(durationMs(startedAt), {
-            status: "error",
-            source: mimeType?.startsWith("image/") ? "image" : "unknown",
-          });
-          throw error;
-        }
-      },
-    ),
+    processImageUploadInternal(input, mediaId, uploadedBy, eventId, mimeType),
   );
 }
 
-async function encodeJpegThumbnail(image: sharp.Sharp) {
+async function encodeJpegThumbnail(image: Sharp) {
   return await image
     .rotate()
     .resize(400, 400, {
@@ -209,54 +178,34 @@ async function generateAndUploadThumbnailInternal(
   tags?: Record<string, string>,
   duration?: number,
 ): Promise<string | null> {
-  const startedAt = Date.now();
   const isVideo = mimeType.startsWith("video/");
   if (isUnsupportedImageMimeType(mimeType)) {
     logger.warn({ mediaId, mimeType }, "Rejected unsupported thumbnail format");
     return null;
   }
   try {
-    const result = await traceAsync(
-      "media.thumbnail.generate",
-      {
-        "media.source": isVideo ? "video" : "image",
-        "media.mime_type": mimeType,
-      },
-      async () => {
-        if (signal?.aborted) {
-          return null;
-        }
-        if (isVideo) {
-          return await withImageProcessingSlot(
-            () =>
-              generateVideoThumbnail(input, mediaId, signal, tags, duration),
-            signal,
-          );
-        }
-        if (typeof input === "string") {
-          logger.error("Image thumbnail generation requires a Buffer input");
-          return null;
-        }
-        return await withImageProcessingSlot(async () => {
-          const { thumbnailBuffer } = await generateImageThumbnailBuffer(
-            input,
-            mimeType,
-          );
-          if (signal?.aborted) return null;
-          return await uploadThumbnail(thumbnailBuffer, mediaId, tags, signal);
-        }, signal);
-      },
-    );
-    thumbnailGenerationDuration.record(durationMs(startedAt), {
-      status: result ? "success" : "skipped",
-      source: isVideo ? "video" : "image",
-    });
-    return result;
+    if (signal?.aborted) {
+      return null;
+    }
+    if (isVideo) {
+      return await withImageProcessingSlot(
+        () => generateVideoThumbnail(input, mediaId, signal, tags, duration),
+        signal,
+      );
+    }
+    if (typeof input === "string") {
+      logger.error("Image thumbnail generation requires a Buffer input");
+      return null;
+    }
+    return await withImageProcessingSlot(async () => {
+      const { thumbnailBuffer } = await generateImageThumbnailBuffer(
+        input,
+        mimeType,
+      );
+      if (signal?.aborted) return null;
+      return await uploadThumbnail(thumbnailBuffer, mediaId, tags, signal);
+    }, signal);
   } catch (error) {
-    thumbnailGenerationDuration.record(durationMs(startedAt), {
-      status: "error",
-      source: isVideo ? "video" : "image",
-    });
     logger.error("Image thumbnail generation error:", error);
     return null;
   }

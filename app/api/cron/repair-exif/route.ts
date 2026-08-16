@@ -3,13 +3,12 @@ import { and, eq, lt, or } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
-import { logger, recordException, serializeError } from "@/lib/logger";
+import { logger, serializeError } from "@/lib/logger";
 import { extractExifData } from "@/lib/media/exif";
 import { createSharp } from "@/lib/media/image-processing";
 import { getSignedDownloadUrl, S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
 import { ALLOWED_IMAGE_TYPES } from "@/lib/media/validation";
 import { extractVideoMetadata } from "@/lib/media/video-metadata";
-import { recordCronJob } from "@/lib/telemetry";
 
 const BATCH_SIZE = 200;
 const REPAIR_CONCURRENCY = 8;
@@ -258,7 +257,6 @@ async function repairExifForMedia(item: MediaRow) {
       .where(eq(media.id, item.id));
     return { scanned: 1, skipped: 0, repaired: 1, failed: 0 };
   } catch (error) {
-    await recordException(error);
     logger.error(
       { mediaId: item.id, error: serializeError(error) },
       "media metadata repair failed",
@@ -274,7 +272,6 @@ export async function GET(request: NextRequest) {
     !process.env.CRON_SECRET ||
     authHeader !== `Bearer ${process.env.CRON_SECRET}`
   ) {
-    recordCronJob("repair_exif", "unauthorized", startedAt);
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   if (repairState.__exifRepairRunning) {
@@ -340,11 +337,6 @@ export async function GET(request: NextRequest) {
       },
       "media metadata repair finished",
     );
-    recordCronJob(
-      "repair_exif",
-      totals.failed > 0 ? "error" : "success",
-      startedAt,
-    );
     return NextResponse.json({
       checked: processedRows,
       ...totals,
@@ -352,8 +344,6 @@ export async function GET(request: NextRequest) {
       completed: !nextCursor,
     });
   } catch (error) {
-    await recordException(error);
-    recordCronJob("repair_exif", "error", startedAt);
     logger.error({ error: serializeError(error) }, "EXIF repair failed");
     return NextResponse.json(
       { success: false, error: String(error) },

@@ -76,11 +76,7 @@ export default function LandingPage({ images = [] }: { images?: string[] }) {
                   style={{ animationDuration: row.duration }}
                 >
                   {tripled.map((src, i) => (
-                    <StripImage
-                      key={`${r}-${i}`}
-                      src={src}
-                      eager={i < 12}
-                    />
+                    <StripImage key={`${r}-${i}`} src={src} eager={i < 12} />
                   ))}
                 </div>
               </div>

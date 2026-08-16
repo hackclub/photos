@@ -10,7 +10,7 @@ import ffmpeg from "fluent-ffmpeg";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
-import { logger, recordException, serializeError } from "@/lib/logger";
+import { logger, serializeError } from "@/lib/logger";
 import { runFfmpegCommand } from "@/lib/media/ffmpeg";
 import {
   createSharp,
@@ -22,7 +22,6 @@ import {
   getThumbnailS3Key,
 } from "@/lib/media/thumbnail";
 import { ALLOWED_IMAGE_TYPES } from "@/lib/media/validation";
-import { recordCronJob } from "@/lib/telemetry";
 
 const BATCH_SIZE = 500;
 const REPAIR_CONCURRENCY = 2;
@@ -224,7 +223,6 @@ export async function GET(request: NextRequest) {
     !process.env.CRON_SECRET ||
     authHeader !== `Bearer ${process.env.CRON_SECRET}`
   ) {
-    recordCronJob("repair_thumbnails", "unauthorized", startedAt);
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   if (repairState.__thumbnailRepairRunning) {
@@ -323,7 +321,6 @@ export async function GET(request: NextRequest) {
           .where(eq(media.id, item.id));
         return { repaired: 1, failed: 0 };
       } catch (error) {
-        await recordException(error);
         logger.error(
           { mediaId: item.id, error: serializeError(error) },
           "thumbnail repair failed",
@@ -346,11 +343,6 @@ export async function GET(request: NextRequest) {
       },
       "thumbnail repair finished",
     );
-    recordCronJob(
-      "repair_thumbnails",
-      failed > 0 ? "error" : "success",
-      startedAt,
-    );
     return NextResponse.json({
       checked: rows.length,
       repaired,
@@ -359,8 +351,6 @@ export async function GET(request: NextRequest) {
       completed: !nextCursor,
     });
   } catch (error) {
-    await recordException(error);
-    recordCronJob("repair_thumbnails", "error", startedAt);
     logger.error({ error: serializeError(error) }, "thumbnail repair failed");
     return NextResponse.json(
       { success: false, error: String(error) },

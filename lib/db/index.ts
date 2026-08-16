@@ -1,4 +1,3 @@
-import { trace } from "@opentelemetry/api";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
@@ -16,7 +15,7 @@ function createQueryClient() {
   const max = Number.isFinite(configuredMaxConnections)
     ? Math.max(2, Math.min(20, Math.floor(configuredMaxConnections)))
     : 10;
-  const sql = postgres(connectionString, {
+  return postgres(connectionString, {
     max,
     prepare: false,
     connect_timeout: 10,
@@ -26,33 +25,7 @@ function createQueryClient() {
       statement_timeout: 120_000,
       idle_in_transaction_session_timeout: 60_000,
     },
-    debug: (_connection, query, parameters) => {
-      const span = trace.getActiveSpan();
-      if (!span) return;
-
-      span.addEvent("db.query", {
-        "db.system": "postgresql",
-        "db.operation.parameter_count": parameters.length,
-        "db.statement.length": query.length,
-      });
-    },
   });
-
-  const originalUnsafe = sql.unsafe.bind(sql);
-  sql.unsafe = ((query, parameters, options) => {
-    const span = trace.getActiveSpan();
-    if (span) {
-      span.addEvent("db.query.unsafe", {
-        "db.system": "postgresql",
-        "db.operation.parameter_count": parameters?.length ?? 0,
-        "db.statement.length": query.length,
-      });
-    }
-
-    return originalUnsafe(query, parameters, options);
-  }) as typeof sql.unsafe;
-
-  return sql;
 }
 
 export const client = globalQueryClient.queryClient || createQueryClient();

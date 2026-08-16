@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
       .filter(Boolean) ?? []),
   ],
   outputFileTracingIncludes: {
-    "/*": ["./otel-bootstrap.cjs", "./node_modules/@opentelemetry/**/*"],
+    "/*": [],
   },
   reactCompiler: true,
   images: {

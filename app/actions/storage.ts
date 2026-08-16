@@ -2,7 +2,7 @@
 import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { APP_URL } from "@/lib/constants";
-import { logger, recordException, serializeError } from "@/lib/logger";
+import { logger, serializeError } from "@/lib/logger";
 import { getDetailedStorageStats } from "@/lib/media/s3";
 import { can, getUserContext } from "@/lib/policy";
 import { getDatabaseStorageStats } from "@/lib/storage";
@@ -73,7 +73,6 @@ export async function cleanupGhostFiles(cursor?: string) {
     });
     return { success: true, ...result };
   } catch (error) {
-    await recordException(error);
     logger.error(
       { userId: user.id, cursor, error: serializeError(error) },
       "manual ghost file cleanup failed",
@@ -110,7 +109,6 @@ export async function repairThumbnails(cursor?: string) {
     await auditLog(user.id, "update", "storage", "thumbnails", { result });
     return { success: true, ...result };
   } catch (error) {
-    await recordException(error);
     logger.error(
       { userId: user.id, cursor, error: serializeError(error) },
       "manual thumbnail repair failed",
@@ -169,7 +167,6 @@ export async function repairExifData(cursor?: string) {
       completed: payload.completed === true,
     };
   } catch (error) {
-    await recordException(error);
     logger.error(
       { userId: user.id, cursor, error: serializeError(error) },
       "manual EXIF repair failed",

@@ -4,7 +4,7 @@ import { unauthorizedResponse, validateApiKey } from "@/lib/auth-api";
 import { APP_URL } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/db/schema";
-import { logger, recordException, serializeError } from "@/lib/logger";
+import { logger, serializeError } from "@/lib/logger";
 export async function GET(req: NextRequest) {
   const auth = await validateApiKey();
   if (!auth) {
@@ -85,7 +85,6 @@ export async function GET(req: NextRequest) {
       });
     }
   } catch (error) {
-    await recordException(error);
     logger.error(
       {
         eventSlug,

@@ -40,11 +40,6 @@ import { extractVideoMetadata } from "@/lib/media/video-metadata";
 import { can, getUserContext } from "@/lib/policy";
 import { publicMedia } from "@/lib/public-data";
 import { checkStorageLimit } from "@/lib/storage";
-import {
-  failedUploadsTotal,
-  photoUploadsTotal,
-  traceAsync,
-} from "@/lib/telemetry";
 
 const MEDIA_KEY_PATTERN = /^media\/([0-9a-f-]{36})\/[A-Za-z0-9._-]+$/i;
 const UUID_PATTERN = /^[0-9a-f-]{36}$/i;
@@ -416,304 +411,271 @@ export async function finalizeUpload(
   },
   skipRevalidation = false,
 ) {
-  return await traceAsync(
-    "media.upload.finalize",
-    {
-      "media.id": mediaId,
-      "event.id": eventId,
-      "media.mime_type": data.mimeType,
-    },
-    async () => {
-      try {
-        const session = await getSession();
-        const user = await getUserContext(session?.id);
-        if (!user) {
-          return { success: false, error: "Unauthorized" };
-        }
-        if (!UUID_PATTERN.test(eventId) || !UUID_PATTERN.test(mediaId)) {
-          return { success: false, error: "Invalid upload identity" };
-        }
-        if (!(await can(user, "upload", "event", eventId))) {
-          return { success: false, error: "Forbidden" };
-        }
-        const validation = validateMediaFile({
-          type: data.mimeType,
-          size: data.fileSize,
-          name: data.filename,
-        });
-        if (!validation.valid) {
-          return { success: false, error: validation.error };
-        }
-        if (getMediaIdFromKey(data.s3Key) !== mediaId) {
-          return { success: false, error: "Invalid upload key" };
-        }
-        if (
-          data.thumbnailS3Key &&
-          getMediaIdFromKey(data.thumbnailS3Key) !== mediaId
-        ) {
-          return { success: false, error: "Invalid thumbnail key" };
-        }
-        if (data.thumbnailFailed) {
-          logger.warn(
-            {
-              mediaId,
-              eventId,
-              reason: data.thumbnailError,
-              mimeType: data.mimeType,
-            },
-            "Client thumbnail generation failed; falling back to server processing",
-          );
-        }
-        let realFileSize = data.fileSize;
-        let serverExifData: Record<string, unknown> | null = null;
-        let thumbnailS3Key = data.thumbnailS3Key;
-        const canonicalThumbnailS3Key = getThumbnailS3Key(mediaId);
-        try {
-          const headCommand = new HeadObjectCommand({
-            Bucket: S3_BUCKET_NAME,
-            Key: data.s3Key,
-          });
-          const s3Metadata = await s3Client.send(headCommand);
-          if (s3Metadata.ContentLength) {
-            realFileSize = s3Metadata.ContentLength;
-          }
-          if (await storedObjectHasUnsupportedImageFormat(data.s3Key)) {
-            await deleteFromS3(data.s3Key).catch((deleteError) => {
-              logger.error(
-                "Failed to delete rejected image upload:",
-                deleteError,
-              );
-            });
-            for (const thumbnailKey of new Set(
-              [data.thumbnailS3Key, canonicalThumbnailS3Key].filter(
-                (key): key is string => Boolean(key),
-              ),
-            )) {
-              await deleteFromS3(thumbnailKey).catch(() => {});
-            }
-            return {
-              success: false,
-              error:
-                "Unsupported image format. Convert the file to JPEG before uploading.",
-            };
-          }
-          if (realFileSize > data.fileSize + 1024 * 1024) {
-            return { success: false, error: "Uploaded file size mismatch" };
-          }
-          const storageCheck = await checkStorageLimit(
-            user.id,
-            realFileSize,
-            user,
-          );
-          if (!storageCheck.allowed) {
-            await deleteFromS3(data.s3Key).catch((deleteError) => {
-              logger.error("Failed to delete over-quota upload:", deleteError);
-            });
-            if (data.thumbnailS3Key) {
-              await deleteFromS3(data.thumbnailS3Key).catch((deleteError) => {
-                logger.error(
-                  "Failed to delete over-quota thumbnail:",
-                  deleteError,
-                );
-              });
-            }
-            return { success: false, error: "Storage limit exceeded" };
-          }
-          if (
-            data.thumbnailS3Key &&
-            !(await objectExists(data.thumbnailS3Key))
-          ) {
-            thumbnailS3Key = null;
-          }
-          if (
-            !thumbnailS3Key &&
-            (await objectExists(canonicalThumbnailS3Key))
-          ) {
-            thumbnailS3Key = canonicalThumbnailS3Key;
-          }
-          if (data.mimeType.startsWith("image/")) {
-            await withMediaBufferingSlot(async () => {
-              try {
-                const getCommand = new GetObjectCommand({
-                  Bucket: S3_BUCKET_NAME,
-                  Key: data.s3Key,
-                });
-                const s3Object = await s3Client.send(getCommand);
-                if (s3Object.Body) {
-                  const originalBuffer = await streamToBuffer(
-                    s3Object.Body as Readable,
-                  );
-                  const originalExif = await extractExifData(
-                    originalBuffer,
-                    data.mimeType,
-                  );
-                  serverExifData = mergeExifData(originalExif, data.exifData);
-                  if (originalExif) {
-                    serverExifData = mergeExifData(
-                      {
-                        ...serverExifData,
-                        width: originalExif.width,
-                        height: originalExif.height,
-                      },
-                      null,
-                    );
-                  }
-                  if (!serverExifData) {
-                    serverExifData = mergeExifData(data.exifData, null);
-                  }
-                  if (!thumbnailS3Key) {
-                    const imageResult = await processImageUpload(
-                      originalBuffer,
-                      mediaId,
-                      user.id,
-                      eventId,
-                      data.mimeType,
-                    );
-                    if (imageResult.thumbnailS3Key) {
-                      thumbnailS3Key = imageResult.thumbnailS3Key;
-                    }
-                    serverExifData = mergeExifData(
-                      {
-                        ...serverExifData,
-                        width: imageResult.width || serverExifData?.width,
-                        height: imageResult.height || serverExifData?.height,
-                      },
-                      data.exifData,
-                    );
-                  }
-                }
-              } catch (e) {
-                logger.error("Failed to process image server-side:", e);
-              }
-            });
-          } else if (data.mimeType.startsWith("video/")) {
-            try {
-              await withVideoStagingSlot(async () => {
-                const getCommand = new GetObjectCommand({
-                  Bucket: S3_BUCKET_NAME,
-                  Key: data.s3Key,
-                });
-                const s3Object = await s3Client.send(getCommand);
-                if (!s3Object.Body) return;
-                const { writeFile, unlink } = await import("node:fs/promises");
-                const { join } = await import("node:path");
-                const { tmpdir } = await import("node:os");
-                const tempFilePath = join(
-                  tmpdir(),
-                  `video-${mediaId}-${randomUUID()}.tmp`,
-                );
-                try {
-                  const stream = s3Object.Body as NodeJS.ReadableStream;
-                  await writeFile(tempFilePath, stream);
-                  const metadataPromise = extractVideoMetadata(tempFilePath);
-                  const thumbnailPromise = generateAndUploadThumbnail(
-                    tempFilePath,
-                    data.mimeType,
-                    mediaId,
-                    undefined,
-                    { uploadedBy: user.id, eventId },
-                    undefined,
-                  );
-                  const [videoMetadata, generatedThumbnailKey] =
-                    await Promise.all([metadataPromise, thumbnailPromise]);
-                  if (videoMetadata) {
-                    serverExifData = {
-                      width: videoMetadata.width,
-                      height: videoMetadata.height,
-                      dateTimeOriginal: videoMetadata.creationTime,
-                      duration: videoMetadata.duration,
-                      make: videoMetadata.make,
-                      model: videoMetadata.model,
-                      gpsLatitude: videoMetadata.latitude,
-                      gpsLongitude: videoMetadata.longitude,
-                    };
-                  }
-                  if (generatedThumbnailKey) {
-                    thumbnailS3Key = generatedThumbnailKey;
-                  }
-                } finally {
-                  await unlink(tempFilePath).catch(() => {});
-                }
-              });
-            } catch (e) {
-              logger.error("Failed to process video server-side:", e);
-            }
-          }
-        } catch (error) {
-          logger.error("Failed to verify S3 object:", error);
-          failedUploadsTotal.add(1, { status: "error", source: "web" });
-          return {
-            success: false,
-            error: "Upload verification failed: File not found in storage",
-          };
-        }
-        const finalExifData = mergeExifData(serverExifData, data.exifData);
-        const dateValue = finalExifData?.dateTimeOriginal ?? data.takenAt;
-        const takenAt = dateValue ? new Date(dateValue as string) : null;
-        const latitude =
-          (finalExifData?.gpsLatitude as number | undefined) ?? null;
-        const longitude =
-          (finalExifData?.gpsLongitude as number | undefined) ?? null;
-        const [insertedMedia] = await db
-          .insert(media)
-          .values({
-            id: mediaId,
-            eventId,
-            uploadedById: user.id,
-            s3Key: data.s3Key,
-            s3Url: data.s3Key,
-            thumbnailS3Key: thumbnailS3Key,
-            filename: data.filename,
-            mimeType: data.mimeType,
-            fileSize: realFileSize,
-            exifData: finalExifData,
-            width: (finalExifData?.width as number | undefined) || data.width,
-            height:
-              (finalExifData?.height as number | undefined) || data.height,
-            latitude,
-            longitude,
-            takenAt: takenAt,
-          })
-          .returning();
-        await auditLog(user.id, "upload", "media", insertedMedia.id, {
+  try {
+    const session = await getSession();
+    const user = await getUserContext(session?.id);
+    if (!user) {
+      return { success: false, error: "Unauthorized" };
+    }
+    if (!UUID_PATTERN.test(eventId) || !UUID_PATTERN.test(mediaId)) {
+      return { success: false, error: "Invalid upload identity" };
+    }
+    if (!(await can(user, "upload", "event", eventId))) {
+      return { success: false, error: "Forbidden" };
+    }
+    const validation = validateMediaFile({
+      type: data.mimeType,
+      size: data.fileSize,
+      name: data.filename,
+    });
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
+    if (getMediaIdFromKey(data.s3Key) !== mediaId) {
+      return { success: false, error: "Invalid upload key" };
+    }
+    if (
+      data.thumbnailS3Key &&
+      getMediaIdFromKey(data.thumbnailS3Key) !== mediaId
+    ) {
+      return { success: false, error: "Invalid thumbnail key" };
+    }
+    if (data.thumbnailFailed) {
+      logger.warn(
+        {
+          mediaId,
           eventId,
-          filename: data.filename,
-        });
-        try {
-          const { broadcastNewPhoto } = await import(
-            "@/app/api/feed/stream/route"
-          );
-          broadcastNewPhoto(insertedMedia.id).catch((error) => {
-            logger.error("Failed to broadcast new photo:", error);
-          });
-        } catch (error) {
-          logger.error("Failed to broadcast new photo:", error);
-        }
-        try {
-          const { notifyUploadForFeed } = await import(
-            "@/lib/slack-notifications"
-          );
-          notifyUploadForFeed(insertedMedia.id).catch((error) => {
-            logger.error("Failed to enqueue Slack feed notification:", error);
-          });
-        } catch (error) {
-          logger.error("Failed to load Slack feed notification:", error);
-        }
-        if (!skipRevalidation) {
-          try {
-            const { revalidatePath } = await import("next/cache");
-            revalidatePath(`/events/${eventId}`);
-          } catch (e) {
-            logger.error("Revalidation failed", e);
-          }
-        }
-        photoUploadsTotal.add(1, { status: "success", source: "web" });
-        return { success: true, media: publicMedia(insertedMedia) };
-      } catch (error) {
-        failedUploadsTotal.add(1, { status: "error", source: "web" });
-        logger.error("Error finalizing upload:", error);
-        return { success: false, error: "Failed to finalize upload" };
+          reason: data.thumbnailError,
+          mimeType: data.mimeType,
+        },
+        "Client thumbnail generation failed; falling back to server processing",
+      );
+    }
+    let realFileSize = data.fileSize;
+    let serverExifData: Record<string, unknown> | null = null;
+    let thumbnailS3Key = data.thumbnailS3Key;
+    const canonicalThumbnailS3Key = getThumbnailS3Key(mediaId);
+    try {
+      const headCommand = new HeadObjectCommand({
+        Bucket: S3_BUCKET_NAME,
+        Key: data.s3Key,
+      });
+      const s3Metadata = await s3Client.send(headCommand);
+      if (s3Metadata.ContentLength) {
+        realFileSize = s3Metadata.ContentLength;
       }
-    },
-  );
+      if (await storedObjectHasUnsupportedImageFormat(data.s3Key)) {
+        await deleteFromS3(data.s3Key).catch((deleteError) => {
+          logger.error("Failed to delete rejected image upload:", deleteError);
+        });
+        for (const thumbnailKey of new Set(
+          [data.thumbnailS3Key, canonicalThumbnailS3Key].filter(
+            (key): key is string => Boolean(key),
+          ),
+        )) {
+          await deleteFromS3(thumbnailKey).catch(() => {});
+        }
+        return {
+          success: false,
+          error:
+            "Unsupported image format. Convert the file to JPEG before uploading.",
+        };
+      }
+      if (realFileSize > data.fileSize + 1024 * 1024) {
+        return { success: false, error: "Uploaded file size mismatch" };
+      }
+      const storageCheck = await checkStorageLimit(user.id, realFileSize, user);
+      if (!storageCheck.allowed) {
+        await deleteFromS3(data.s3Key).catch((deleteError) => {
+          logger.error("Failed to delete over-quota upload:", deleteError);
+        });
+        if (data.thumbnailS3Key) {
+          await deleteFromS3(data.thumbnailS3Key).catch((deleteError) => {
+            logger.error("Failed to delete over-quota thumbnail:", deleteError);
+          });
+        }
+        return { success: false, error: "Storage limit exceeded" };
+      }
+      if (data.thumbnailS3Key && !(await objectExists(data.thumbnailS3Key))) {
+        thumbnailS3Key = null;
+      }
+      if (!thumbnailS3Key && (await objectExists(canonicalThumbnailS3Key))) {
+        thumbnailS3Key = canonicalThumbnailS3Key;
+      }
+      if (data.mimeType.startsWith("image/")) {
+        await withMediaBufferingSlot(async () => {
+          try {
+            const getCommand = new GetObjectCommand({
+              Bucket: S3_BUCKET_NAME,
+              Key: data.s3Key,
+            });
+            const s3Object = await s3Client.send(getCommand);
+            if (s3Object.Body) {
+              const originalBuffer = await streamToBuffer(
+                s3Object.Body as Readable,
+              );
+              const originalExif = await extractExifData(
+                originalBuffer,
+                data.mimeType,
+              );
+              serverExifData = mergeExifData(originalExif, data.exifData);
+              if (originalExif) {
+                serverExifData = mergeExifData(
+                  {
+                    ...serverExifData,
+                    width: originalExif.width,
+                    height: originalExif.height,
+                  },
+                  null,
+                );
+              }
+              if (!serverExifData) {
+                serverExifData = mergeExifData(data.exifData, null);
+              }
+              if (!thumbnailS3Key) {
+                const imageResult = await processImageUpload(
+                  originalBuffer,
+                  mediaId,
+                  user.id,
+                  eventId,
+                  data.mimeType,
+                );
+                if (imageResult.thumbnailS3Key) {
+                  thumbnailS3Key = imageResult.thumbnailS3Key;
+                }
+                serverExifData = mergeExifData(
+                  {
+                    ...serverExifData,
+                    width: imageResult.width || serverExifData?.width,
+                    height: imageResult.height || serverExifData?.height,
+                  },
+                  data.exifData,
+                );
+              }
+            }
+          } catch (e) {
+            logger.error("Failed to process image server-side:", e);
+          }
+        });
+      } else if (data.mimeType.startsWith("video/")) {
+        try {
+          await withVideoStagingSlot(async () => {
+            const getCommand = new GetObjectCommand({
+              Bucket: S3_BUCKET_NAME,
+              Key: data.s3Key,
+            });
+            const s3Object = await s3Client.send(getCommand);
+            if (!s3Object.Body) return;
+            const { writeFile, unlink } = await import("node:fs/promises");
+            const { join } = await import("node:path");
+            const { tmpdir } = await import("node:os");
+            const tempFilePath = join(
+              tmpdir(),
+              `video-${mediaId}-${randomUUID()}.tmp`,
+            );
+            try {
+              const stream = s3Object.Body as NodeJS.ReadableStream;
+              await writeFile(tempFilePath, stream);
+              const metadataPromise = extractVideoMetadata(tempFilePath);
+              const thumbnailPromise = generateAndUploadThumbnail(
+                tempFilePath,
+                data.mimeType,
+                mediaId,
+                undefined,
+                { uploadedBy: user.id, eventId },
+                undefined,
+              );
+              const [videoMetadata, generatedThumbnailKey] = await Promise.all([
+                metadataPromise,
+                thumbnailPromise,
+              ]);
+              if (videoMetadata) {
+                serverExifData = {
+                  width: videoMetadata.width,
+                  height: videoMetadata.height,
+                  dateTimeOriginal: videoMetadata.creationTime,
+                  duration: videoMetadata.duration,
+                  make: videoMetadata.make,
+                  model: videoMetadata.model,
+                  gpsLatitude: videoMetadata.latitude,
+                  gpsLongitude: videoMetadata.longitude,
+                };
+              }
+              if (generatedThumbnailKey) {
+                thumbnailS3Key = generatedThumbnailKey;
+              }
+            } finally {
+              await unlink(tempFilePath).catch(() => {});
+            }
+          });
+        } catch (e) {
+          logger.error("Failed to process video server-side:", e);
+        }
+      }
+    } catch (error) {
+      logger.error("Failed to verify S3 object:", error);
+      return {
+        success: false,
+        error: "Upload verification failed: File not found in storage",
+      };
+    }
+    const finalExifData = mergeExifData(serverExifData, data.exifData);
+    const dateValue = finalExifData?.dateTimeOriginal ?? data.takenAt;
+    const takenAt = dateValue ? new Date(dateValue as string) : null;
+    const latitude = (finalExifData?.gpsLatitude as number | undefined) ?? null;
+    const longitude =
+      (finalExifData?.gpsLongitude as number | undefined) ?? null;
+    const [insertedMedia] = await db
+      .insert(media)
+      .values({
+        id: mediaId,
+        eventId,
+        uploadedById: user.id,
+        s3Key: data.s3Key,
+        s3Url: data.s3Key,
+        thumbnailS3Key: thumbnailS3Key,
+        filename: data.filename,
+        mimeType: data.mimeType,
+        fileSize: realFileSize,
+        exifData: finalExifData,
+        width: (finalExifData?.width as number | undefined) || data.width,
+        height: (finalExifData?.height as number | undefined) || data.height,
+        latitude,
+        longitude,
+        takenAt: takenAt,
+      })
+      .returning();
+    await auditLog(user.id, "upload", "media", insertedMedia.id, {
+      eventId,
+      filename: data.filename,
+    });
+    try {
+      const { broadcastNewPhoto } = await import("@/app/api/feed/stream/route");
+      broadcastNewPhoto(insertedMedia.id).catch((error) => {
+        logger.error("Failed to broadcast new photo:", error);
+      });
+    } catch (error) {
+      logger.error("Failed to broadcast new photo:", error);
+    }
+    try {
+      const { notifyUploadForFeed } = await import("@/lib/slack-notifications");
+      notifyUploadForFeed(insertedMedia.id).catch((error) => {
+        logger.error("Failed to enqueue Slack feed notification:", error);
+      });
+    } catch (error) {
+      logger.error("Failed to load Slack feed notification:", error);
+    }
+    if (!skipRevalidation) {
+      try {
+        const { revalidatePath } = await import("next/cache");
+        revalidatePath(`/events/${eventId}`);
+      } catch (e) {
+        logger.error("Revalidation failed", e);
+      }
+    }
+    return { success: true, media: publicMedia(insertedMedia) };
+  } catch (error) {
+    logger.error("Error finalizing upload:", error);
+    return { success: false, error: "Failed to finalize upload" };
+  }
 }

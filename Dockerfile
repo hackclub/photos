@@ -38,7 +38,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/drizzle ./drizzle
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
-COPY --from=builder --chown=nextjs:nodejs /app/otel-bootstrap.cjs ./otel-bootstrap.cjs
 COPY --chown=nextjs:nodejs package.json bun.lock ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --production --frozen-lockfile
