@@ -3,7 +3,6 @@ import { Anton } from "next/font/google";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
-  HiArrowRightOnRectangle,
   HiCalendar,
   HiFolder,
   HiMap,
@@ -102,9 +101,8 @@ export default function LandingPage({ images = [] }: { images?: string[] }) {
         <Link
           prefetch={false}
           href="/auth/signin"
-          className="mt-10 inline-flex items-center gap-3 rounded-lg bg-red-600 px-10 py-4 text-xl font-bold text-white transition-colors hover:bg-red-700"
+          className="mt-10 inline-flex items-center justify-center rounded-lg bg-red-600 px-10 py-4 text-xl font-bold text-white transition-colors hover:bg-red-700"
         >
-          <HiArrowRightOnRectangle className="h-6 w-6" />
           Log in
         </Link>
 
