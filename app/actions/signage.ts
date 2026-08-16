@@ -1,5 +1,5 @@
 "use server";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { events, media, series } from "@/lib/db/schema";
@@ -162,6 +162,34 @@ export async function getRandomMediaIds(limit = 12) {
     return { success: true, ids: rows.map((row) => row.id) };
   } catch (error) {
     logger.error("Error fetching random media ids:", error);
+    return { success: false, error: "Failed to fetch media" };
+  }
+}
+
+export async function getPublicMediaIds(limit = 24) {
+  try {
+    const safeLimit = clampLimit(limit, 24);
+    const publicEvents = await db.query.events.findMany({
+      where: eq(events.visibility, "public"),
+      columns: { id: true },
+    });
+    const publicEventIds = publicEvents.map((e) => e.id);
+    if (publicEventIds.length === 0) {
+      return { success: true, ids: [] as string[] };
+    }
+    const rows = await db.query.media.findMany({
+      where: and(
+        inArray(media.eventId, publicEventIds),
+        isNull(media.blurStatus),
+        sql`${media.mimeType} LIKE 'image/%'`,
+      ),
+      orderBy: [sql`random()`],
+      limit: safeLimit,
+      columns: { id: true },
+    });
+    return { success: true, ids: rows.map((row) => row.id) };
+  } catch (error) {
+    logger.error("Error fetching public media ids:", error);
     return { success: false, error: "Failed to fetch media" };
   }
 }

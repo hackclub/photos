@@ -1,6 +1,6 @@
 import { count, desc, eq, inArray } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { getRandomMediaIds } from "@/app/actions/signage";
+import { getPublicMediaIds, getRandomMediaIds } from "@/app/actions/signage";
 import LandingPage from "@/components/home/LandingPage";
 import UserDashboard from "@/components/home/UserDashboard";
 import { deleteSession, getSession, refreshUser } from "@/lib/auth";
@@ -20,7 +20,7 @@ export default async function HomePage() {
     if (onboardingSession) {
       redirect("/onboarding");
     }
-    const randomMedia = await getRandomMediaIds(24);
+    const randomMedia = await getPublicMediaIds(24);
     const images = (randomMedia.ids ?? []).map((id) =>
       getMediaProxyUrl(id, "thumbnail"),
     );
