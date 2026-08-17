@@ -548,23 +548,18 @@ export default function IncludesMeDrawer({
               <h3 className="mt-3 text-2xl font-semibold text-white">
                 Choose a camera
               </h3>
-              <div className="mt-8 space-y-3">
+              <div className="mt-8 divide-y divide-zinc-800 border-y border-zinc-800">
                 <button
                   type="button"
                   onClick={() => void createPhoneCapture()}
-                  className="flex min-h-20 w-full items-center gap-4 rounded-xl border border-red-600/50 bg-red-600/10 px-4 py-4 text-left transition-colors hover:border-red-500 hover:bg-red-600/20"
+                  className="flex min-h-20 w-full items-center gap-3 py-4 text-left transition-colors hover:text-white"
                 >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-red-600/20 text-red-400">
-                    <HiDevicePhoneMobile className="h-5 w-5" />
-                  </span>
+                  <HiDevicePhoneMobile className="h-5 w-5 shrink-0 text-red-500" />
                   <span className="flex-1">
-                    <span className="flex items-center gap-2">
-                      <span className="font-medium text-white">Use my phone</span>
-                      <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                        Recommended
-                      </span>
+                    <span className="block font-medium text-white">
+                      Use your phone
                     </span>
-                    <span className="mt-1 block text-sm text-zinc-400">
+                    <span className="mt-1 block text-sm text-zinc-500">
                       Scan a QR code
                     </span>
                   </span>
@@ -576,16 +571,14 @@ export default function IncludesMeDrawer({
                     setStep("camera");
                     void startCamera();
                   }}
-                  className="flex min-h-20 w-full items-center gap-4 rounded-xl px-4 py-4 text-left transition-colors hover:bg-zinc-800/60"
+                  className="flex min-h-20 w-full items-center gap-3 py-4 text-left transition-colors hover:text-white"
                 >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-zinc-800 text-zinc-400">
-                    <HiComputerDesktop className="h-5 w-5" />
-                  </span>
+                  <HiComputerDesktop className="h-5 w-5 shrink-0 text-zinc-500" />
                   <span className="flex-1">
-                    <span className="block font-medium text-white">
+                    <span className="block font-medium text-zinc-300">
                       Use this computer
                     </span>
-                    <span className="mt-1 block text-sm text-zinc-400">
+                    <span className="mt-1 block text-sm text-zinc-500">
                       Open this camera
                     </span>
                   </span>
