@@ -2413,6 +2413,7 @@ export default function PhotoDetailModal({
             top: hoveredMention.rect.top,
             transform: "translate(-50%, -100%) translateY(-12px)",
           }}
+          onClick={(e) => e.stopPropagation()}
           onMouseEnter={() => {
             if (hoverTimeoutRef.current) {
               clearTimeout(hoverTimeoutRef.current);
