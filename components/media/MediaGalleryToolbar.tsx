@@ -207,9 +207,7 @@ export default function MediaGalleryToolbar({
                 : "find-me-breathe border-zinc-800 bg-zinc-900 text-zinc-300"
             }`}
           >
-            <HiFaceSmile
-              className={`h-6 w-6 ${includesMeActive ? "text-white" : "text-zinc-500"}`}
-            />
+            <HiFaceSmile className="h-6 w-6 text-white" />
             <span>Find me</span>
           </button>
         ) : null}
