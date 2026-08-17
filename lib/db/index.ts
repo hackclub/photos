@@ -15,10 +15,15 @@ const globalQueryClient = global as unknown as {
 };
 
 function createQueryClient() {
+  const isVercelRuntime = Boolean(process.env.VERCEL || process.env.VERCEL_ENV);
   const configuredMaxConnections = Number(process.env.DATABASE_MAX_CONNECTIONS);
-  const max = Number.isFinite(configuredMaxConnections)
-    ? Math.max(2, Math.min(20, Math.floor(configuredMaxConnections)))
-    : 5;
+  const max = isVercelRuntime
+    ? Number.isFinite(configuredMaxConnections)
+      ? Math.max(1, Math.min(2, Math.floor(configuredMaxConnections)))
+      : 2
+    : Number.isFinite(configuredMaxConnections)
+      ? Math.max(1, Math.min(20, Math.floor(configuredMaxConnections)))
+      : 5;
   return postgres(connectionString, {
     max,
     prepare: false,

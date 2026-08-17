@@ -63,7 +63,7 @@ This repository is configured for Vercel in `vercel.json`:
 - Install command: `bun install --frozen-lockfile`
 - Build command: `bun run vercel:build`
 - Cron: `/api/cron/slack-notifications` every minute
-- Runtime: Node.js 24.x with Fluid Compute
+- Runtime: Node.js 24.x with Fluid Compute in Frankfurt (`fra1`)
 
 ### 1. Create the Vercel project
 
@@ -75,12 +75,14 @@ Set the project Node.js version to `24.x` if it is not detected from `package.js
 
 The application runs on Vercel, but its stateful services remain external:
 
-- Postgres: use a pooled connection for `DATABASE_URL` and a direct connection for `MIGRATION_DATABASE_URL` when available.
+- Postgres: use a pooled connection for `DATABASE_URL` and a direct connection for `MIGRATION_DATABASE_URL` when available. Vercel uses at most two runtime connections per function instance.
 - Redis: set `REDIS_URL`. Production uses Redis for distributed rate limits, multipart-upload state, and short-lived phone capture handoffs.
 - S3-compatible storage: set the S3 variables below and configure bucket CORS for the production domain and any preview domains that need browser uploads.
 - Vision worker: deploy `services/vision-worker/Dockerfile` on Linux x64 and keep its HTTP endpoint private.
 
 For Postgres, set `DATABASE_URL` and `MIGRATION_DATABASE_URL` in Production. For Preview, use a separate database or provider branch and set `MIGRATE_PREVIEW_DATABASE=true`; never point preview migrations at the production database.
+
+`DATABASE_URL` must be the provider's pooled/serverless URL. Do not use the direct database URL for runtime traffic on Vercel. Keep the direct URL in `MIGRATION_DATABASE_URL` for the migration step only.
 
 ### 3. Configure environment variables
 

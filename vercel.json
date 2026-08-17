@@ -4,6 +4,7 @@
   "installCommand": "bun install --frozen-lockfile",
   "buildCommand": "bun run vercel:build",
   "fluid": true,
+  "regions": ["fra1"],
   "crons": [
     {
       "path": "/api/cron/slack-notifications",
