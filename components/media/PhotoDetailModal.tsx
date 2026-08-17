@@ -33,7 +33,9 @@ import {
 import { updateMediaCaption } from "@/app/actions/media";
 import {
   addMention,
+  confirmFaceSuggestion,
   getMediaMentions,
+  rejectFaceSuggestion,
   removeMention,
 } from "@/app/actions/mentions";
 import { createShareLink } from "@/app/actions/sharing";
@@ -128,6 +130,9 @@ interface MediaItem {
     id: string;
     name: string | null;
   } | null;
+  suggestedMention?: boolean;
+  suggestionId?: string;
+  canConfirmSuggestion?: boolean;
 }
 interface Event {
   id?: string;
@@ -192,6 +197,7 @@ interface Props {
   onDownload: () => void;
   onDelete?: () => void;
   onMediaUpdate?: (media: MediaItem) => void;
+  onSuggestionResolved?: (status: "accepted" | "rejected") => void;
   onNext?: () => void;
   onPrevious?: () => void;
   hasNext?: boolean;
@@ -213,6 +219,7 @@ export default function PhotoDetailModal({
   onDownload,
   onDelete,
   onMediaUpdate,
+  onSuggestionResolved,
   onNext,
   onPrevious,
   hasNext = false,
@@ -239,15 +246,24 @@ export default function PhotoDetailModal({
   const [blurSaveState, setBlurSaveState] = useState<
     "idle" | "saving" | "saved"
   >("idle");
+  const blurContainerRef = useRef<HTMLDivElement>(null);
+  const blurImageRef = useRef<HTMLImageElement>(null);
+  const [blurImageRect, setBlurImageRect] = useState({
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
+  });
 
   const MAX_IMAGE_AUTO_RETRIES = 2;
   const resolvedUrl = fullSizeUrl ?? "";
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Changing photos must clear unsaved blur regions even without a draft.
   useEffect(() => {
     setBlurRegions(blurDraft?.regions ?? []);
     setBlurStart(null);
     setCurrentBlurRegion(null);
     setBlurSaveState(blurDraft ? "saved" : "idle");
-  }, [blurDraft]);
+  }, [blurDraft, media.id]);
   const effectiveUrl = useMemo(() => {
     if (!resolvedUrl) return null;
     if (retryCount === 0) return resolvedUrl;
@@ -304,6 +320,7 @@ export default function PhotoDetailModal({
   const [mentionDropdownStyle, setMentionDropdownStyle] =
     useState<React.CSSProperties>({});
   const [addingMention, setAddingMention] = useState(false);
+  const [resolvingSuggestion, setResolvingSuggestion] = useState(false);
   const [_loadingMentions, setLoadingMentions] = useState(false);
   const mentionInputRef = useRef<HTMLInputElement>(null);
   const mentionSuggestionsRef = useRef<HTMLDivElement>(null);
@@ -905,6 +922,21 @@ export default function PhotoDetailModal({
       logger.error("Error removing mention:", error);
     }
   };
+  const handleFaceSuggestion = async (status: "accepted" | "rejected") => {
+    if (!media.suggestionId || resolvingSuggestion) return;
+    setResolvingSuggestion(true);
+    try {
+      const result =
+        status === "accepted"
+          ? await confirmFaceSuggestion(media.suggestionId)
+          : await rejectFaceSuggestion(media.suggestionId);
+      if (result.success) onSuggestionResolved?.(status);
+    } catch (error) {
+      logger.error("Failed to resolve face suggestion:", error);
+    } finally {
+      setResolvingSuggestion(false);
+    }
+  };
   const handleShareClick = async () => {
     setShowShareModal(true);
     if (shareLinks || generatingLink) return;
@@ -927,17 +959,65 @@ export default function PhotoDetailModal({
   const activeBlurRegions = currentBlurRegion
     ? [...blurRegions, currentBlurRegion]
     : blurRegions;
+  const measureBlurImage = () => {
+    const element = blurContainerRef.current;
+    const image = blurImageRef.current;
+    if (!element || !image?.naturalWidth || !image.naturalHeight) return null;
+    const container = element.getBoundingClientRect();
+    const imageRatio = image.naturalWidth / image.naturalHeight;
+    const containerRatio = container.width / container.height;
+    const width =
+      imageRatio > containerRatio
+        ? container.width
+        : container.height * imageRatio;
+    const height =
+      imageRatio > containerRatio
+        ? container.width / imageRatio
+        : container.height;
+    const measured = {
+      left: (container.width - width) / 2,
+      top: (container.height - height) / 2,
+      width,
+      height,
+    };
+    setBlurImageRect(measured);
+    return measured;
+  };
   const getBlurPoint = (
     element: HTMLElement,
     clientX: number,
     clientY: number,
   ) => {
     const rect = element.getBoundingClientRect();
+    const imageRect = measureBlurImage() ?? {
+      left: 0,
+      top: 0,
+      width: rect.width,
+      height: rect.height,
+    };
+    const localX = clientX - rect.left - imageRect.left;
+    const localY = clientY - rect.top - imageRect.top;
+    if (
+      localX < 0 ||
+      localY < 0 ||
+      localX > imageRect.width ||
+      localY > imageRect.height
+    ) {
+      return null;
+    }
     return {
-      x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
-      y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
+      x: localX / imageRect.width,
+      y: localY / imageRect.height,
     };
   };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Re-measure only when the rendered photo or container changes.
+  useEffect(() => {
+    if (!blurMode || !imageLoaded || !blurContainerRef.current) return;
+    measureBlurImage();
+    const observer = new ResizeObserver(measureBlurImage);
+    observer.observe(blurContainerRef.current);
+    return () => observer.disconnect();
+  }, [blurMode, imageLoaded, media.id]);
   const saveBlurDraft = async () => {
     if (
       !blurMode ||
@@ -1009,6 +1089,7 @@ export default function PhotoDetailModal({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
+      aria-label="Photo details"
       tabIndex={-1}
     >
       <button
@@ -1224,6 +1305,7 @@ export default function PhotoDetailModal({
               </div>
             ) : (
               <div
+                ref={blurContainerRef}
                 className={`relative flex h-full w-full items-center justify-center ${blurMode ? "touch-none select-none" : ""}`}
                 onDragStart={(e) => blurMode && e.preventDefault()}
                 onPointerDown={(e) => {
@@ -1231,6 +1313,7 @@ export default function PhotoDetailModal({
                   e.preventDefault();
                   e.currentTarget.setPointerCapture(e.pointerId);
                   const p = getBlurPoint(e.currentTarget, e.clientX, e.clientY);
+                  if (!p) return;
                   setBlurStart(p);
                   setCurrentBlurRegion({ ...p, width: 0, height: 0 });
                   setBlurSaveState("idle");
@@ -1239,6 +1322,7 @@ export default function PhotoDetailModal({
                   if (!blurMode || !blurStart) return;
                   e.preventDefault();
                   const p = getBlurPoint(e.currentTarget, e.clientX, e.clientY);
+                  if (!p) return;
                   setCurrentBlurRegion({
                     x: Math.min(blurStart.x, p.x),
                     y: Math.min(blurStart.y, p.y),
@@ -1273,6 +1357,7 @@ export default function PhotoDetailModal({
                 )}
                 {effectiveUrl && (
                   <img
+                    ref={blurImageRef}
                     src={effectiveUrl}
                     alt={media.filename}
                     decoding="async"
@@ -1284,6 +1369,7 @@ export default function PhotoDetailModal({
                     onLoad={() => {
                       setImageLoaded(true);
                       setImageError(false);
+                      requestAnimationFrame(measureBlurImage);
                     }}
                     onError={(e) => {
                       setImageLoaded(false);
@@ -1318,10 +1404,12 @@ export default function PhotoDetailModal({
                       key={`${region.x}-${region.y}-${index}`}
                       className="absolute z-20 border-2 border-red-400 bg-red-500/20 pointer-events-none"
                       style={{
-                        left: `${region.x * 100}%`,
-                        top: `${region.y * 100}%`,
-                        width: `${region.width * 100}%`,
-                        height: `${region.height * 100}%`,
+                        left:
+                          blurImageRect.left + region.x * blurImageRect.width,
+                        top:
+                          blurImageRect.top + region.y * blurImageRect.height,
+                        width: region.width * blurImageRect.width,
+                        height: region.height * blurImageRect.height,
                       }}
                     />
                   ))}
@@ -1679,6 +1767,41 @@ export default function PhotoDetailModal({
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {activeTab === "info" ? (
               <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4 lg:space-y-6">
+                {media.suggestedMention ? (
+                  <div className="rounded-xl border border-cyan-500/60 bg-cyan-950/25 p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-semibold text-cyan-100">
+                          Suggested mention
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-cyan-200/70">
+                          Face matching suggests this person appears in the
+                          photo. It is not a confirmed mention yet.
+                        </p>
+                      </div>
+                      {media.canConfirmSuggestion ? (
+                        <div className="flex shrink-0 gap-2">
+                          <button
+                            type="button"
+                            disabled={resolvingSuggestion}
+                            onClick={() => handleFaceSuggestion("rejected")}
+                            className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs font-medium text-zinc-300 disabled:opacity-50"
+                          >
+                            Dismiss
+                          </button>
+                          <button
+                            type="button"
+                            disabled={resolvingSuggestion}
+                            onClick={() => handleFaceSuggestion("accepted")}
+                            className="inline-flex items-center gap-1 rounded-lg bg-cyan-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                          >
+                            <HiCheck className="h-4 w-4" /> Confirm
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-xs text-zinc-400">
                     <HiTag className="w-5 h-5" />

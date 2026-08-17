@@ -5,6 +5,7 @@ import { auditLog } from "@/lib/audit";
 import { unauthorizedResponse, validateAdminApiKey } from "@/lib/auth-api";
 import { db } from "@/lib/db";
 import { events, media, pendingMediaOwnership, users } from "@/lib/db/schema";
+import { rebuildEventFaceIndex } from "@/lib/face-indexing";
 import { logger } from "@/lib/logger";
 import { deleteMediaAndThumbnail } from "@/lib/media/thumbnail";
 import { PENDING_REGISTRATION_USER_ID } from "@/lib/pending-ownership";
@@ -191,6 +192,12 @@ export async function DELETE(
       item.blurredThumbnailS3Key,
     ]);
     await db.delete(media).where(eq(media.id, id));
+    await rebuildEventFaceIndex(item.eventId).catch((error) =>
+      logger.error(
+        "Failed to rebuild face index after admin media deletion",
+        error,
+      ),
+    );
     await auditLog(auth.user.id, "delete", "media", id, {
       viaAdminApiKey: true,
       apiKeyId: auth.apiKeyId,

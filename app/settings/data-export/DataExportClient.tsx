@@ -116,6 +116,11 @@ export default function DataExportClient({
             <li>Your comments, likes, and mentions</li>
             <li>Your API keys and settings</li>
           </ul>
+          <p className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-sm text-zinc-400">
+            Saved face templates and face-recognition data are not included in
+            exports for security. You can delete all face data from the privacy
+            panel on your profile.
+          </p>
           <p className="text-sm text-zinc-500 mt-4">
             Heads up: For security, the download link self-destructs in 48
             hours. Don't wait too long to grab it! (But don't worry, you can

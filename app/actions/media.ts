@@ -8,6 +8,10 @@ import { getSession } from "@/lib/auth";
 import { withDirectUploadSlot } from "@/lib/concurrency";
 import { db } from "@/lib/db";
 import { eventParticipants, events, media, series } from "@/lib/db/schema";
+import {
+  queueMediaForFaceIndexing,
+  rebuildEventFaceIndex,
+} from "@/lib/face-indexing";
 import { logger } from "@/lib/logger";
 import { extractExifData } from "@/lib/media/exif";
 import { createSharp } from "@/lib/media/image-processing";
@@ -547,6 +551,9 @@ async function uploadMediaInternal(formData: FormData) {
       eventId,
       filename: file.name,
     });
+    await queueMediaForFaceIndexing(inserted.id).catch((error) => {
+      logger.error("Failed to queue face indexing:", error);
+    });
     revalidatePath(`/events/${eventId}`);
     return { success: true, media: publicMedia(inserted) };
   } catch (error) {
@@ -624,6 +631,9 @@ export async function deleteMedia(mediaId: string) {
       mediaItem.blurredThumbnailS3Key,
     ]);
     await db.delete(media).where(eq(media.id, mediaId));
+    await rebuildEventFaceIndex(mediaItem.eventId).catch((error) =>
+      logger.error("Failed to rebuild face index after media deletion", error),
+    );
     await auditLog(user.id, "delete", "media", mediaId);
     try {
       const { reports } = await import("@/lib/db/schema");

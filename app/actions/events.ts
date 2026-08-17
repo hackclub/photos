@@ -1,10 +1,20 @@
 "use server";
 import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { eventParticipants, events, media } from "@/lib/db/schema";
+import {
+  eventFaceIndexes,
+  eventParticipants,
+  events,
+  media,
+} from "@/lib/db/schema";
+import {
+  prepareJoinedEventFaceMatching,
+  rebuildEventFaceIndex,
+} from "@/lib/face-indexing";
 import { logger } from "@/lib/logger";
 import {
   deleteBatchMedia,
@@ -13,6 +23,7 @@ import {
 import { claimPendingAdminGrantsForUser } from "@/lib/pending-admins";
 import { can, getUserContext } from "@/lib/policy";
 import { publicEvent } from "@/lib/public-data";
+import { deleteVisionGallery } from "@/lib/vision-client";
 export async function joinEvent(eventId: string, inviteCode?: string) {
   const session = await getSession();
   const user = await getUserContext(session?.id);
@@ -35,6 +46,11 @@ export async function joinEvent(eventId: string, inviteCode?: string) {
     ),
   });
   if (existingParticipant) {
+    after(() =>
+      prepareJoinedEventFaceMatching(eventId, user.id).catch((error) =>
+        logger.error("Failed to refresh face suggestions after join", error),
+      ),
+    );
     return { success: true };
   }
   const isAdmin = await can(user, "manage", "event", event);
@@ -52,6 +68,11 @@ export async function joinEvent(eventId: string, inviteCode?: string) {
   });
   await claimPendingAdminGrantsForUser({ id: user.id, slackId: user.slackId });
   await auditLog(user.id, "join", "event", event.id);
+  after(() =>
+    prepareJoinedEventFaceMatching(event.id, user.id).catch((error) =>
+      logger.error("Failed to refresh face suggestions after join", error),
+    ),
+  );
   revalidatePath(`/events/${event.slug}`);
   revalidatePath("/events");
   return { success: true };
@@ -77,6 +98,9 @@ export async function leaveEvent(eventId: string) {
   const { successfulIds } = await deleteBatchMedia(userMedia);
   if (successfulIds.length > 0) {
     await db.delete(media).where(inArray(media.id, successfulIds));
+    await rebuildEventFaceIndex(eventId).catch((error) =>
+      logger.error("Failed to rebuild face index after leaving event", error),
+    );
   }
   await db
     .delete(eventParticipants)
@@ -123,12 +147,30 @@ export async function deleteEvent(eventId: string) {
   if (hasMediaDeletionErrors || bannerDeletionError) {
     if (successfulIds.length > 0) {
       await db.delete(media).where(inArray(media.id, successfulIds));
+      await rebuildEventFaceIndex(event.id).catch((error) =>
+        logger.error("Failed to rebuild partially deleted face index", error),
+      );
     }
     return {
       success: false,
       error:
         "Failed to delete some files from storage. Event was not deleted, but successfully deleted files were removed.",
     };
+  }
+  const faceIndex = await db.query.eventFaceIndexes.findFirst({
+    where: eq(eventFaceIndexes.eventId, event.id),
+    columns: { galleryId: true },
+  });
+  if (faceIndex?.galleryId) {
+    try {
+      await deleteVisionGallery(faceIndex.galleryId);
+    } catch (error) {
+      logger.error("Failed to delete event face gallery", error);
+      return {
+        success: false,
+        error: "Failed to delete the event face index. Try again.",
+      };
+    }
   }
   await db.delete(events).where(eq(events.id, event.id));
   await auditLog(user.id, "delete", "event", event.id);

@@ -14,6 +14,7 @@ import {
 } from "react-icons/hi2";
 import { bulkDeleteMedia } from "@/app/actions/bulk";
 import { deleteMedia, getDownloadUrl } from "@/app/actions/media";
+import IncludesMeDrawer from "@/components/face/IncludesMeDrawer";
 import { useMediaGalleryData } from "@/hooks/useMediaGallery";
 import { logger } from "@/lib/client-logger";
 import type { Event, MediaItem } from "@/types/media";
@@ -174,7 +175,7 @@ export default function MediaGallery({
     fullSizeUrl,
     refreshFullSizeUrl,
     prefetchFullSizeUrls,
-    sortedMedia,
+    sortedMedia: unfilteredSortedMedia,
     eventMap,
     updateUrl,
   } = useMediaGalleryData(media, events, initialPhotoId);
@@ -193,9 +194,15 @@ export default function MediaGallery({
   const [showChangeOwnerModal, setShowChangeOwnerModal] = useState(false);
   const [mediaToDelete, setMediaToDelete] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_ITEMS);
+  const [faceDrawerOpen, setFaceDrawerOpen] = useState(false);
+  const [includesMeActive, setIncludesMeActive] = useState(false);
+  const [faceMediaIds, setFaceMediaIds] = useState<Set<string>>(new Set());
   const [_isPending, startTransition] = useTransition();
   const abortControllerRef = useRef<AbortController | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const sortedMedia = includesMeActive
+    ? unfilteredSortedMedia.filter((item) => faceMediaIds.has(item.id))
+    : unfilteredSortedMedia;
 
   useEffect(() => {
     const element = loadMoreRef.current;
@@ -520,8 +527,27 @@ export default function MediaGallery({
           showEventFilter={showEventFilter}
           showTypeFilter={showTypeFilter}
           showSortFilter={showSortFilter}
+          showIncludesMe={Boolean(eventId && currentUserId && !blurMode)}
+          includesMeActive={includesMeActive}
+          onIncludesMeClick={() => {
+            if (includesMeActive) {
+              setIncludesMeActive(false);
+            } else {
+              setFaceDrawerOpen(true);
+            }
+          }}
         />
       )}
+
+      {includesMeActive && sortedMedia.length === 0 ? (
+        <div className="rounded-xl border border-cyan-900/50 bg-cyan-950/15 px-5 py-10 text-center">
+          <p className="font-medium text-white">No confident matches yet</p>
+          <p className="mt-1 text-sm text-zinc-500">
+            This event may still be indexing. Open Includes me to check
+            progress.
+          </p>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4 xl:grid-cols-5">
         {sortedMedia
@@ -535,7 +561,11 @@ export default function MediaGallery({
             return (
               <div
                 key={item.id}
-                className="group relative aspect-square overflow-hidden rounded-xl border border-zinc-800 bg-zinc-800 transition-all duration-300 hover:border-zinc-700 hover:shadow-xl md:hover:scale-[1.02]"
+                className={`group relative aspect-square overflow-hidden rounded-xl border bg-zinc-800 transition-all duration-300 hover:shadow-xl md:hover:scale-[1.02] ${
+                  item.suggestedMention
+                    ? "border-cyan-500/80 hover:border-cyan-400"
+                    : "border-zinc-800 hover:border-zinc-700"
+                }`}
               >
                 <button
                   type="button"
@@ -637,6 +667,13 @@ export default function MediaGallery({
                     </button>
                   </div>
                 )}
+                {item.suggestedMention ? (
+                  <div className="absolute inset-x-2 top-2 z-20 flex items-center justify-between gap-2">
+                    <span className="rounded-full border border-cyan-500/50 bg-cyan-950/90 px-2 py-1 text-[11px] font-semibold text-cyan-200">
+                      Suggested mention
+                    </span>
+                  </div>
+                ) : null}
               </div>
             );
           })}
@@ -734,6 +771,25 @@ export default function MediaGallery({
             if (selectedMedia?.id === updatedMedia.id) {
               setSelectedMedia(updatedMedia);
             }
+          }}
+          onSuggestionResolved={(status) => {
+            if (status === "rejected") {
+              setLocalMedia((current) =>
+                current.filter((item) => item.id !== selectedMedia.id),
+              );
+              setSelectedMedia(null);
+              updateUrl(null);
+              return;
+            }
+            const updated = {
+              ...selectedMedia,
+              suggestedMention: false,
+              suggestionId: undefined,
+            };
+            setLocalMedia((current) =>
+              current.map((item) => (item.id === updated.id ? updated : item)),
+            );
+            setSelectedMedia(updated);
           }}
           onDownload={() => handleDownload(selectedMedia)}
           onDelete={
@@ -849,6 +905,19 @@ export default function MediaGallery({
           setSelectionMode(false);
         }}
       />
+
+      {eventId && currentUserId ? (
+        <IncludesMeDrawer
+          eventId={eventId}
+          open={faceDrawerOpen}
+          onClose={() => setFaceDrawerOpen(false)}
+          onApply={(matches) => {
+            setFaceMediaIds(new Set(matches.map((match) => match.mediaId)));
+            setIncludesMeActive(true);
+            setVisibleCount(INITIAL_VISIBLE_ITEMS);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

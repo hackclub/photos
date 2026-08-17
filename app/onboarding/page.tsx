@@ -1,4 +1,5 @@
 "use client";
+import { track } from "@vercel/analytics";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
@@ -12,7 +13,6 @@ import {
   HiUserGroup,
 } from "react-icons/hi2";
 import { useDebounce } from "use-debounce";
-import { trackRybbitEvent } from "@/components/analytics/RybbitUserIdentifier";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { logger } from "@/lib/client-logger";
 
@@ -36,31 +36,20 @@ export default function OnboardingPage() {
       .then((data) => {
         if (data.user?.handle) {
           setAlreadyOnboarded(true);
-          trackRybbitEvent("onboarding_already_completed", {
-            user_id: data.user.slackId ?? null,
-            handle: data.user.handle,
-            slack_id: data.user.slackId ?? null,
-            name: data.user.name ?? null,
-            email: data.user.email ?? null,
-          });
+          track("onboarding_already_completed");
         } else if (!data.user && !data.onboardingUser) {
           router.push("/");
         } else {
-          trackRybbitEvent("onboarding_started", {
+          track("onboarding_started", {
             has_existing_user: Boolean(data.user),
             has_onboarding_user: Boolean(data.onboardingUser),
-            user_id: data.user?.slackId ?? data.onboardingUser?.slackId ?? null,
-            slack_id:
-              data.user?.slackId ?? data.onboardingUser?.slackId ?? null,
-            name: data.user?.name ?? data.onboardingUser?.name ?? null,
-            email: data.user?.email ?? data.onboardingUser?.email ?? null,
           });
         }
       });
   }, [router]);
 
   useEffect(() => {
-    trackRybbitEvent("onboarding_step_viewed", {
+    track("onboarding_step_viewed", {
       step,
     });
   }, [step]);
@@ -111,7 +100,7 @@ export default function OnboardingPage() {
         setLoading(false);
       }
     }
-    trackRybbitEvent("onboarding_next_clicked", {
+    track("onboarding_next_clicked", {
       from_step: step,
       handle_length: handle.length,
       handle_available: isHandleAvailable ?? null,
@@ -120,7 +109,7 @@ export default function OnboardingPage() {
   };
 
   const handleBack = () => {
-    trackRybbitEvent("onboarding_back_clicked", {
+    track("onboarding_back_clicked", {
       from_step: step,
     });
     setStep((current) => current - 1);
@@ -132,19 +121,19 @@ export default function OnboardingPage() {
       const { completeOnboarding } = await import("@/app/actions/onboarding");
       const result = await completeOnboarding({ handle });
       if (!result.success) {
-        trackRybbitEvent("onboarding_failed", {
+        track("onboarding_failed", {
           handle_length: handle.length,
           error: result.error || "unknown",
         });
         setError(result.error || "Failed to complete onboarding");
         return;
       }
-      trackRybbitEvent("onboarding_completed", {
+      track("onboarding_completed", {
         handle_length: handle.length,
       });
       window.location.href = "/";
     } catch (_err) {
-      trackRybbitEvent("onboarding_failed", {
+      track("onboarding_failed", {
         handle_length: handle.length,
         error: "client_exception",
       });

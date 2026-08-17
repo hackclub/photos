@@ -18,7 +18,7 @@ function createQueryClient() {
   const configuredMaxConnections = Number(process.env.DATABASE_MAX_CONNECTIONS);
   const max = Number.isFinite(configuredMaxConnections)
     ? Math.max(2, Math.min(20, Math.floor(configuredMaxConnections)))
-    : 10;
+    : 5;
   return postgres(connectionString, {
     max,
     prepare: false,

@@ -13,6 +13,9 @@ import {
   eventAdmins,
   eventParticipants,
   events,
+  faceBlurSubscriptions,
+  facePrivacyPreferences,
+  faceScans,
   media,
   mediaComments,
   mediaLikes,
@@ -417,7 +420,12 @@ export async function mergeUsers(options: {
         await tx
           .update(blurRequests)
           .set({ requesterId: target.id, updatedAt: new Date() })
-          .where(eq(blurRequests.requesterId, source.id));
+          .where(
+            and(
+              eq(blurRequests.requesterId, source.id),
+              eq(blurRequests.source, "manual"),
+            ),
+          );
         await tx
           .update(blurRequests)
           .set({ resolvedById: target.id, updatedAt: new Date() })
@@ -493,6 +501,14 @@ export async function mergeUsers(options: {
           .set({ claimedById: target.id })
           .where(eq(pendingEventAdmins.claimedById, source.id));
       }
+      // Biometric consent and templates never transfer during account merges.
+      await tx
+        .delete(faceBlurSubscriptions)
+        .where(eq(faceBlurSubscriptions.userId, source.id));
+      await tx.delete(faceScans).where(eq(faceScans.userId, source.id));
+      await tx
+        .delete(facePrivacyPreferences)
+        .where(eq(facePrivacyPreferences.userId, source.id));
       if (Object.keys(dataUpdate).length > 0) {
         await tx
           .update(users)
@@ -554,6 +570,7 @@ export async function mergeUsers(options: {
       migrateLogin: !!options.migrateLogin,
       aliasLogin: !!options.aliasLogin,
       mergeDataFields: options.mergeDataFields || [],
+      faceDataPurged: true,
     });
     revalidatePath("/admin/users");
     revalidatePath(`/users/${source.handle || source.id}`);
@@ -690,6 +707,13 @@ export async function banUser(
           .delete(dataExports)
           .where(inArray(dataExports.id, successfulExportIds));
       }
+      await db
+        .delete(faceBlurSubscriptions)
+        .where(eq(faceBlurSubscriptions.userId, userId));
+      await db.delete(faceScans).where(eq(faceScans.userId, userId));
+      await db
+        .delete(facePrivacyPreferences)
+        .where(eq(facePrivacyPreferences.userId, userId));
     }
     const userToBan = await db.query.users.findFirst({
       where: eq(users.id, userId),

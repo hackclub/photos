@@ -1,11 +1,22 @@
 "use server";
 import { randomUUID } from "node:crypto";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { blurRequests, media } from "@/lib/db/schema";
+import {
+  blurRequests,
+  eventFaceIndexes,
+  faceBlurSubscriptions,
+  faceScans,
+  media,
+  mediaFaceDetections,
+} from "@/lib/db/schema";
+import {
+  rebuildEventFaceIndex,
+  searchFaceScanInEvent,
+} from "@/lib/face-indexing";
 import { logger } from "@/lib/logger";
 import {
   createSharp,
@@ -17,16 +28,19 @@ import {
   ALLOWED_IMAGE_TYPES,
   isUnsupportedImageBuffer,
 } from "@/lib/media/validation";
-import { can, getUserContext } from "@/lib/policy";
+import { can, getUserContext, type UserContext } from "@/lib/policy";
 
 type BlurRegion = { x: number; y: number; width: number; height: number };
 type BlurSubmission = {
   mediaId: string;
   regions: BlurRegion[];
   previewDataUrl?: string;
+  source?: "manual" | "face" | "automatic_face";
+  faceScanId?: string;
+  faceDetectionId?: string;
 };
 
-const MAX_BLUR_SUBMISSIONS = 25;
+const MAX_BLUR_SUBMISSIONS = 200;
 const MAX_BLUR_REGIONS = 100;
 const MAX_PREVIEW_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_PREVIEW_BYTES = 8 * 1024 * 1024;
@@ -184,10 +198,10 @@ function decodeDataUrl(dataUrl: string) {
   return { mimeType: match[1], buffer };
 }
 
-export async function submitBlurRequests(submissions: BlurSubmission[]) {
-  const session = await getSession();
-  const user = await getUserContext(session?.id);
-  if (!user) return { success: false, error: "Unauthorized" };
+async function submitBlurRequestsForUser(
+  user: UserContext,
+  submissions: BlurSubmission[],
+) {
   if (submissions.length === 0) {
     return { success: false, error: "No blur requests selected" };
   }
@@ -273,6 +287,9 @@ export async function submitBlurRequests(submissions: BlurSubmission[]) {
         id: requestId,
         mediaId: item.id,
         requesterId: user.id,
+        source: submission.source ?? "manual",
+        faceScanId: submission.faceScanId,
+        faceDetectionId: submission.faceDetectionId,
         regions: submission.regions,
         blurredS3Key,
         blurredThumbnailS3Key: thumbnailS3Key,
@@ -290,6 +307,140 @@ export async function submitBlurRequests(submissions: BlurSubmission[]) {
     logger.error("Error submitting blur requests:", error);
     return { success: false, error: "Failed to submit blur requests" };
   }
+}
+
+export async function submitBlurRequests(submissions: BlurSubmission[]) {
+  const session = await getSession();
+  const user = await getUserContext(session?.id);
+  if (!user) return { success: false, error: "Unauthorized" };
+  return submitBlurRequestsForUser(user, submissions);
+}
+
+export async function submitFaceBlurRequests(input: {
+  eventId: string;
+  scanId: string;
+  detectionIds: string[];
+}) {
+  const session = await getSession();
+  const user = await getUserContext(session?.id);
+  if (!user) return { success: false, error: "Unauthorized" };
+  if (input.detectionIds.length === 0 || input.detectionIds.length > 200) {
+    return { success: false, error: "Select between 1 and 200 photos" };
+  }
+  const [scan, eventIndex] = await Promise.all([
+    db.query.faceScans.findFirst({
+      where: and(
+        eq(faceScans.id, input.scanId),
+        eq(faceScans.userId, user.id),
+        eq(faceScans.status, "ready"),
+      ),
+    }),
+    db.query.eventFaceIndexes.findFirst({
+      where: eq(eventFaceIndexes.eventId, input.eventId),
+    }),
+  ]);
+  if (
+    !scan?.highQuality ||
+    Date.now() - scan.createdAt.getTime() > 30 * 24 * 60 * 60 * 1000
+  ) {
+    return {
+      success: false,
+      error: "A high-quality face scan from the last 30 days is required",
+    };
+  }
+  if (!eventIndex) return { success: false, error: "Event is not indexed" };
+  const matches = await searchFaceScanInEvent({
+    userId: user.id,
+    scanId: scan.id,
+    eventId: input.eventId,
+    minSimilarity: eventIndex.blurThreshold,
+    persistSuggestions: false,
+  });
+  const selectedIds = new Set(input.detectionIds);
+  const validMatches = matches.filter(
+    (match) =>
+      selectedIds.has(match.detectionId) &&
+      match.similarity >= eventIndex.blurThreshold,
+  );
+  if (validMatches.length !== selectedIds.size) {
+    return { success: false, error: "Some face matches are no longer valid" };
+  }
+  const detections = await db.query.mediaFaceDetections.findMany({
+    where: inArray(
+      mediaFaceDetections.id,
+      validMatches.map((match) => match.detectionId),
+    ),
+    with: { media: true },
+  });
+  const valid = detections.filter(
+    (detection) => detection.media.eventId === input.eventId,
+  );
+  if (valid.length !== selectedIds.size) {
+    return { success: false, error: "Some face matches are no longer valid" };
+  }
+  const existingRequests = await db.query.blurRequests.findMany({
+    where: and(
+      eq(blurRequests.requesterId, user.id),
+      inArray(
+        blurRequests.mediaId,
+        valid.map((detection) => detection.mediaId),
+      ),
+      inArray(blurRequests.status, ["pending", "approved"]),
+    ),
+    columns: { mediaId: true },
+  });
+  const existingMediaIds = new Set(
+    existingRequests.map((item) => item.mediaId),
+  );
+  const newRequests = valid.filter(
+    (detection) => !existingMediaIds.has(detection.mediaId),
+  );
+  if (newRequests.length === 0) {
+    return { success: false, error: "These photos already have blur requests" };
+  }
+  const result = await submitBlurRequestsForUser(
+    user,
+    newRequests.map((detection) => ({
+      mediaId: detection.mediaId,
+      regions: [expandFaceRegion(detection)],
+      source: "face" as const,
+      faceScanId: scan.id,
+      faceDetectionId: detection.id,
+    })),
+  );
+  if (result.success) {
+    await db
+      .insert(faceBlurSubscriptions)
+      .values({ eventId: input.eventId, userId: user.id, faceScanId: scan.id })
+      .onConflictDoUpdate({
+        target: [faceBlurSubscriptions.eventId, faceBlurSubscriptions.userId],
+        set: { faceScanId: scan.id, active: true, updatedAt: new Date() },
+      });
+    await auditLog(user.id, "create", "face_blur_subscription", input.eventId, {
+      matches: newRequests.length,
+    });
+  }
+  return result;
+}
+
+function expandFaceRegion(detection: {
+  boxX: number;
+  boxY: number;
+  boxWidth: number;
+  boxHeight: number;
+}): BlurRegion {
+  const margin = detection.boxWidth < 0.08 ? 0.38 : 0.24;
+  const left = Math.max(0, detection.boxX - detection.boxWidth * margin);
+  const top = Math.max(
+    0,
+    detection.boxY - detection.boxHeight * (margin + 0.12),
+  );
+  const right = Math.min(1, detection.boxX + detection.boxWidth * (1 + margin));
+  const bottom = Math.min(
+    1,
+    detection.boxY + detection.boxHeight * (1 + margin + 0.08),
+  );
+  return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
 export async function getBlurRequests() {
@@ -343,13 +494,15 @@ export async function getBlurRequestUrls(requestId: string) {
     with: { media: true },
   });
   if (!request) return { success: false, error: "Request not found" };
+  if (request.status !== "pending") {
+    return { success: false, error: "This request was already resolved" };
+  }
   if (!ALLOWED_IMAGE_TYPES.includes(request.media.mimeType)) {
     return { success: false, error: "Unsupported image format" };
   }
-  const originalKey = request.media.originalS3Key ?? request.media.s3Key;
   return {
     success: true,
-    originalUrl: await getSignedDownloadUrl(originalKey),
+    originalUrl: await getSignedDownloadUrl(request.media.s3Key),
     blurredUrl: await getSignedDownloadUrl(request.blurredS3Key),
   };
 }
@@ -408,9 +561,8 @@ export async function resolveBlurRequest(
       mediaId: request.mediaId,
     });
   } else if (status === "approved") {
-    const sourceKey = request.media.originalS3Key ?? request.media.s3Key;
     const rendered = await renderBlurredPhoto(
-      sourceKey,
+      request.media.s3Key,
       finalRegions,
       intensity,
       request.media.mimeType,
@@ -435,37 +587,61 @@ export async function resolveBlurRequest(
       mediaId: request.mediaId,
     });
   }
-  await db
-    .update(blurRequests)
-    .set({
-      status,
-      regions: finalRegions,
-      blurredS3Key,
-      blurredThumbnailS3Key: thumbnailS3Key,
-      resolvedAt: new Date(),
-      resolvedById: user.id,
-      updatedAt: new Date(),
-    })
-    .where(eq(blurRequests.id, requestId));
-  await db
-    .update(media)
-    .set(
-      status === "approved"
-        ? {
-            s3Key: blurredS3Key,
-            thumbnailS3Key,
-            originalS3Key: request.media.originalS3Key ?? request.media.s3Key,
-            originalThumbnailS3Key:
-              request.media.originalThumbnailS3Key ??
-              request.media.thumbnailS3Key,
-            blurredS3Key,
-            blurredThumbnailS3Key: thumbnailS3Key,
-            blurStatus: "approved",
-          }
-        : { blurStatus: null },
-    )
-    .where(eq(media.id, request.mediaId));
+  const resolved = await db.transaction(async (tx) => {
+    const [claimed] = await tx
+      .update(blurRequests)
+      .set({
+        status,
+        regions: finalRegions,
+        blurredS3Key,
+        blurredThumbnailS3Key: thumbnailS3Key,
+        resolvedAt: new Date(),
+        resolvedById: user.id,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(blurRequests.id, requestId), eq(blurRequests.status, "pending")),
+      )
+      .returning({ id: blurRequests.id });
+    if (!claimed) return false;
+    if (status === "approved") {
+      const [updatedMedia] = await tx
+        .update(media)
+        .set({
+          s3Key: blurredS3Key,
+          thumbnailS3Key,
+          originalS3Key: request.media.originalS3Key ?? request.media.s3Key,
+          originalThumbnailS3Key:
+            request.media.originalThumbnailS3Key ??
+            request.media.thumbnailS3Key,
+          blurredS3Key,
+          blurredThumbnailS3Key: thumbnailS3Key,
+          blurStatus: "approved",
+        })
+        .where(
+          and(
+            eq(media.id, request.mediaId),
+            eq(media.s3Key, request.media.s3Key),
+          ),
+        )
+        .returning({ id: media.id });
+      if (!updatedMedia) {
+        throw new Error(
+          "The photo changed while this request was open. Try again.",
+        );
+      }
+    }
+    return true;
+  });
+  if (!resolved) {
+    return { success: false, error: "This request was already resolved" };
+  }
   await auditLog(user.id, "update", "blur_request", requestId, { status });
+  if (status === "approved") {
+    await rebuildEventFaceIndex(request.media.eventId).catch((error) =>
+      logger.error("Failed to rebuild face index after blur approval", error),
+    );
+  }
   revalidateTag("media", "default");
   revalidatePath(`/events/${request.media.event.slug}`);
   revalidatePath("/admin/blur-requests");

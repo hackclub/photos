@@ -14,6 +14,7 @@ import {
   HiInformationCircle,
   HiPencilSquare,
   HiPhoto,
+  HiShieldCheck,
   HiTrash,
   HiUserGroup,
   HiVideoCamera,
@@ -37,6 +38,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import UserAvatar from "@/components/ui/UserAvatar";
 import DeleteAccountModal from "@/components/users/DeleteAccountModal";
 import EditProfileModal from "@/components/users/EditProfileModal";
+import PrivacyPanel from "@/components/users/PrivacyPanel";
 import UserBlurRequests from "@/components/users/UserBlurRequests";
 import UserReports from "@/components/users/UserReports";
 import { useAuth } from "@/hooks/useAuth";
@@ -131,6 +133,7 @@ export default function UserProfileClient({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showReports, setShowReports] = useState(false);
   const [showBlurRequests, setShowBlurRequests] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
   useEffect(() => {
     setUser(initialUser);
   }, [initialUser]);
@@ -249,7 +252,7 @@ export default function UserProfileClient({
                 </div>
               </div>
               {isOwnProfile && (
-                <div className="flex gap-2 self-start">
+                <div className="flex flex-wrap justify-end gap-2 self-start">
                   <button
                     onClick={() => setIsEditing(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm font-medium transition-colors"
@@ -263,6 +266,18 @@ export default function UserProfileClient({
                     title="Export Data"
                   >
                     <HiArrowDownTray className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setShowPrivacy(!showPrivacy)}
+                    aria-label="Privacy and data"
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      showPrivacy
+                        ? "bg-red-600 text-white"
+                        : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+                    }`}
+                    title="Privacy and data"
+                  >
+                    <HiShieldCheck className="w-5 h-5" />
                   </button>
                   <button
                     onClick={() => setShowReports(!showReports)}
@@ -519,7 +534,23 @@ export default function UserProfileClient({
         </div>
       </div>
 
-      {showBlurRequests && isOwnProfile ? (
+      {showPrivacy && isOwnProfile ? (
+        <div className="mb-12">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <HiShieldCheck className="w-6 h-6 text-red-500" />
+              Privacy and data
+            </h2>
+            <button
+              onClick={() => setShowPrivacy(false)}
+              className="text-sm text-zinc-400 hover:text-white"
+            >
+              Close
+            </button>
+          </div>
+          <PrivacyPanel />
+        </div>
+      ) : showBlurRequests && isOwnProfile ? (
         <div className="mb-12">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -588,7 +619,7 @@ export default function UserProfileClient({
               }`}
             >
               <HiUserGroup className="w-5 h-5" />
-              Mentions ({mentions.length})
+              {isOwnProfile ? "Mentions you" : "Mentions"} ({mentions.length})
             </button>
             <button
               type="button"

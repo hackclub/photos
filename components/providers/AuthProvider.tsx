@@ -1,4 +1,5 @@
 "use client";
+import { track } from "@vercel/analytics";
 import {
   createContext,
   useCallback,
@@ -6,10 +7,6 @@ import {
   useEffect,
   useState,
 } from "react";
-import RybbitUserIdentifier, {
-  clearRybbitUser,
-  trackRybbitEvent,
-} from "@/components/analytics/RybbitUserIdentifier";
 import type { SessionUser } from "@/lib/auth";
 import { logger } from "@/lib/client-logger";
 
@@ -61,14 +58,7 @@ export function AuthProvider({
     fetchUser();
   }, [fetchUser]);
   const signOut = async () => {
-    trackRybbitEvent("user_logout", {
-      user_id: user?.slackId ?? null,
-      handle: user?.handle ?? null,
-      slack_id: user?.slackId ?? null,
-      name: user?.name ?? null,
-      email: user?.email ?? null,
-    });
-    clearRybbitUser();
+    track("user_logout");
     await fetch("/api/auth/signout", { method: "POST" });
     setUser(null);
     window.location.href = "/";
@@ -77,7 +67,6 @@ export function AuthProvider({
     <AuthContext.Provider
       value={{ user, loading, refreshUser: fetchUser, signOut }}
     >
-      <RybbitUserIdentifier user={user} loading={loading} />
       {children}
     </AuthContext.Provider>
   );

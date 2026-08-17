@@ -15,3 +15,4 @@ dist
 *.md
 docker-compose*
 LICENSE
+services/vision-worker

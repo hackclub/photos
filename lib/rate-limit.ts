@@ -30,6 +30,10 @@ if (!("__photosRateLimitRedis" in redisGlobal)) {
 }
 const redis = redisGlobal.__photosRateLimitRedis ?? null;
 
+export function getRedisClient() {
+  return redis;
+}
+
 export interface RateLimitConfig {
   limit: number;
   window: number;
@@ -48,14 +52,20 @@ export async function rateLimit(
   success: boolean;
   remaining: number;
   resetAt: number;
+  backendAvailable: boolean;
 }> {
   const resetAt = Date.now() + config.window * 1000;
 
   if (!redis) {
     if (shouldFailOpen(config)) {
-      return { success: true, remaining: config.limit, resetAt };
+      return {
+        success: true,
+        remaining: config.limit,
+        resetAt,
+        backendAvailable: false,
+      };
     }
-    return { success: false, remaining: 0, resetAt };
+    return { success: false, remaining: 0, resetAt, backendAvailable: false };
   }
 
   try {
@@ -78,6 +88,7 @@ export async function rateLimit(
         success: false,
         remaining: 0,
         resetAt: computedResetAt,
+        backendAvailable: true,
       };
     }
 
@@ -85,12 +96,18 @@ export async function rateLimit(
       success: true,
       remaining: config.limit - count,
       resetAt: computedResetAt,
+      backendAvailable: true,
     };
   } catch (err) {
     logger.error("[rate-limit] backend error:", err);
     if (shouldFailOpen(config)) {
-      return { success: true, remaining: config.limit, resetAt };
+      return {
+        success: true,
+        remaining: config.limit,
+        resetAt,
+        backendAvailable: false,
+      };
     }
-    return { success: false, remaining: 0, resetAt };
+    return { success: false, remaining: 0, resetAt, backendAvailable: false };
   }
 }

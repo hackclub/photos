@@ -1,9 +1,11 @@
 "use server";
-import { count, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   eventParticipants,
+  faceMatchSuggestions,
+  facePrivacyPreferences,
   media,
   mediaLikes,
   mediaMentions,
@@ -13,6 +15,7 @@ import { logger } from "@/lib/logger";
 import { getAssetProxyUrl } from "@/lib/media/s3";
 import {
   augmentMediaWithPermissions,
+  can,
   getAccessibleEventIds,
   getUserContext,
 } from "@/lib/policy";
@@ -40,6 +43,14 @@ export async function getUserProfileData(userId: string) {
     }
     if (user.isBanned) {
       return { success: false, error: "User is banned" };
+    }
+    const privacy = await db.query.facePrivacyPreferences.findFirst({
+      where: eq(facePrivacyPreferences.userId, userId),
+    });
+    const privilegedViewer =
+      currentUser?.id === userId || currentUser?.isGlobalAdmin === true;
+    if (privacy?.hideProfile && !privilegedViewer) {
+      return { success: false, error: "User not found" };
     }
     const userUploads = await db.query.media.findMany({
       where: eq(media.uploadedById, userId),
@@ -103,6 +114,55 @@ export async function getUserProfileData(userId: string) {
     const mentionedMedia = userMentions
       .map((mention) => mention.media)
       .filter((m) => m !== null);
+    const suggestionRows =
+      privacy?.hideMentions && !privilegedViewer
+        ? []
+        : await db.query.faceMatchSuggestions.findMany({
+            where: and(
+              eq(faceMatchSuggestions.userId, userId),
+              eq(faceMatchSuggestions.status, "pending"),
+            ),
+            orderBy: [desc(faceMatchSuggestions.createdAt)],
+            limit: PROFILE_MEDIA_LIMIT,
+            with: {
+              media: {
+                with: {
+                  event: true,
+                  uploadedBy: {
+                    columns: {
+                      id: true,
+                      preferredName: true,
+                      handle: true,
+                      slackId: true,
+                    },
+                  },
+                },
+              },
+            },
+          });
+    const visibleSuggestionRows = [];
+    for (const suggestion of suggestionRows) {
+      const eventAdmin = Boolean(
+        currentUser &&
+          (await can(currentUser, "manage", "event", suggestion.media.eventId)),
+      );
+      if (privacy?.hideAiSuggestions && !privilegedViewer && !eventAdmin)
+        continue;
+      visibleSuggestionRows.push({
+        suggestion,
+        canConfirm: privilegedViewer || eventAdmin,
+      });
+    }
+    const confirmedMediaIds = new Set(mentionedMedia.map((item) => item.id));
+    const suggestedMedia = visibleSuggestionRows
+      .filter(({ suggestion }) => !confirmedMediaIds.has(suggestion.mediaId))
+      .map(({ suggestion, canConfirm }) => ({
+        ...suggestion.media,
+        suggestedMention: true,
+        suggestionId: suggestion.id,
+        canConfirmSuggestion:
+          canConfirm || currentUser?.id === suggestion.userId,
+      }));
     const userEvents = await db.query.eventParticipants.findMany({
       where: eq(eventParticipants.userId, userId),
       orderBy: [desc(eventParticipants.joinedAt)],
@@ -129,6 +189,9 @@ export async function getUserProfileData(userId: string) {
     mentionedMedia.forEach((m) => {
       if (m.event) allEventsMap.set(m.event.id, m.event);
     });
+    suggestedMedia.forEach((m) => {
+      if (m.event) allEventsMap.set(m.event.id, m.event);
+    });
     userEvents.forEach((p) => {
       if (p.event) allEventsMap.set(p.event.id, p.event);
     });
@@ -149,6 +212,10 @@ export async function getUserProfileData(userId: string) {
       ...item,
       uploadedBy: toPublicUser(item.uploadedBy),
     }));
+    const publicSuggestedMedia = suggestedMedia.map((item) => ({
+      ...item,
+      uploadedBy: toPublicUser(item.uploadedBy),
+    }));
     const filteredUploads = publicUploads.filter(
       (u) => u.event && accessibleEventIds.has(u.event.id),
     );
@@ -158,14 +225,20 @@ export async function getUserProfileData(userId: string) {
     const filteredMentions = publicMentionedMedia.filter(
       (m) => m.event && accessibleEventIds.has(m.event.id),
     );
+    const filteredSuggestions = publicSuggestedMedia.filter(
+      (m) => m.event && accessibleEventIds.has(m.event.id),
+    );
     const filteredUserEvents = userEvents.filter(
       (p) => p.event && accessibleEventIds.has(p.event.id),
     );
     const mediaIds = Array.from(
       new Set(
-        [...filteredUploads, ...filteredLikes, ...filteredMentions].map(
-          (item) => item.id,
-        ),
+        [
+          ...filteredUploads,
+          ...filteredLikes,
+          ...filteredMentions,
+          ...filteredSuggestions,
+        ].map((item) => item.id),
       ),
     );
     const eventIds = filteredUserEvents.map((item) => item.event.id);
@@ -209,7 +282,12 @@ export async function getUserProfileData(userId: string) {
       await Promise.all([
         augmentMediaWithPermissions(currentUser?.id, filteredUploads),
         augmentMediaWithPermissions(currentUser?.id, filteredLikes),
-        augmentMediaWithPermissions(currentUser?.id, filteredMentions),
+        augmentMediaWithPermissions(currentUser?.id, [
+          ...(privacy?.hideMentions && !privilegedViewer
+            ? []
+            : filteredMentions),
+          ...filteredSuggestions,
+        ]),
       ]);
     const joinedEvents = await Promise.all(
       filteredUserEvents.map(async (p) => {

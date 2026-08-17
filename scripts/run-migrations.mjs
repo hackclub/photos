@@ -3,11 +3,16 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is required to run migrations");
+const migrationUrl =
+  process.env.MIGRATION_DATABASE_URL || process.env.DATABASE_URL;
+
+if (!migrationUrl) {
+  throw new Error(
+    "MIGRATION_DATABASE_URL or DATABASE_URL is required to run migrations",
+  );
 }
 
-const client = postgres(process.env.DATABASE_URL, {
+const client = postgres(migrationUrl, {
   max: 1,
   prepare: false,
 });

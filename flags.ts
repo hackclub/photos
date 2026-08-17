@@ -1,26 +1,37 @@
-import { growthbookAdapter } from "@flags-sdk/growthbook";
+import { vercelAdapter } from "@flags-sdk/vercel";
 import { flag } from "flags/next";
-import { after } from "next/server";
-import { identify } from "@/lib/identify";
+import { type FlagEntities, identify } from "@/lib/identify";
 
-growthbookAdapter.setTrackingCallback((experiment, result) => {
-  after(async () => {});
-});
-export const maintenanceMode = flag({
+export const maintenanceMode = flag<boolean, FlagEntities>({
   key: "maintenance-mode",
-  adapter: growthbookAdapter.feature<boolean>(),
+  adapter: vercelAdapter,
   defaultValue: false,
+  description: "Show the maintenance page instead of the application.",
+  options: [
+    { label: "Off", value: false },
+    { label: "On", value: true },
+  ],
   identify,
 });
-export const signage = flag({
+export const signage = flag<boolean, FlagEntities>({
   key: "signage",
-  adapter: growthbookAdapter.feature<boolean>(),
+  adapter: vercelAdapter,
   defaultValue: false,
+  description: "Enable the event signage display routes.",
+  options: [
+    { label: "Off", value: false },
+    { label: "On", value: true },
+  ],
   identify,
 });
-export const comingSoon = flag({
+export const comingSoon = flag<boolean, FlagEntities>({
   key: "coming-soon",
-  adapter: growthbookAdapter.feature<boolean>(),
+  adapter: vercelAdapter,
   defaultValue: false,
+  description: "Show the coming soon page instead of the application.",
+  options: [
+    { label: "Off", value: false },
+    { label: "On", value: true },
+  ],
   identify,
 });

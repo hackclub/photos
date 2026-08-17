@@ -4,18 +4,24 @@ import {
   apiKeys,
   commentLikes,
   dataExports,
+  eventFaceIndexes,
   events,
+  faceBlurSubscriptions,
+  facePrivacyPreferences,
+  faceScans,
   media,
   mediaLikes,
   series,
   users,
 } from "@/lib/db/schema";
+import { rebuildEventFaceIndex } from "@/lib/face-indexing";
 import { logger } from "@/lib/logger";
 import { deleteFromS3 } from "@/lib/media/s3";
 import {
   deleteBatchMedia,
   deleteMediaAndThumbnail,
 } from "@/lib/media/thumbnail";
+import { deleteVisionGallery } from "@/lib/vision-client";
 export async function deleteUserContent(userId: string) {
   const userMedia = await db.query.media.findMany({
     where: eq(media.uploadedById, userId),
@@ -28,6 +34,19 @@ export async function deleteUserContent(userId: string) {
   const successfulEventIds: string[] = [];
   for (const event of userEvents) {
     let eventDeletionFailed = false;
+    const faceIndex = await db.query.eventFaceIndexes.findFirst({
+      where: eq(eventFaceIndexes.eventId, event.id),
+      columns: { galleryId: true },
+    });
+    if (faceIndex?.galleryId) {
+      await deleteVisionGallery(faceIndex.galleryId).catch((error) => {
+        logger.error(
+          `Failed to delete face gallery for event ${event.id}:`,
+          error,
+        );
+        eventDeletionFailed = true;
+      });
+    }
     if (event.bannerS3Key) {
       try {
         await deleteMediaAndThumbnail(event.bannerS3Key, null);
@@ -93,6 +112,13 @@ export async function deleteUserContent(userId: string) {
     await tx.delete(commentLikes).where(eq(commentLikes.userId, userId));
     await tx.delete(dataExports).where(eq(dataExports.userId, userId));
     await tx
+      .delete(faceBlurSubscriptions)
+      .where(eq(faceBlurSubscriptions.userId, userId));
+    await tx.delete(faceScans).where(eq(faceScans.userId, userId));
+    await tx
+      .delete(facePrivacyPreferences)
+      .where(eq(facePrivacyPreferences.userId, userId));
+    await tx
       .update(apiKeys)
       .set({ isRevoked: true })
       .where(eq(apiKeys.userId, userId));
@@ -125,6 +151,19 @@ export async function deleteUserContent(userId: string) {
       );
     }
   });
+  const deletedEventIds = new Set(successfulEventIds);
+  const deletedMediaIds = new Set(successfulMediaIds);
+  const affectedEventIds = new Set(
+    userMedia
+      .filter((item) => deletedMediaIds.has(item.id))
+      .map((item) => item.eventId)
+      .filter((eventId) => !deletedEventIds.has(eventId)),
+  );
+  for (const eventId of affectedEventIds) {
+    await rebuildEventFaceIndex(eventId).catch((error) =>
+      logger.error(`Failed to rebuild face index for event ${eventId}`, error),
+    );
+  }
   const userCheck = await db.query.users.findFirst({
     where: eq(users.id, userId),
     columns: { deletedAt: true },

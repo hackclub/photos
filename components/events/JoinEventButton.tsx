@@ -1,8 +1,8 @@
 "use client";
+import { track } from "@vercel/analytics";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { joinEvent } from "@/app/actions/events";
-import { trackRybbitEvent } from "@/components/analytics/RybbitUserIdentifier";
 
 interface Props {
   eventId: string;
@@ -17,7 +17,7 @@ export default function JoinEventButton({ eventId, requiresInvite }: Props) {
   const handleJoin = useCallback(
     async (codeOverride?: string) => {
       setLoading(true);
-      trackRybbitEvent("event_join_started", {
+      track("event_join_started", {
         event_id: eventId,
         requires_invite: requiresInvite,
         has_invite_code: Boolean(codeOverride || inviteCode),
@@ -30,14 +30,14 @@ export default function JoinEventButton({ eventId, requiresInvite }: Props) {
           requiresInvite ? codeToUse : undefined,
         );
         if (result.success) {
-          trackRybbitEvent("event_joined", {
+          track("event_joined", {
             event_id: eventId,
             requires_invite: requiresInvite,
             source: codeOverride ? "invite_url" : "button",
           });
           router.refresh();
         } else {
-          trackRybbitEvent("event_join_failed", {
+          track("event_join_failed", {
             event_id: eventId,
             requires_invite: requiresInvite,
             error: result.error || "unknown",
@@ -45,7 +45,7 @@ export default function JoinEventButton({ eventId, requiresInvite }: Props) {
           alert(result.error || "Failed to join event");
         }
       } catch (_error) {
-        trackRybbitEvent("event_join_failed", {
+        track("event_join_failed", {
           event_id: eventId,
           requires_invite: requiresInvite,
           error: "client_exception",
@@ -71,7 +71,7 @@ export default function JoinEventButton({ eventId, requiresInvite }: Props) {
       <button
         type="button"
         onClick={() => {
-          trackRybbitEvent("event_invite_prompt_opened", { event_id: eventId });
+          track("event_invite_prompt_opened", { event_id: eventId });
           setShowInviteInput(true);
         }}
         className="min-h-11 rounded-xl bg-red-600 px-6 py-2 text-center font-medium transition hover:bg-red-700"

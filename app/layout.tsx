@@ -1,8 +1,9 @@
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { HiWrenchScrewdriver } from "react-icons/hi2";
 import "./globals.css";
-import RybbitScript from "@/components/analytics/RybbitScript";
 import ComingSoon from "@/components/ComingSoon";
 import { comingSoon, maintenanceMode } from "@/flags";
 import { getSession } from "@/lib/auth";
@@ -83,7 +84,8 @@ export default async function RootLayout({
             {children}
           </ClientLayout>
         </Suspense>
-        <RybbitScript />
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

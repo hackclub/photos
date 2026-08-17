@@ -4,7 +4,7 @@ import { HiExclamationCircle } from "react-icons/hi2";
 import { getSession } from "@/lib/auth";
 import { APP_URL } from "@/lib/constants";
 import { db } from "@/lib/db";
-import { media, users } from "@/lib/db/schema";
+import { facePrivacyPreferences, media, users } from "@/lib/db/schema";
 import { createOgMetadata } from "@/lib/metadata";
 import { getUserContext } from "@/lib/policy";
 import { getUserDisplayName } from "@/lib/user-display";
@@ -39,6 +39,17 @@ export async function generateMetadata({
     return {
       title: "User Not Found",
     };
+  }
+  const [privacy, viewerSession] = await Promise.all([
+    db.query.facePrivacyPreferences.findFirst({
+      where: eq(facePrivacyPreferences.userId, user.id),
+      columns: { hideProfile: true },
+    }),
+    getSession(),
+  ]);
+  if (privacy?.hideProfile && viewerSession?.id !== user.id) {
+    const viewer = await getUserContext(viewerSession?.id);
+    if (!viewer?.isGlobalAdmin) return { title: "User Not Found" };
   }
   const displayName = getUserDisplayName(user);
   const title = `${displayName}${user.handle ? ` (@${user.handle})` : ""} | Hack Club Photos`;
@@ -161,6 +172,11 @@ export default async function UserProfilePage({
     );
   }
   const isOwnProfile = session?.id === user.id;
+  const privacy = await db.query.facePrivacyPreferences.findFirst({
+    where: eq(facePrivacyPreferences.userId, user.id),
+    columns: { hideProfile: true },
+  });
+  if (privacy?.hideProfile && !isOwnProfile && !isAdmin) notFound();
   return (
     <UserProfileClient
       user={user}

@@ -1,4 +1,5 @@
 "use client";
+import { track } from "@vercel/analytics";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
@@ -7,7 +8,6 @@ import {
   HiXMark,
 } from "react-icons/hi2";
 import { leaveEvent } from "@/app/actions/events";
-import { trackRybbitEvent } from "@/components/analytics/RybbitUserIdentifier";
 import { logger } from "@/lib/client-logger";
 
 interface LeaveEventButtonProps {
@@ -23,21 +23,21 @@ export default function LeaveEventButton({
   const router = useRouter();
   const handleLeave = async () => {
     setIsLeaving(true);
-    trackRybbitEvent("event_leave_started", {
+    track("event_leave_started", {
       event_id: eventId,
       photo_count: photoCount,
     });
     try {
       const result = await leaveEvent(eventId);
       if (result.success) {
-        trackRybbitEvent("event_left", {
+        track("event_left", {
           event_id: eventId,
           photo_count: photoCount,
         });
         router.push("/events");
         router.refresh();
       } else {
-        trackRybbitEvent("event_leave_failed", {
+        track("event_leave_failed", {
           event_id: eventId,
           photo_count: photoCount,
           error: result.error || "unknown",
@@ -47,7 +47,7 @@ export default function LeaveEventButton({
       }
     } catch (error) {
       logger.error("Error leaving event:", error);
-      trackRybbitEvent("event_leave_failed", {
+      track("event_leave_failed", {
         event_id: eventId,
         photo_count: photoCount,
         error: "client_exception",
@@ -61,7 +61,7 @@ export default function LeaveEventButton({
       <button
         type="button"
         onClick={() => {
-          trackRybbitEvent("event_leave_dialog_opened", {
+          track("event_leave_dialog_opened", {
             event_id: eventId,
             photo_count: photoCount,
           });
@@ -91,7 +91,7 @@ export default function LeaveEventButton({
               <button
                 type="button"
                 onClick={() => {
-                  trackRybbitEvent("event_leave_dialog_closed", {
+                  track("event_leave_dialog_closed", {
                     event_id: eventId,
                     photo_count: photoCount,
                   });
@@ -121,7 +121,7 @@ export default function LeaveEventButton({
               <button
                 type="button"
                 onClick={() => {
-                  trackRybbitEvent("event_leave_cancelled", {
+                  track("event_leave_cancelled", {
                     event_id: eventId,
                     photo_count: photoCount,
                   });

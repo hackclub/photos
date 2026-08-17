@@ -8,6 +8,7 @@ import {
   HiHeart,
   HiPhoto,
   HiPlay,
+  HiSparkles,
   HiUser,
 } from "react-icons/hi2";
 
@@ -27,6 +28,9 @@ interface MediaGalleryToolbarProps {
   showEventFilter: boolean;
   showTypeFilter: boolean;
   showSortFilter: boolean;
+  showIncludesMe?: boolean;
+  includesMeActive?: boolean;
+  onIncludesMeClick?: () => void;
 }
 export default function MediaGalleryToolbar({
   filter,
@@ -42,6 +46,9 @@ export default function MediaGalleryToolbar({
   showEventFilter,
   showTypeFilter,
   showSortFilter,
+  showIncludesMe = false,
+  includesMeActive = false,
+  onIncludesMeClick,
 }: MediaGalleryToolbarProps) {
   return (
     <div className="space-y-3 overflow-x-clip">
@@ -88,16 +95,32 @@ export default function MediaGalleryToolbar({
           <div />
         )}
 
-        {!selectionMode && (
-          <button
-            type="button"
-            onClick={() => setSelectionMode(true)}
-            className="flex min-h-11 items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium transition hover:border-zinc-700 hover:bg-zinc-800"
-          >
-            <HiCheckCircle className="w-5 h-5" />
-            <span className="hidden sm:inline">Select</span>
-          </button>
-        )}
+        {!selectionMode ? (
+          <div className="flex items-center gap-2">
+            {showIncludesMe ? (
+              <button
+                type="button"
+                onClick={onIncludesMeClick}
+                className={`flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                  includesMeActive
+                    ? "border-cyan-500 bg-cyan-950/50 text-cyan-200"
+                    : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800"
+                }`}
+              >
+                <HiSparkles className="h-5 w-5" />
+                <span className="hidden sm:inline">Includes me</span>
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setSelectionMode(true)}
+              className="flex min-h-11 items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium transition hover:border-zinc-700 hover:bg-zinc-800"
+            >
+              <HiCheckCircle className="w-5 h-5" />
+              <span className="hidden sm:inline">Select</span>
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">

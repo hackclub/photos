@@ -15,6 +15,7 @@ import {
   tags,
   users,
 } from "@/lib/db/schema";
+import { queueMediaForFaceIndexing } from "@/lib/face-indexing";
 import { logger } from "@/lib/logger";
 import { extractExifData } from "@/lib/media/exif";
 import { uploadToS3 } from "@/lib/media/s3";
@@ -34,7 +35,8 @@ import { publicMedia } from "@/lib/public-data";
 import { isValidSlackId, normalizeSlackId } from "@/lib/slack-id";
 import { checkStorageLimit } from "@/lib/storage";
 
-const MAX_DIRECT_API_UPLOAD_BYTES = 100 * 1024 * 1024;
+// Vercel rejects request bodies above 4.5 MB before this route executes.
+const MAX_DIRECT_API_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 function safeFileExtension(filename: string) {
   const ext = filename.split(".").pop()?.toLowerCase() ?? "bin";
@@ -80,7 +82,7 @@ async function handlePost(req: NextRequest) {
     }
     if (contentLength > MAX_DIRECT_API_UPLOAD_BYTES) {
       return NextResponse.json(
-        { error: "Direct API uploads are limited to 100MB" },
+        { error: "Direct API uploads are limited to 4MB on Vercel" },
         { status: 413 },
       );
     }
@@ -150,7 +152,7 @@ async function handlePost(req: NextRequest) {
     }
     if (file.size > MAX_DIRECT_API_UPLOAD_BYTES) {
       return NextResponse.json(
-        { error: "Direct API uploads are limited to 100MB" },
+        { error: "Direct API uploads are limited to 4MB on Vercel" },
         { status: 413 },
       );
     }
@@ -438,6 +440,9 @@ async function handlePost(req: NextRequest) {
       pendingOwnerHackclubId,
       globalAdminOnlyDelete,
       tags: tagNames,
+    });
+    await queueMediaForFaceIndexing(inserted.id).catch((error) => {
+      logger.error("Failed to queue face indexing:", error);
     });
     revalidatePath(`/events/${eventId}`);
     return NextResponse.json({

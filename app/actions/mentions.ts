@@ -1,9 +1,15 @@
 "use server";
 import { and, eq } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { media, mediaMentions, users } from "@/lib/db/schema";
+import {
+  faceMatchSuggestions,
+  media,
+  mediaMentions,
+  users,
+} from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { can, getUserContext } from "@/lib/policy";
 import { toPublicUser } from "@/lib/user-display";
@@ -193,4 +199,106 @@ export async function getMediaMentions(mediaId: string) {
     logger.error("Failed to get media mentions:", error);
     return { success: false, error: "Failed to get media mentions" };
   }
+}
+
+export async function confirmFaceSuggestion(suggestionId: string) {
+  const session = await getSession();
+  const currentUser = await getUserContext(session?.id);
+  if (!currentUser) return { success: false, error: "Unauthorized" };
+  const suggestion = await db.query.faceMatchSuggestions.findFirst({
+    where: eq(faceMatchSuggestions.id, suggestionId),
+    with: { media: { with: { event: true } } },
+  });
+  if (!suggestion || suggestion.status !== "pending") {
+    return { success: false, error: "Suggestion not found" };
+  }
+  const allowed =
+    suggestion.userId === currentUser.id ||
+    (await can(currentUser, "manage", "event", suggestion.media.eventId));
+  if (!allowed) return { success: false, error: "Forbidden" };
+  const confirmed = await db.transaction(async (tx) => {
+    const [claimed] = await tx
+      .update(faceMatchSuggestions)
+      .set({
+        status: "accepted",
+        reviewedById: currentUser.id,
+        reviewedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(faceMatchSuggestions.id, suggestion.id),
+          eq(faceMatchSuggestions.status, "pending"),
+        ),
+      )
+      .returning({ id: faceMatchSuggestions.id });
+    if (!claimed) return false;
+    await tx
+      .insert(mediaMentions)
+      .values({ mediaId: suggestion.mediaId, userId: suggestion.userId })
+      .onConflictDoNothing();
+    return true;
+  });
+  if (!confirmed)
+    return { success: false, error: "Suggestion was already reviewed" };
+  await auditLog(
+    currentUser.id,
+    "update",
+    "face_match_suggestion",
+    suggestion.id,
+    {
+      status: "accepted",
+      mediaId: suggestion.mediaId,
+      mentionedUserId: suggestion.userId,
+    },
+  );
+  // Deliberately no Slack notification for suggestions promoted to mentions.
+  revalidatePath("/users/[username]", "page");
+  return { success: true };
+}
+
+export async function rejectFaceSuggestion(suggestionId: string) {
+  const session = await getSession();
+  const currentUser = await getUserContext(session?.id);
+  if (!currentUser) return { success: false, error: "Unauthorized" };
+  const suggestion = await db.query.faceMatchSuggestions.findFirst({
+    where: eq(faceMatchSuggestions.id, suggestionId),
+    with: { media: true },
+  });
+  if (!suggestion || suggestion.status !== "pending") {
+    return { success: false, error: "Suggestion not found" };
+  }
+  const allowed =
+    suggestion.userId === currentUser.id ||
+    (await can(currentUser, "manage", "event", suggestion.media.eventId));
+  if (!allowed) return { success: false, error: "Forbidden" };
+  const [rejected] = await db
+    .update(faceMatchSuggestions)
+    .set({
+      status: "rejected",
+      reviewedById: currentUser.id,
+      reviewedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(faceMatchSuggestions.id, suggestion.id),
+        eq(faceMatchSuggestions.status, "pending"),
+      ),
+    )
+    .returning({ id: faceMatchSuggestions.id });
+  if (!rejected)
+    return { success: false, error: "Suggestion was already reviewed" };
+  await auditLog(
+    currentUser.id,
+    "update",
+    "face_match_suggestion",
+    suggestion.id,
+    {
+      status: "rejected",
+      mediaId: suggestion.mediaId,
+    },
+  );
+  revalidatePath("/users/[username]", "page");
+  return { success: true };
 }

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "bun install --frozen-lockfile",
+  "buildCommand": "bun run vercel:build",
+  "fluid": true,
+  "crons": [
+    {
+      "path": "/api/cron/slack-notifications",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/faces",
+      "schedule": "* * * * *"
+    }
+  ]
+}

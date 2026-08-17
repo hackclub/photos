@@ -15,6 +15,7 @@ import {
   HiMap,
   HiRss,
   HiServer,
+  HiSparkles,
   HiTag,
   HiUser,
   HiUsers,
@@ -45,6 +46,7 @@ const adminNavigation = [
   { name: "Manage Tags", href: "/admin/tags", icon: HiTag },
   { name: "Users", href: "/admin/users", icon: HiUsers },
   { name: "Storage", href: "/admin/storage", icon: HiServer },
+  { name: "Face Indexing", href: "/admin/faces", icon: HiSparkles },
   { name: "Audit Logs", href: "/admin/audit", icon: HiClipboardDocumentList },
   { name: "API Keys", href: "/admin/api-keys", icon: HiCommandLine },
 ];

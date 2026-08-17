@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  ...(process.env.VERCEL ? {} : { output: "standalone" }),
   serverExternalPackages: ["mediainfo.js"],
   allowedDevOrigins: [
     "192.168.0.32",
@@ -88,23 +88,16 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "12mb",
     },
   },
-  async rewrites() {
-    const rybbitHost =
-      process.env.NEXT_PUBLIC_RYBBIT_HOST || "https://logging.deployor.dev";
-
-    return [
-      {
-        source: "/api/script.js",
-        destination: `${rybbitHost}/api/script.js`,
-      },
-      {
-        source: "/api/track",
-        destination: `${rybbitHost}/api/track`,
-      },
-    ];
-  },
   async headers() {
     return [
+      {
+        source: "/face-capture/:path*",
+        headers: [
+          { key: "Cache-Control", value: "no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Permissions-Policy", value: "camera=(self)" },
+        ],
+      },
       {
         source: "/:path*",
         headers: [

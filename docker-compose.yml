@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   web:
     build:
@@ -15,3 +13,38 @@ services:
     environment:
       NODE_ENV: production
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      VISION_WORKER_URL: http://vision-worker:3100
+    depends_on:
+      - vision-worker
+
+  vision-worker:
+    platform: linux/amd64
+    build:
+      context: ./services/vision-worker
+      dockerfile: Dockerfile
+    container_name: hack-club-photos-vision
+    restart: unless-stopped
+    mem_limit: ${VISION_MEMORY_LIMIT:-8g}
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3100
+      REDIS_URL: ${VISION_REDIS_URL:-redis://vision-redis:6379}
+      VISION_WORKER_TOKEN: ${VISION_WORKER_TOKEN:?VISION_WORKER_TOKEN is required}
+      VISION_DATA_ENCRYPTION_KEY: ${VISION_DATA_ENCRYPTION_KEY:?VISION_DATA_ENCRYPTION_KEY is required}
+    volumes:
+      - vision-data:/app/data
+    depends_on:
+      - vision-redis
+
+  vision-redis:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    command: ["valkey-server", "--save", "60", "1", "--appendonly", "yes"]
+    volumes:
+      - vision-redis-data:/data
+
+volumes:
+  vision-data:
+  vision-redis-data:

@@ -7,6 +7,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 type Request = {
   id: string;
   status: "pending" | "approved" | "rejected";
+  source: "manual" | "face" | "automatic_face";
   createdAt: Date;
   media: { filename: string } | null;
 };
@@ -59,6 +60,13 @@ export default function UserBlurRequests() {
                 <p className="text-xs text-zinc-500">
                   {new Date(request.createdAt).toLocaleString()}
                 </p>
+                {request.source !== "manual" ? (
+                  <p className="mt-1 text-xs text-cyan-400">
+                    {request.source === "face"
+                      ? "Face-matched request"
+                      : "New photo matched automatically"}
+                  </p>
+                ) : null}
               </div>
               <Status status={request.status} />
             </div>

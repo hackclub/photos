@@ -23,10 +23,15 @@ export default function ClientLayout({
   const searchParams = useSearchParams();
   const isSignMode = pathname?.startsWith("/sign");
   const isAuthPage = pathname?.startsWith("/auth");
+  const isFaceCapture = pathname?.startsWith("/face-capture");
   const isPublicLanding = pathname === "/" && !initialSession;
   const isMobileShell = searchParams?.get("mobile") === "1";
   const showShell =
-    !isSignMode && !isAuthPage && !isPublicLanding && !isMobileShell;
+    !isSignMode &&
+    !isAuthPage &&
+    !isFaceCapture &&
+    !isPublicLanding &&
+    !isMobileShell;
   return (
     <AuthProvider initialSession={initialSession}>
       <UploadProvider>

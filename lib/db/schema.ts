@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   bigint,
@@ -12,6 +12,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 export const shareTypeEnum = pgEnum("share_type", ["view", "raw"]);
@@ -37,6 +38,36 @@ export const blurRequestStatusEnum = pgEnum("blur_request_status", [
   "pending",
   "approved",
   "rejected",
+]);
+export const faceAlgorithmEnum = pgEnum("face_algorithm", [
+  "fast",
+  "accurate",
+  "very-accurate",
+]);
+export const faceJobStatusEnum = pgEnum("face_job_status", [
+  "queued",
+  "processing",
+  "ready",
+  "failed",
+  "cancelled",
+]);
+export const faceIndexStatusEnum = pgEnum("face_index_status", [
+  "disabled",
+  "queued",
+  "indexing",
+  "ready",
+  "failed",
+  "paused",
+]);
+export const faceMatchStatusEnum = pgEnum("face_match_status", [
+  "pending",
+  "accepted",
+  "rejected",
+]);
+export const blurRequestSourceEnum = pgEnum("blur_request_source", [
+  "manual",
+  "face",
+  "automatic_face",
 ]);
 export const slackNotificationCategoryEnum = pgEnum(
   "slack_notification_category",
@@ -466,6 +497,170 @@ export const mediaMentions = pgTable(
     pk: primaryKey({ columns: [t.mediaId, t.userId] }),
   }),
 );
+export const faceSystemSettings = pgTable("face_system_settings", {
+  id: text("id").primaryKey().default("global"),
+  scanNewUploads: boolean("scan_new_uploads").notNull().default(true),
+  autoSuggestions: boolean("auto_suggestions").notNull().default(true),
+  paused: boolean("paused").notNull().default(false),
+  algorithm: faceAlgorithmEnum("algorithm").notNull().default("accurate"),
+  maxFaces: integer("max_faces").notNull().default(300),
+  suggestionThreshold: doublePrecision("suggestion_threshold")
+    .notNull()
+    .default(0.62),
+  blurThreshold: doublePrecision("blur_threshold").notNull().default(0.82),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+export const facePrivacyPreferences = pgTable("face_privacy_preferences", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  matchingEnabled: boolean("matching_enabled").notNull().default(false),
+  autoSuggestionsEnabled: boolean("auto_suggestions_enabled")
+    .notNull()
+    .default(true),
+  hideProfile: boolean("hide_profile").notNull().default(false),
+  hideMentions: boolean("hide_mentions").notNull().default(false),
+  hideAiSuggestions: boolean("hide_ai_suggestions").notNull().default(false),
+  consentedAt: timestamp("consented_at"),
+  revokedAt: timestamp("revoked_at"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+export const faceScans = pgTable(
+  "face_scans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: faceJobStatusEnum("status").notNull().default("queued"),
+    isActive: boolean("is_active").notNull().default(false),
+    highQuality: boolean("high_quality").notNull().default(false),
+    algorithm: faceAlgorithmEnum("algorithm").notNull().default("accurate"),
+    modelVersion: text("model_version").notNull().default("roc-3.15.0"),
+    templateEncrypted: text("template_encrypted"),
+    quality: doublePrecision("quality"),
+    spoof: doublePrecision("spoof"),
+    spoofQuality: doublePrecision("spoof_quality"),
+    error: text("error"),
+    completedAt: timestamp("completed_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    userCreatedAtIdx: index("face_scans_user_created_at_idx").on(
+      t.userId,
+      t.createdAt.desc(),
+    ),
+    activeUserIdx: uniqueIndex("face_scans_active_user_idx")
+      .on(t.userId)
+      .where(sql`${t.isActive} = true`),
+  }),
+);
+export const eventFaceIndexes = pgTable(
+  "event_face_indexes",
+  {
+    eventId: uuid("event_id")
+      .primaryKey()
+      .references(() => events.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").notNull().default(false),
+    status: faceIndexStatusEnum("status").notNull().default("disabled"),
+    galleryId: text("gallery_id"),
+    algorithm: faceAlgorithmEnum("algorithm").notNull().default("accurate"),
+    modelVersion: text("model_version").notNull().default("roc-3.15.0"),
+    revision: integer("revision").notNull().default(1),
+    maxFaces: integer("max_faces").notNull().default(300),
+    minQuality: doublePrecision("min_quality"),
+    suggestionThreshold: doublePrecision("suggestion_threshold")
+      .notNull()
+      .default(0.62),
+    blurThreshold: doublePrecision("blur_threshold").notNull().default(0.82),
+    requestedAt: timestamp("requested_at"),
+    startedAt: timestamp("started_at"),
+    indexedAt: timestamp("indexed_at"),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    galleryIdx: uniqueIndex("event_face_indexes_gallery_idx").on(t.galleryId),
+    statusIdx: index("event_face_indexes_status_idx").on(t.status, t.updatedAt),
+  }),
+);
+export const mediaFaceScans = pgTable(
+  "media_face_scans",
+  {
+    mediaId: uuid("media_id")
+      .primaryKey()
+      .references(() => media.id, { onDelete: "cascade" }),
+    status: faceJobStatusEnum("status").notNull().default("queued"),
+    eventIndexRevision: integer("event_index_revision").notNull().default(1),
+    algorithm: faceAlgorithmEnum("algorithm").notNull().default("accurate"),
+    modelVersion: text("model_version").notNull().default("roc-3.15.0"),
+    sourceS3Key: text("source_s3_key").notNull(),
+    workerJobId: text("worker_job_id"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    lastError: text("last_error"),
+    startedAt: timestamp("started_at"),
+    completedAt: timestamp("completed_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    workerJobIdx: uniqueIndex("media_face_scans_worker_job_idx").on(
+      t.workerJobId,
+    ),
+    statusIdx: index("media_face_scans_status_idx").on(t.status, t.updatedAt),
+  }),
+);
+export const mediaFaceDetections = pgTable(
+  "media_face_detections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    mediaId: uuid("media_id")
+      .notNull()
+      .references(() => mediaFaceScans.mediaId, { onDelete: "cascade" }),
+    faceIndex: integer("face_index").notNull(),
+    boxX: doublePrecision("box_x").notNull(),
+    boxY: doublePrecision("box_y").notNull(),
+    boxWidth: doublePrecision("box_width").notNull(),
+    boxHeight: doublePrecision("box_height").notNull(),
+    rotation: doublePrecision("rotation"),
+    confidence: doublePrecision("confidence"),
+    quality: doublePrecision("quality"),
+    templateEncrypted: text("template_encrypted").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    mediaFaceIdx: uniqueIndex("media_face_detections_media_face_idx").on(
+      t.mediaId,
+      t.faceIndex,
+    ),
+  }),
+);
+export const faceBlurSubscriptions = pgTable(
+  "face_blur_subscriptions",
+  {
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    faceScanId: uuid("face_scan_id").references(() => faceScans.id, {
+      onDelete: "set null",
+    }),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.eventId, t.userId] }),
+    userActiveIdx: index("face_blur_subscriptions_user_active_idx").on(
+      t.userId,
+      t.active,
+    ),
+  }),
+);
 export const shareLinks = pgTable("share_links", {
   token: text("token").primaryKey(),
   mediaId: uuid("media_id")
@@ -521,24 +716,82 @@ export const reports = pgTable("reports", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
-export const blurRequests = pgTable("blur_requests", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  mediaId: uuid("media_id")
-    .notNull()
-    .references(() => media.id, { onDelete: "cascade" }),
-  requesterId: uuid("requester_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  status: blurRequestStatusEnum("status").notNull().default("pending"),
-  regions: jsonb("regions").notNull(),
-  blurredS3Key: text("blurred_s3_key").notNull(),
-  blurredThumbnailS3Key: text("blurred_thumbnail_s3_key"),
-  resolvedAt: timestamp("resolved_at"),
-  resolvedById: uuid("resolved_by_id").references(() => users.id),
-  resolutionNotes: text("resolution_notes"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+export const blurRequests = pgTable(
+  "blur_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    mediaId: uuid("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    requesterId: uuid("requester_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: blurRequestStatusEnum("status").notNull().default("pending"),
+    source: blurRequestSourceEnum("source").notNull().default("manual"),
+    faceScanId: uuid("face_scan_id").references(() => faceScans.id, {
+      onDelete: "set null",
+    }),
+    faceDetectionId: uuid("face_detection_id").references(
+      () => mediaFaceDetections.id,
+      { onDelete: "set null" },
+    ),
+    regions: jsonb("regions").notNull(),
+    blurredS3Key: text("blurred_s3_key").notNull(),
+    blurredThumbnailS3Key: text("blurred_thumbnail_s3_key"),
+    resolvedAt: timestamp("resolved_at"),
+    resolvedById: uuid("resolved_by_id").references(() => users.id),
+    resolutionNotes: text("resolution_notes"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    activeRequesterMediaIdx: uniqueIndex(
+      "blur_requests_active_requester_media_idx",
+    )
+      .on(t.requesterId, t.mediaId)
+      .where(sql`${t.status} in ('pending', 'approved')`),
+  }),
+);
+export const faceMatchSuggestions = pgTable(
+  "face_match_suggestions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    faceScanId: uuid("face_scan_id")
+      .notNull()
+      .references(() => faceScans.id, { onDelete: "cascade" }),
+    detectionId: uuid("detection_id")
+      .notNull()
+      .references(() => mediaFaceDetections.id, { onDelete: "cascade" }),
+    mediaId: uuid("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    similarity: doublePrecision("similarity").notNull(),
+    status: faceMatchStatusEnum("status").notNull().default("pending"),
+    reviewedById: uuid("reviewed_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    reviewedAt: timestamp("reviewed_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    userDetectionIdx: uniqueIndex(
+      "face_match_suggestions_user_detection_idx",
+    ).on(t.userId, t.detectionId),
+    userStatusIdx: index("face_match_suggestions_user_status_idx").on(
+      t.userId,
+      t.status,
+      t.similarity.desc(),
+    ),
+    mediaStatusIdx: index("face_match_suggestions_media_status_idx").on(
+      t.mediaId,
+      t.status,
+    ),
+  }),
+);
 export const auditLogs = pgTable("audit_logs", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id")
@@ -574,6 +827,8 @@ export const eventsRelations = relations(events, ({ one, many }) => ({
   participants: many(eventParticipants),
   admins: many(eventAdmins),
   pendingAdmins: many(pendingEventAdmins),
+  faceIndex: one(eventFaceIndexes),
+  faceBlurSubscriptions: many(faceBlurSubscriptions),
 }));
 export const mediaRelations = relations(media, ({ one, many }) => ({
   event: one(events, {
@@ -591,6 +846,8 @@ export const mediaRelations = relations(media, ({ one, many }) => ({
   mentions: many(mediaMentions),
   reports: many(reports),
   blurRequests: many(blurRequests),
+  faceScan: one(mediaFaceScans),
+  faceMatchSuggestions: many(faceMatchSuggestions),
   apiKey: one(apiKeys, {
     fields: [media.apiKeyId],
     references: [apiKeys.id],
@@ -810,14 +1067,117 @@ export const blurRequestsRelations = relations(blurRequests, ({ one }) => ({
     references: [users.id],
     relationName: "blur_resolver",
   }),
+  faceScan: one(faceScans, {
+    fields: [blurRequests.faceScanId],
+    references: [faceScans.id],
+  }),
+  faceDetection: one(mediaFaceDetections, {
+    fields: [blurRequests.faceDetectionId],
+    references: [mediaFaceDetections.id],
+  }),
 }));
+export const facePrivacyPreferencesRelations = relations(
+  facePrivacyPreferences,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [facePrivacyPreferences.userId],
+      references: [users.id],
+    }),
+  }),
+);
+export const faceScansRelations = relations(faceScans, ({ one, many }) => ({
+  user: one(users, {
+    fields: [faceScans.userId],
+    references: [users.id],
+  }),
+  suggestions: many(faceMatchSuggestions),
+  blurSubscriptions: many(faceBlurSubscriptions),
+}));
+export const eventFaceIndexesRelations = relations(
+  eventFaceIndexes,
+  ({ one }) => ({
+    event: one(events, {
+      fields: [eventFaceIndexes.eventId],
+      references: [events.id],
+    }),
+  }),
+);
+export const mediaFaceScansRelations = relations(
+  mediaFaceScans,
+  ({ one, many }) => ({
+    media: one(media, {
+      fields: [mediaFaceScans.mediaId],
+      references: [media.id],
+    }),
+    detections: many(mediaFaceDetections),
+  }),
+);
+export const mediaFaceDetectionsRelations = relations(
+  mediaFaceDetections,
+  ({ one, many }) => ({
+    media: one(media, {
+      fields: [mediaFaceDetections.mediaId],
+      references: [media.id],
+    }),
+    mediaScan: one(mediaFaceScans, {
+      fields: [mediaFaceDetections.mediaId],
+      references: [mediaFaceScans.mediaId],
+    }),
+    suggestions: many(faceMatchSuggestions),
+    blurRequests: many(blurRequests),
+  }),
+);
+export const faceMatchSuggestionsRelations = relations(
+  faceMatchSuggestions,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [faceMatchSuggestions.userId],
+      references: [users.id],
+      relationName: "face_suggestion_user",
+    }),
+    reviewedBy: one(users, {
+      fields: [faceMatchSuggestions.reviewedById],
+      references: [users.id],
+      relationName: "face_suggestion_reviewer",
+    }),
+    faceScan: one(faceScans, {
+      fields: [faceMatchSuggestions.faceScanId],
+      references: [faceScans.id],
+    }),
+    detection: one(mediaFaceDetections, {
+      fields: [faceMatchSuggestions.detectionId],
+      references: [mediaFaceDetections.id],
+    }),
+    media: one(media, {
+      fields: [faceMatchSuggestions.mediaId],
+      references: [media.id],
+    }),
+  }),
+);
+export const faceBlurSubscriptionsRelations = relations(
+  faceBlurSubscriptions,
+  ({ one }) => ({
+    event: one(events, {
+      fields: [faceBlurSubscriptions.eventId],
+      references: [events.id],
+    }),
+    user: one(users, {
+      fields: [faceBlurSubscriptions.userId],
+      references: [users.id],
+    }),
+    faceScan: one(faceScans, {
+      fields: [faceBlurSubscriptions.faceScanId],
+      references: [faceScans.id],
+    }),
+  }),
+);
 export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
   user: one(users, {
     fields: [auditLogs.userId],
     references: [users.id],
   }),
 }));
-export const usersRelations = relations(users, ({ many }) => ({
+export const usersRelations = relations(users, ({ one, many }) => ({
   createdSeries: many(series),
   createdEvents: many(events),
   uploadedMedia: many(media),
@@ -856,4 +1216,13 @@ export const usersRelations = relations(users, ({ many }) => ({
   resolvedReports: many(reports, { relationName: "resolver" }),
   blurRequests: many(blurRequests, { relationName: "blur_requester" }),
   resolvedBlurRequests: many(blurRequests, { relationName: "blur_resolver" }),
+  facePrivacyPreference: one(facePrivacyPreferences),
+  faceScans: many(faceScans),
+  faceSuggestions: many(faceMatchSuggestions, {
+    relationName: "face_suggestion_user",
+  }),
+  reviewedFaceSuggestions: many(faceMatchSuggestions, {
+    relationName: "face_suggestion_reviewer",
+  }),
+  faceBlurSubscriptions: many(faceBlurSubscriptions),
 }));

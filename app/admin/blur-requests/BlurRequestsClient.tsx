@@ -12,6 +12,7 @@ type Rect = { x: number; y: number; width: number; height: number };
 type Request = {
   id: string;
   status: "pending" | "approved" | "rejected";
+  source: "manual" | "face" | "automatic_face";
   regions: Rect[];
   createdAt: Date;
   media: { filename: string; id: string };
@@ -59,6 +60,21 @@ export default function BlurRequestsClient() {
               className={`w-full rounded-xl border p-4 text-left transition ${selected?.id === request.id ? "border-red-600 bg-red-950/20" : "border-zinc-800 bg-zinc-900 hover:border-red-600/50"}`}
             >
               <div className="flex items-center justify-between gap-3">
+                <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-zinc-800">
+                  <img
+                    src={`/media/${request.media.id}/thumbnail`}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    style={
+                      request.source !== "manual" && request.regions?.[0]
+                        ? {
+                            objectPosition: `${(request.regions[0].x + request.regions[0].width / 2) * 100}% ${(request.regions[0].y + request.regions[0].height / 2) * 100}%`,
+                            transform: "scale(2.2)",
+                          }
+                        : undefined
+                    }
+                  />
+                </div>
                 <div className="min-w-0">
                   <p className="truncate font-medium text-white">
                     {request.media?.filename || "Deleted media"}
@@ -68,6 +84,13 @@ export default function BlurRequestsClient() {
                       request.requester?.handle ||
                       "User"}
                   </p>
+                  {request.source !== "manual" ? (
+                    <span className="mt-1 inline-block rounded-full border border-cyan-500/30 bg-cyan-950/40 px-2 py-0.5 text-[10px] font-semibold text-cyan-300">
+                      {request.source === "face"
+                        ? "Face match"
+                        : "Automatic face match"}
+                    </span>
+                  ) : null}
                 </div>
                 <StatusBadge status={request.status} />
               </div>
@@ -129,19 +152,26 @@ function ReviewPanel({
   const [selectedRegion, setSelectedRegion] = useState(0);
   const [blurIntensity, setBlurIntensity] = useState(12);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setUrls(null);
     setRegions(request.regions || []);
     setSelectedRegion(0);
+    setError(null);
+    let current = true;
     void getBlurRequestUrls(request.id).then((result) => {
+      if (!current) return;
       if (result.success && result.originalUrl && result.blurredUrl) {
         setUrls({
           originalUrl: result.originalUrl,
           blurredUrl: result.blurredUrl,
         });
-      }
+      } else setError(result.error || "Failed to load request images");
     });
+    return () => {
+      current = false;
+    };
   }, [request.id, request.regions]);
 
   useEffect(() => {
@@ -171,29 +201,51 @@ function ReviewPanel({
   };
   const approve = async () => {
     if (!urls || regions.length === 0) return;
-    onResolved("approved");
     setBusy(true);
-    const result = await resolveBlurRequest(
-      request.id,
-      "approved",
-      undefined,
-      regions,
-      blurIntensity,
-    );
-    setBusy(false);
-    if (!result.success) alert(result.error || "Failed to approve request");
+    setError(null);
+    try {
+      const result = await resolveBlurRequest(
+        request.id,
+        "approved",
+        undefined,
+        regions,
+        blurIntensity,
+      );
+      if (!result.success)
+        throw new Error(result.error || "Failed to approve request");
+      onResolved("approved");
+    } catch (resolveError) {
+      setError(
+        resolveError instanceof Error
+          ? resolveError.message
+          : "Failed to approve request",
+      );
+    } finally {
+      setBusy(false);
+    }
   };
   const reject = async () => {
-    onResolved("rejected");
     setBusy(true);
-    const result = await resolveBlurRequest(
-      request.id,
-      "rejected",
-      undefined,
-      regions,
-    );
-    setBusy(false);
-    if (!result.success) alert(result.error || "Failed to reject request");
+    setError(null);
+    try {
+      const result = await resolveBlurRequest(
+        request.id,
+        "rejected",
+        undefined,
+        regions,
+      );
+      if (!result.success)
+        throw new Error(result.error || "Failed to reject request");
+      onResolved("rejected");
+    } catch (resolveError) {
+      setError(
+        resolveError instanceof Error
+          ? resolveError.message
+          : "Failed to reject request",
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -206,6 +258,12 @@ function ReviewPanel({
               Move boxes, add missing boxes, approve or reject. Keys: A approve,
               R reject, arrows next/prev, 1-9 select, Delete remove, +/- blur.
             </p>
+            {request.source !== "manual" ? (
+              <p className="mt-2 text-xs font-medium text-cyan-300">
+                Submitted from a high-confidence face match. Verify the person
+                and box before approval.
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -228,6 +286,11 @@ function ReviewPanel({
             </button>
           </div>
         </div>
+        {error ? (
+          <p className="mt-3 rounded-lg border border-red-900 bg-red-950/30 p-3 text-sm text-red-300">
+            {error}
+          </p>
+        ) : null}
       </div>
 
       <div className="grid gap-4 p-4 xl:grid-cols-[1fr_280px]">

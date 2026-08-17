@@ -1,4 +1,5 @@
 "use client";
+import { track } from "@vercel/analytics";
 import { useRouter } from "next/navigation";
 import type React from "react";
 import {
@@ -11,7 +12,6 @@ import {
   useState,
 } from "react";
 import { finalizeUpload, getPresignedUrl } from "@/app/actions/upload";
-import { trackRybbitEvent } from "@/components/analytics/RybbitUserIdentifier";
 import { logger } from "@/lib/client-logger";
 import {
   ALLOWED_IMAGE_TYPES,
@@ -130,7 +130,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       ).length;
       const batchId = crypto.randomUUID?.() ?? Math.random().toString(36);
       activeBatchIdRef.current = batchId;
-      trackRybbitEvent("upload_added", {
+      track("upload_added", {
         batch_id: batchId,
         event_id: eventId,
         file_count: validFiles.length,
@@ -140,7 +140,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         total_bytes: totalBytes,
       });
     } else if (rejectedFiles.length > 0) {
-      trackRybbitEvent("upload_rejected", {
+      track("upload_rejected", {
         event_id: eventId,
         rejected_count: rejectedFiles.length,
         attempted_count: newFiles.length,
@@ -169,7 +169,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
   const cancelUpload = useCallback(() => {
-    trackRybbitEvent("upload_cancelled", {
+    track("upload_cancelled", {
       batch_id: activeBatchIdRef.current,
       total_count: filesRef.current.length,
       active_count: filesRef.current.filter(
@@ -523,7 +523,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       if (activeFiles.length === 0) {
         const successCount = files.filter((f) => f.status === "success").length;
         const errorCount = files.filter((f) => f.status === "error").length;
-        trackRybbitEvent("upload_finished", {
+        track("upload_finished", {
           batch_id: activeBatchIdRef.current,
           total_count: files.length,
           success_count: successCount,

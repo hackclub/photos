@@ -28,6 +28,9 @@ export interface MediaItem {
   likeCount?: number;
   caption?: string | null;
   canDelete?: boolean;
+  suggestedMention?: boolean;
+  suggestionId?: string;
+  canConfirmSuggestion?: boolean;
   apiKeyId?: string | null;
   apiKey?: {
     id: string;

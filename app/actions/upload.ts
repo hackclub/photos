@@ -10,6 +10,7 @@ import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
+import { queueMediaForFaceIndexing } from "@/lib/face-indexing";
 import { logger } from "@/lib/logger";
 import { type ExifData, extractExifData } from "@/lib/media/exif";
 import {
@@ -33,70 +34,17 @@ import {
   validateMediaFile,
 } from "@/lib/media/validation";
 import { extractVideoMetadataFromS3Key } from "@/lib/media/video-metadata";
+import {
+  forgetMultipartSession,
+  getMultipartSession,
+  rememberMultipartSession,
+} from "@/lib/multipart-sessions";
 import { can, getUserContext } from "@/lib/policy";
 import { publicMedia } from "@/lib/public-data";
 import { checkStorageLimit } from "@/lib/storage";
 
 const MEDIA_KEY_PATTERN = /^media\/([0-9a-f-]{36})\/[A-Za-z0-9._-]+$/i;
 const UUID_PATTERN = /^[0-9a-f-]{36}$/i;
-const MULTIPART_SESSION_TTL_MS = 6 * 60 * 60 * 1000;
-const MAX_MULTIPART_SESSIONS = 10_000;
-
-type MultipartSession = {
-  userId: string;
-  eventId: string;
-  s3Key: string;
-  expiresAt: number;
-};
-
-const uploadGlobal = globalThis as typeof globalThis & {
-  __photosMultipartSessions?: Map<string, MultipartSession>;
-};
-const multipartSessions =
-  uploadGlobal.__photosMultipartSessions ?? new Map<string, MultipartSession>();
-uploadGlobal.__photosMultipartSessions = multipartSessions;
-
-function multipartSessionKey(s3Key: string, uploadId: string) {
-  return `${s3Key}:${uploadId}`;
-}
-
-function pruneMultipartSessions() {
-  const now = Date.now();
-  for (const [key, session] of multipartSessions) {
-    if (session.expiresAt <= now) multipartSessions.delete(key);
-  }
-  while (multipartSessions.size >= MAX_MULTIPART_SESSIONS) {
-    const oldestKey = multipartSessions.keys().next().value;
-    if (!oldestKey) break;
-    multipartSessions.delete(oldestKey);
-  }
-}
-
-function rememberMultipartSession(
-  s3Key: string,
-  uploadId: string,
-  userId: string,
-  eventId: string,
-) {
-  pruneMultipartSessions();
-  multipartSessions.set(multipartSessionKey(s3Key, uploadId), {
-    userId,
-    eventId,
-    s3Key,
-    expiresAt: Date.now() + MULTIPART_SESSION_TTL_MS,
-  });
-}
-
-function getMultipartSession(s3Key: string, uploadId: string, userId: string) {
-  const key = multipartSessionKey(s3Key, uploadId);
-  const session = multipartSessions.get(key);
-  if (!session || session.expiresAt < Date.now() || session.userId !== userId) {
-    multipartSessions.delete(key);
-    return null;
-  }
-  return session;
-}
-
 function getMediaIdFromKey(s3Key: string) {
   return MEDIA_KEY_PATTERN.exec(s3Key)?.[1] ?? null;
 }
@@ -281,7 +229,12 @@ export async function initiateMultipartUpload(
     const s3Key = `media/${mediaId}/original.${fileExtension}`;
     const thumbnailS3Key = `media/${mediaId}/thumbnail.jpg`;
     const uploadId = await createMultipartUpload(s3Key, fileType);
-    rememberMultipartSession(s3Key, uploadId, user.id, eventId);
+    try {
+      await rememberMultipartSession(s3Key, uploadId, user.id, eventId);
+    } catch (error) {
+      await abortMultipartUpload(s3Key, uploadId).catch(() => {});
+      throw error;
+    }
     const thumbnailUploadUrl = await getSignedUploadUrl(
       thumbnailS3Key,
       "image/jpeg",
@@ -311,7 +264,7 @@ export async function getMultipartPresignedUrls(
     if (!getMediaIdFromKey(s3Key)) {
       return { success: false, error: "Invalid upload key" };
     }
-    const uploadSession = getMultipartSession(s3Key, uploadId, user.id);
+    const uploadSession = await getMultipartSession(s3Key, uploadId, user.id);
     if (!uploadSession) {
       return { success: false, error: "Invalid upload session" };
     }
@@ -354,7 +307,7 @@ export async function completeMultipart(
     if (!getMediaIdFromKey(s3Key) || parts.length === 0) {
       return { success: false, error: "Invalid upload key" };
     }
-    const uploadSession = getMultipartSession(s3Key, uploadId, user.id);
+    const uploadSession = await getMultipartSession(s3Key, uploadId, user.id);
     if (!uploadSession) {
       return { success: false, error: "Invalid upload session" };
     }
@@ -362,7 +315,7 @@ export async function completeMultipart(
       return { success: false, error: "Forbidden" };
     }
     await completeMultipartUpload(s3Key, uploadId, parts);
-    multipartSessions.delete(multipartSessionKey(s3Key, uploadId));
+    await forgetMultipartSession(s3Key, uploadId);
     return { success: true };
   } catch (error) {
     logger.error("Error completing multipart upload:", error);
@@ -377,12 +330,12 @@ export async function abortMultipart(s3Key: string, uploadId: string) {
     if (!getMediaIdFromKey(s3Key)) {
       return { success: false, error: "Invalid upload key" };
     }
-    const uploadSession = getMultipartSession(s3Key, uploadId, user.id);
+    const uploadSession = await getMultipartSession(s3Key, uploadId, user.id);
     if (!uploadSession) {
       return { success: false, error: "Invalid upload session" };
     }
     await abortMultipartUpload(s3Key, uploadId);
-    multipartSessions.delete(multipartSessionKey(s3Key, uploadId));
+    await forgetMultipartSession(s3Key, uploadId);
     return { success: true };
   } catch (error) {
     logger.error("Error aborting multipart upload:", error);
@@ -626,6 +579,9 @@ export async function finalizeUpload(
     await auditLog(user.id, "upload", "media", insertedMedia.id, {
       eventId,
       filename: data.filename,
+    });
+    await queueMediaForFaceIndexing(insertedMedia.id).catch((error) => {
+      logger.error("Failed to queue face indexing:", error);
     });
     try {
       const { broadcastNewPhoto } = await import("@/app/api/feed/stream/route");

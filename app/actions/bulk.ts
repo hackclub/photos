@@ -11,6 +11,7 @@ import {
   pendingEventAdmins,
   series,
 } from "@/lib/db/schema";
+import { rebuildEventFaceIndex } from "@/lib/face-indexing";
 import { logger } from "@/lib/logger";
 import { getMediaProxyUrl } from "@/lib/media/s3";
 import { deleteBatchMedia } from "@/lib/media/thumbnail";
@@ -132,6 +133,16 @@ export async function bulkDeleteMedia(mediaIds: string[]) {
       };
     }
     await db.delete(media).where(inArray(media.id, successfullyDeletedIds));
+    const affectedEvents = new Set(
+      itemsToDelete
+        .filter((item) => successfullyDeletedIds.includes(item.id))
+        .map((item) => item.eventId),
+    );
+    for (const eventId of affectedEvents) {
+      await rebuildEventFaceIndex(eventId).catch((error) =>
+        logger.error("Failed to rebuild face index after bulk deletion", error),
+      );
+    }
     await auditLog(user.id, "delete", "media_bulk", "bulk", {
       count: successfullyDeletedIds.length,
       ids: successfullyDeletedIds,

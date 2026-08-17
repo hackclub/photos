@@ -8,6 +8,13 @@ const redactPaths = [
   "S3_SECRET_ACCESS_KEY",
   "S3_ACCESS_KEY_ID",
   "DATABASE_URL",
+  "MIGRATION_DATABASE_URL",
+  "REDIS_URL",
+  "NEXTAUTH_SECRET",
+  "HACKCLUB_CLIENT_SECRET",
+  "SLACK_BOT_TOKEN",
+  "SLACK_SIGNING_SECRET",
+  "CRON_SECRET",
 ];
 
 const pinoLogger = pino({
