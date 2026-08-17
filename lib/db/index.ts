@@ -19,8 +19,8 @@ function createQueryClient() {
   const configuredMaxConnections = Number(process.env.DATABASE_MAX_CONNECTIONS);
   const max = isVercelRuntime
     ? Number.isFinite(configuredMaxConnections)
-      ? Math.max(1, Math.min(2, Math.floor(configuredMaxConnections)))
-      : 2
+      ? Math.max(1, Math.min(40, Math.floor(configuredMaxConnections)))
+      : 40
     : Number.isFinite(configuredMaxConnections)
       ? Math.max(1, Math.min(20, Math.floor(configuredMaxConnections)))
       : 5;
