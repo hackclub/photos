@@ -8,11 +8,13 @@ import {
   HiPlay,
   HiQueueList,
   HiStop,
+  HiTrash,
   HiXMark,
 } from "react-icons/hi2";
 import {
   cancelFaceJob,
   controlFaceQueue,
+  deleteAllFaceIndexing,
   getFaceAdminState,
   processPendingFaceIndexing,
   setEventFaceIndexing,
@@ -163,6 +165,22 @@ export default function FaceAdminClient() {
               className="inline-flex items-center gap-2 rounded-xl border border-red-900 bg-red-950/30 px-4 py-2 text-sm font-medium text-red-300 disabled:opacity-40"
             >
               <HiStop className="h-4 w-4" /> Stop all
+            </button>
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "Delete ALL processed face data (event indexes, detections, suggestions, and galleries)? This cannot be undone.",
+                  )
+                ) {
+                  run(() => deleteAllFaceIndexing());
+                }
+              }}
+              className="inline-flex items-center gap-2 rounded-xl border border-red-700 bg-red-950/50 px-4 py-2 text-sm font-bold text-red-200 disabled:opacity-40"
+            >
+              <HiTrash className="h-4 w-4" /> Delete all
             </button>
           </div>
         </div>

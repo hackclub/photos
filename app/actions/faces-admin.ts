@@ -8,8 +8,10 @@ import { db } from "@/lib/db";
 import {
   eventFaceIndexes,
   events,
+  faceMatchSuggestions,
   faceSystemSettings,
   media,
+  mediaFaceDetections,
   mediaFaceScans,
 } from "@/lib/db/schema";
 import {
@@ -209,4 +211,32 @@ export async function cancelFaceJob(jobId: string) {
     .where(eq(mediaFaceScans.workerJobId, jobId));
   await auditLog(user.id, "update", "face_job", jobId, { status: "cancelled" });
   return { success: true };
+}
+
+export async function deleteAllFaceIndexing() {
+  const user = await requireGlobalAdmin();
+  await controlVisionQueue("stop").catch(() => undefined);
+  const indexes = await db
+    .select({ galleryId: eventFaceIndexes.galleryId })
+    .from(eventFaceIndexes)
+    .where(sql`${eventFaceIndexes.galleryId} is not null`);
+  await db.transaction(async (tx) => {
+    await tx.delete(faceMatchSuggestions);
+    await tx.delete(mediaFaceDetections);
+    await tx.delete(mediaFaceScans);
+    await tx.delete(eventFaceIndexes);
+  });
+  let deletedGalleries = 0;
+  for (const index of indexes) {
+    if (!index.galleryId) continue;
+    const result = await deleteVisionGallery(index.galleryId).catch(
+      () => undefined,
+    );
+    if (result) deletedGalleries++;
+  }
+  await auditLog(user.id, "delete", "face_indexing", "all", {
+    galleries: deletedGalleries,
+  });
+  revalidatePath("/admin/faces");
+  return { success: true, galleries: deletedGalleries };
 }
