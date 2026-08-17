@@ -442,13 +442,13 @@ export default function IncludesMeDrawer({
       <button
         type="button"
         aria-label="Close"
-        className={`fixed inset-0 z-50 bg-black/65 transition-opacity duration-200 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
+        className={`fixed inset-0 z-[60] bg-black/65 transition-opacity duration-200 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
         onClick={onClose}
         tabIndex={open ? 0 : -1}
         disabled={!open}
       />
       <aside
-        className={`fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-zinc-800 bg-zinc-950 pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ease-out ${open ? "translate-x-0" : "translate-x-full"}`}
+        className={`fixed inset-y-0 right-0 z-[60] flex w-full max-w-md flex-col border-l border-zinc-800 bg-zinc-950 pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ease-out ${open ? "translate-x-0" : "translate-x-full"}`}
         aria-hidden={!open}
         aria-labelledby="face-drawer-title"
         aria-modal="true"
