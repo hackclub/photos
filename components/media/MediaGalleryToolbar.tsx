@@ -201,13 +201,15 @@ export default function MediaGalleryToolbar({
           <button
             type="button"
             onClick={onIncludesMeClick}
-            className={`flex min-h-12 shrink-0 items-center gap-2 rounded-full px-5 py-2 text-base font-semibold text-white shadow-lg shadow-red-900/40 sm:ml-auto ${
+            className={`flex min-h-12 shrink-0 items-center gap-2 rounded-full border px-5 py-2 text-base font-semibold sm:ml-auto ${
               includesMeActive
-                ? "bg-red-700 ring-2 ring-red-300/40"
-                : "find-me-breathe bg-red-600"
+                ? "border-red-600 bg-red-700 text-white ring-2 ring-red-300/40"
+                : "find-me-breathe border-zinc-800 bg-zinc-900 text-zinc-300"
             }`}
           >
-            <HiFaceSmile className="w-6 h-6" />
+            <HiFaceSmile
+              className={`h-6 w-6 ${includesMeActive ? "text-white" : "text-zinc-500"}`}
+            />
             <span>Find me</span>
           </button>
         ) : null}
