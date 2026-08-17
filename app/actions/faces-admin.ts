@@ -190,7 +190,7 @@ export async function controlFaceQueue(action: "pause" | "resume" | "stop") {
   await controlVisionQueue(action);
   await db
     .update(faceSystemSettings)
-    .set({ paused: action !== "resume", updatedAt: new Date() })
+    .set({ paused: action === "pause", updatedAt: new Date() })
     .where(eq(faceSystemSettings.id, "global"));
   if (action === "stop") {
     await db
