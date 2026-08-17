@@ -2,24 +2,14 @@
 
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import {
-  HiArrowPath,
-  HiCamera,
-  HiCheck,
-  HiFaceSmile,
-  HiShieldCheck,
-  HiSparkles,
-  HiTrash,
-  HiXMark,
-} from "react-icons/hi2";
+import { HiPlus, HiXMark } from "react-icons/hi2";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
 type Scan = {
   id: string;
   isActive: boolean;
   highQuality: boolean;
-  quality: number | null;
-  spoofQuality: number | null;
   createdAt: string;
 };
 
@@ -38,6 +28,27 @@ type PhoneCapture = {
   error?: string;
 };
 
+type Step =
+  | "loading"
+  | "intro"
+  | "method"
+  | "phone"
+  | "camera"
+  | "processing"
+  | "scans";
+
+const MAX_BLUR_SCAN_AGE = 30 * 24 * 60 * 60 * 1000;
+
+function canUseScan(scan: Scan, mode: "filter" | "blur") {
+  if (mode === "filter") return true;
+  const createdAt = new Date(scan.createdAt).getTime();
+  return (
+    scan.highQuality &&
+    Number.isFinite(createdAt) &&
+    Date.now() - createdAt <= MAX_BLUR_SCAN_AGE
+  );
+}
+
 export default function IncludesMeDrawer({
   eventId,
   open,
@@ -54,9 +65,10 @@ export default function IncludesMeDrawer({
   onManual?: () => void;
 }) {
   const [scans, setScans] = useState<Scan[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<Step>("loading");
   const [capturing, setCapturing] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<{
     indexed: number;
@@ -67,7 +79,7 @@ export default function IncludesMeDrawer({
   const [deleteScanId, setDeleteScanId] = useState<string | null>(null);
   const [phoneCapture, setPhoneCapture] = useState<PhoneCapture | null>(null);
   const [creatingPhoneCapture, setCreatingPhoneCapture] = useState(false);
-  const [showDesktopCamera, setShowDesktopCamera] = useState(false);
+  const [processingText, setProcessingText] = useState("Checking your face");
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const pollRef = useRef<number | null>(null);
@@ -76,11 +88,12 @@ export default function IncludesMeDrawer({
   const searchAbortRef = useRef<AbortController | null>(null);
   const cameraGenerationRef = useRef(0);
   const completedPhoneScanRef = useRef<string | null>(null);
+  const usableScans = scans.filter((scan) => canUseScan(scan, mode));
+
   const initializeOnOpen = useEffectEvent(async () => {
-    const savedAutoSuggestions = await loadScans();
-    if (window.matchMedia("(min-width: 768px)").matches) {
-      await createPhoneCapture(savedAutoSuggestions);
-    }
+    const loaded = await loadScans();
+    const available = loaded.scans.filter((scan) => canUseScan(scan, mode));
+    setStep(available.length > 0 ? "scans" : "intro");
   });
   const cleanUpOnClose = useEffectEvent(cleanUp);
 
@@ -88,8 +101,9 @@ export default function IncludesMeDrawer({
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setProgress(null);
     setPhoneCapture(null);
-    setShowDesktopCamera(false);
+    setStep("loading");
     completedPhoneScanRef.current = null;
     void initializeOnOpen();
     return cleanUpOnClose;
@@ -99,18 +113,17 @@ export default function IncludesMeDrawer({
     try {
       const response = await fetch("/api/face/scans", { cache: "no-store" });
       const body = await response.json();
-      if (!response.ok)
-        throw new Error(body.error || "Could not load saved scans");
-      setScans(body.scans);
-      setAutoSuggestions(body.autoSuggestionsEnabled);
-      return Boolean(body.autoSuggestionsEnabled);
+      if (!response.ok) throw new Error(body.error || "Could not load faces");
+      const loadedScans = body.scans as Scan[];
+      const suggestionsEnabled = Boolean(body.autoSuggestionsEnabled);
+      setScans(loadedScans);
+      setAutoSuggestions(suggestionsEnabled);
+      return { scans: loadedScans, autoSuggestions: suggestionsEnabled };
     } catch (loadError) {
       setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Could not load saved scans",
+        loadError instanceof Error ? loadError.message : "Could not load faces",
       );
-      return true;
+      return { scans: [] as Scan[], autoSuggestions: true };
     }
   }
 
@@ -123,27 +136,47 @@ export default function IncludesMeDrawer({
     if (pollRef.current) window.clearTimeout(pollRef.current);
     pollRef.current = null;
     setCameraReady(false);
+    setCameraStarting(false);
   }
 
-  function cleanUp() {
-    stopCamera();
-    searchAbortRef.current?.abort();
-    searchAbortRef.current = null;
+  function stopPhoneCapture() {
     if (phonePollRef.current) window.clearTimeout(phonePollRef.current);
     phonePollRef.current = null;
     phonePollGenerationRef.current++;
-    if (phoneCapture && phoneCapture.status !== "completed") {
-      void fetch(`/api/face/capture-sessions/${phoneCapture.token}`, {
+    const capture = phoneCapture;
+    setPhoneCapture(null);
+    if (capture && capture.status !== "completed") {
+      void fetch(`/api/face/capture-sessions/${capture.token}`, {
         method: "DELETE",
         keepalive: true,
       });
     }
   }
 
+  function cleanUp() {
+    stopCamera();
+    stopPhoneCapture();
+    searchAbortRef.current?.abort();
+    searchAbortRef.current = null;
+  }
+
+  function beginSetup() {
+    setError(null);
+    setProgress(null);
+    if (window.matchMedia("(min-width: 768px)").matches) {
+      setStep("method");
+      return;
+    }
+    setStep("camera");
+    void startCamera();
+  }
+
   async function startCamera() {
     setError(null);
+    setCameraStarting(true);
     if (!navigator.mediaDevices?.getUserMedia) {
-      setError("This browser cannot access a camera. Try Safari or Chrome.");
+      setCameraStarting(false);
+      setError("This browser cannot use the camera.");
       return;
     }
     const generation = ++cameraGenerationRef.current;
@@ -169,19 +202,21 @@ export default function IncludesMeDrawer({
       }
       setCameraReady(true);
     } catch (cameraError) {
+      stopCamera();
       const denied =
         cameraError instanceof DOMException &&
         cameraError.name === "NotAllowedError";
       setError(
         denied
-          ? "Camera permission was denied. Allow access and try again."
-          : "The camera could not start. Close other camera apps and try again.",
+          ? "Allow camera access, then try again."
+          : "The camera could not start.",
       );
+    } finally {
+      setCameraStarting(false);
     }
   }
 
-  async function captureFrame(track: MediaStreamTrack): Promise<Blob> {
-    void track;
+  async function captureFrame(): Promise<Blob> {
     const video = videoRef.current;
     if (!video?.videoWidth || !video.videoHeight) {
       throw new Error("Camera is not ready");
@@ -206,16 +241,17 @@ export default function IncludesMeDrawer({
   }
 
   async function createScan() {
-    const track = streamRef.current?.getVideoTracks()[0];
-    if (!track) return;
+    if (!streamRef.current?.getVideoTracks()[0] || capturing) return;
     setCapturing(true);
     setError(null);
     try {
       const frames: Blob[] = [];
       for (let index = 0; index < 6; index++) {
-        frames.push(await captureFrame(track));
+        frames.push(await captureFrame());
         if (index < 5) await new Promise((resolve) => setTimeout(resolve, 350));
       }
+      setProcessingText("Checking your face");
+      setStep("processing");
       stopCamera();
       const form = new FormData();
       form.set("eventId", eventId);
@@ -236,8 +272,9 @@ export default function IncludesMeDrawer({
       setError(
         captureFailure instanceof Error
           ? captureFailure.message
-          : "Face capture failed.",
+          : "We could not use that scan.",
       );
+      setStep("camera");
     } finally {
       setCapturing(false);
     }
@@ -247,7 +284,8 @@ export default function IncludesMeDrawer({
     searchAbortRef.current?.abort();
     const controller = new AbortController();
     searchAbortRef.current = controller;
-    setLoading(true);
+    setProcessingText("Looking through photos");
+    setStep("processing");
     setError(null);
     try {
       const response = await fetch("/api/face/search", {
@@ -257,7 +295,8 @@ export default function IncludesMeDrawer({
         signal: controller.signal,
       });
       const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Face search failed");
+      if (!response.ok)
+        throw new Error(body.error || "Could not search photos");
       setProgress(body.progress);
       const complete = body.progress.indexed >= body.progress.total;
       if (mode === "filter" || complete) onApply(body.matches, body.scanId);
@@ -273,15 +312,15 @@ export default function IncludesMeDrawer({
       if (
         searchError instanceof DOMException &&
         searchError.name === "AbortError"
-      )
+      ) {
         return;
+      }
       setError(
         searchError instanceof Error
           ? searchError.message
-          : "Face search failed",
+          : "Could not search photos",
       );
-    } finally {
-      setLoading(false);
+      setStep(usableScans.length > 0 ? "scans" : "intro");
     }
   }
 
@@ -291,15 +330,20 @@ export default function IncludesMeDrawer({
       method: "DELETE",
     });
     const body = await response.json().catch(() => null);
-    if (response.ok) await loadScans();
-    else setError(body?.error || "Could not delete face scan");
+    if (response.ok) {
+      const loaded = await loadScans();
+      const remaining = loaded.scans.filter((scan) => canUseScan(scan, mode));
+      if (remaining.length === 0) setStep("intro");
+    } else {
+      setError(body?.error || "Could not remove face");
+    }
     setDeleteScanId(null);
   }
 
-  async function createPhoneCapture(
-    suggestionsEnabled: boolean = autoSuggestions,
-  ) {
+  async function createPhoneCapture() {
     if (creatingPhoneCapture) return;
+    const generation = ++phonePollGenerationRef.current;
+    setStep("phone");
     setCreatingPhoneCapture(true);
     setError(null);
     try {
@@ -309,21 +353,26 @@ export default function IncludesMeDrawer({
         body: JSON.stringify({
           eventId,
           mode,
-          autoSuggestions: suggestionsEnabled,
+          autoSuggestions,
         }),
       });
       const body = await response.json();
-      if (!response.ok)
-        throw new Error(body.error || "Could not create phone capture");
+      if (!response.ok) throw new Error(body.error || "Could not make QR code");
+      if (generation !== phonePollGenerationRef.current) {
+        void fetch(`/api/face/capture-sessions/${body.token}`, {
+          method: "DELETE",
+          keepalive: true,
+        });
+        return;
+      }
       const capture: PhoneCapture = { ...body, status: "created" };
       setPhoneCapture(capture);
-      const generation = ++phonePollGenerationRef.current;
       schedulePhonePoll(capture.token, generation);
-    } catch (captureError) {
+    } catch (captureFailure) {
       setError(
-        captureError instanceof Error
-          ? captureError.message
-          : "Could not create phone capture",
+        captureFailure instanceof Error
+          ? captureFailure.message
+          : "Could not make QR code",
       );
     } finally {
       setCreatingPhoneCapture(false);
@@ -344,30 +393,29 @@ export default function IncludesMeDrawer({
       });
       const body = await response.json();
       if (generation !== phonePollGenerationRef.current) return;
-      if (!response.ok) throw new Error(body.error || "Phone capture expired");
+      if (!response.ok) throw new Error(body.error || "QR code expired");
       setPhoneCapture((current) =>
         current ? { ...current, ...body } : current,
       );
       if (body.status === "completed" && body.scanId) {
         if (completedPhoneScanRef.current !== body.scanId) {
           completedPhoneScanRef.current = body.scanId;
+          setProcessingText("Looking through photos");
+          setStep("processing");
           await loadScans();
           await search(body.scanId);
         }
         return;
       }
       if (body.status === "failed") {
-        setError(
-          body.error || "The phone capture failed. Try again on your phone.",
-        );
+        setError(body.error || "Try again on your phone.");
+        return;
       }
       schedulePhonePoll(token, generation);
     } catch (pollError) {
       if (generation !== phonePollGenerationRef.current) return;
       setError(
-        pollError instanceof Error
-          ? pollError.message
-          : "Phone capture unavailable",
+        pollError instanceof Error ? pollError.message : "Phone disconnected",
       );
       phonePollRef.current = window.setTimeout(() => {
         void pollPhoneCapture(token, generation);
@@ -375,11 +423,29 @@ export default function IncludesMeDrawer({
     }
   }
 
+  function backToSetup() {
+    stopCamera();
+    stopPhoneCapture();
+    setError(null);
+    setStep("method");
+  }
+
+  const title =
+    step === "scans"
+      ? mode === "blur"
+        ? "Choose a face"
+        : "Find me"
+      : "Face setup";
+
   return (
     <>
-      <div
+      <button
+        type="button"
+        aria-label="Close"
         className={`fixed inset-0 z-50 bg-black/65 transition-opacity duration-200 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
         onClick={onClose}
+        tabIndex={open ? 0 : -1}
+        disabled={!open}
       />
       <aside
         className={`fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-zinc-800 bg-zinc-950 pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ease-out ${open ? "translate-x-0" : "translate-x-full"}`}
@@ -387,259 +453,303 @@ export default function IncludesMeDrawer({
         aria-labelledby="face-drawer-title"
         aria-modal="true"
         role="dialog"
+        inert={!open}
       >
-        <header className="flex items-start justify-between border-b border-zinc-800 p-5">
-          <div>
-            <h2
-              id="face-drawer-title"
-              className="flex items-center gap-2 text-lg font-bold text-white"
-            >
-              {mode === "blur" ? (
-                <HiShieldCheck className="h-5 w-5 text-red-400" />
-              ) : (
-                <HiSparkles className="h-5 w-5 text-cyan-400" />
-              )}
-              {mode === "blur" ? "Find photos to blur" : "Includes me"}
-            </h2>
-            <p className="mt-1 text-sm text-zinc-400">
-              {mode === "blur"
-                ? "Use a recent high-quality scan to find your face."
-                : "Filter this event to photos that appear to include you."}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-zinc-400 transition hover:bg-zinc-800 hover:text-white"
-            aria-label="Close"
+        <header className="flex min-h-16 items-center justify-between border-b border-zinc-800 px-5">
+          <h2
+            id="face-drawer-title"
+            className="text-lg font-semibold text-white"
           >
-            <HiXMark className="h-5 w-5" />
-          </button>
+            {title}
+          </h2>
+          <div className="flex items-center gap-1">
+            {step === "scans" ? (
+              <button
+                type="button"
+                onClick={beginSetup}
+                className="flex h-11 w-11 items-center justify-center rounded-xl text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-white"
+                aria-label="Add face"
+              >
+                <HiPlus className="h-5 w-5" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-11 w-11 items-center justify-center rounded-xl text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-white"
+              aria-label="Close"
+            >
+              <HiXMark className="h-5 w-5" />
+            </button>
+          </div>
         </header>
 
-        <div className="flex-1 space-y-5 overflow-y-auto p-5">
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-300">
-            <p>
-              Camera frames stay on Hack Club infrastructure only while the scan
-              is checked. They are then discarded. You can delete the saved face
-              template at any time.
-            </p>
-          </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
+          {error ? <p className="mb-5 text-sm text-red-400">{error}</p> : null}
 
-          {error ? (
-            <div className="rounded-xl border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-300">
-              {error}
+          {step === "loading" ? (
+            <div className="flex min-h-full items-center justify-center">
+              <LoadingSpinner size="xl" />
             </div>
           ) : null}
 
-          {progress && progress.indexed < progress.total ? (
-            <div className="rounded-xl border border-cyan-900/60 bg-cyan-950/20 p-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-cyan-200">Indexing this event</span>
-                <span className="text-zinc-400">
-                  {progress.indexed}/{progress.total}
-                </span>
+          {step === "intro" ? (
+            <section className="face-step flex min-h-full flex-col justify-between gap-10">
+              <div className="pt-8">
+                <p className="text-xs text-zinc-500">Step 1 of 2</p>
+                <h3 className="mt-3 text-2xl font-semibold text-white">
+                  {mode === "blur"
+                    ? "Find photos to blur"
+                    : "Find photos of you"}
+                </h3>
+                <p className="mt-3 max-w-sm text-sm leading-6 text-zinc-400">
+                  {mode === "blur"
+                    ? "Add your face, then choose which photos to blur."
+                    : "Add your face to filter this event."}
+                </p>
               </div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-800">
-                <div
-                  className="h-full bg-cyan-500 transition-all duration-500"
-                  style={{
-                    width: `${progress.total ? (progress.indexed / progress.total) * 100 : 0}%`,
-                  }}
-                />
-              </div>
-            </div>
-          ) : null}
-
-          {scans.length > 0 ? (
-            <section>
-              <h3 className="mb-3 text-sm font-semibold text-zinc-300">
-                Saved scans
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                {scans.map((scan) => (
-                  <div
-                    key={scan.id}
-                    className="group relative rounded-xl border border-zinc-800 bg-zinc-900 p-3"
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={beginSetup}
+                  className="min-h-12 w-full rounded-xl bg-red-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+                >
+                  Continue
+                </button>
+                {mode === "blur" && onManual ? (
+                  <button
+                    type="button"
+                    onClick={onManual}
+                    className="min-h-11 w-full text-sm text-zinc-400 transition-colors hover:text-white"
                   >
-                    <button
-                      type="button"
-                      onClick={() => search(scan.id)}
-                      disabled={
-                        loading || (mode === "blur" && !scan.highQuality)
-                      }
-                      className="w-full text-left disabled:cursor-not-allowed disabled:opacity-45"
-                    >
-                      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800">
-                        <HiFaceSmile className="h-7 w-7 text-zinc-400" />
-                      </div>
-                      <p className="text-sm font-medium text-white">
-                        {new Date(scan.createdAt).toLocaleDateString()}
-                      </p>
-                      <p className="mt-0.5 text-xs text-zinc-500">
-                        {scan.highQuality ? "High quality" : "Standard"}
-                        {scan.isActive ? " · Latest" : ""}
-                      </p>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteScanId(scan.id)}
-                      className="absolute right-2 top-2 rounded-lg bg-zinc-950 p-2 text-zinc-400 transition hover:text-red-400 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
-                      aria-label="Delete face scan"
-                    >
-                      <HiTrash className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
+                    Choose photos yourself
+                  </button>
+                ) : null}
               </div>
             </section>
           ) : null}
 
-          <section className="hidden space-y-4 md:block">
-            <div className="rounded-2xl border border-red-500/40 bg-red-950/25 p-5">
-              <div className="flex items-center gap-2 text-sm font-bold text-red-200">
-                <HiSparkles className="h-5 w-5" /> Recommended
-              </div>
-              <h3 className="mt-2 text-lg font-bold text-white">
-                Scan with your phone
+          {step === "method" ? (
+            <section className="face-step">
+              <button
+                type="button"
+                onClick={() => setStep(usableScans.length ? "scans" : "intro")}
+                className="mb-8 text-sm text-zinc-400 hover:text-white"
+              >
+                Back
+              </button>
+              <p className="text-xs text-zinc-500">Step 2 of 2</p>
+              <h3 className="mt-3 text-2xl font-semibold text-white">
+                Choose a camera
               </h3>
-              <p className="mt-1 text-sm leading-5 text-zinc-400">
-                Your phone’s front camera is usually faster and easier. No login
-                needed.
-              </p>
+              <div className="mt-8 divide-y divide-zinc-800 border-y border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => void createPhoneCapture()}
+                  className="flex min-h-20 w-full items-center justify-between py-4 text-left transition-colors hover:text-white"
+                >
+                  <span>
+                    <span className="block font-medium text-white">
+                      Use my phone
+                    </span>
+                    <span className="mt-1 block text-sm text-zinc-500">
+                      Scan a QR code
+                    </span>
+                  </span>
+                  <span className="text-zinc-600">→</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStep("camera");
+                    void startCamera();
+                  }}
+                  className="flex min-h-20 w-full items-center justify-between py-4 text-left transition-colors hover:text-white"
+                >
+                  <span>
+                    <span className="block font-medium text-white">
+                      Use this computer
+                    </span>
+                    <span className="mt-1 block text-sm text-zinc-500">
+                      Open this camera
+                    </span>
+                  </span>
+                  <span className="text-zinc-600">→</span>
+                </button>
+              </div>
+            </section>
+          ) : null}
+
+          {step === "phone" ? (
+            <section className="face-step text-center">
+              <button
+                type="button"
+                onClick={backToSetup}
+                className="mb-8 block text-sm text-zinc-400 hover:text-white"
+              >
+                Back
+              </button>
+              <p className="text-xs text-zinc-500">Step 2 of 2</p>
+              <h3 className="mt-3 text-2xl font-semibold text-white">
+                Scan this code
+              </h3>
               {phoneCapture ? (
-                <div className="mt-5">
-                  <div className="mx-auto w-fit rounded-2xl bg-white p-3">
-                    <QRCodeSVG value={phoneCapture.url} size={184} level="M" />
+                <>
+                  <div className="mx-auto mt-8 w-fit rounded-xl bg-white p-3">
+                    <QRCodeSVG value={phoneCapture.url} size={196} level="M" />
                   </div>
-                  <div className="mt-4 flex items-center justify-center gap-2 text-sm font-medium text-zinc-200">
-                    {phoneCapture.status === "created" ? (
-                      <>
-                        <span className="h-2 w-2 rounded-full bg-red-400" />{" "}
-                        Scan this code with your phone
-                      </>
-                    ) : phoneCapture.status === "opened" ? (
-                      <>
-                        <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" />
-                        Phone connected · waiting for scan
-                      </>
-                    ) : phoneCapture.status === "processing" ? (
-                      <>
-                        <HiArrowPath className="h-4 w-4 animate-spin text-cyan-400" />
-                        Checking the phone scan
-                      </>
-                    ) : phoneCapture.status === "completed" ? (
-                      <>
-                        <HiCheck className="h-4 w-4 text-emerald-400" /> Scan
-                        complete
-                      </>
-                    ) : (
-                      <span className="text-red-300">
-                        Try again on your phone
-                      </span>
-                    )}
-                  </div>
+                  <p className="mt-5 text-sm text-zinc-400">
+                    {phoneCapture.status === "created"
+                      ? "Open it with your phone."
+                      : phoneCapture.status === "opened"
+                        ? "Phone connected."
+                        : phoneCapture.status === "processing"
+                          ? "Checking your face..."
+                          : phoneCapture.status === "completed"
+                            ? "Done."
+                            : "Try again."}
+                  </p>
+                </>
+              ) : creatingPhoneCapture ? (
+                <div className="mt-16 flex justify-center">
+                  <LoadingSpinner size="xl" />
                 </div>
               ) : (
                 <button
                   type="button"
                   onClick={() => void createPhoneCapture()}
-                  disabled={creatingPhoneCapture}
-                  className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-bold text-white hover:bg-red-500 disabled:bg-zinc-700"
+                  className="mt-8 min-h-12 w-full rounded-xl bg-red-600 px-5 text-sm font-semibold text-white hover:bg-red-700"
                 >
-                  {creatingPhoneCapture ? (
-                    <HiArrowPath className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <HiCamera className="h-5 w-5" />
-                  )}
-                  {creatingPhoneCapture
-                    ? "Creating secure link…"
-                    : "Show phone QR code"}
+                  Try again
                 </button>
               )}
-            </div>
-            {!showDesktopCamera ? (
-              <button
-                type="button"
-                onClick={() => setShowDesktopCamera(true)}
-                className="mx-auto block rounded-lg bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-300"
-              >
-                Use this computer’s camera instead
-              </button>
-            ) : null}
-          </section>
+            </section>
+          ) : null}
 
-          <section
-            className={`space-y-3 ${showDesktopCamera ? "md:block" : "md:hidden"}`}
-          >
-            <div>
-              <h3 className="text-sm font-semibold text-zinc-300">
-                {scans.length ? "Create another scan" : "Set up face matching"}
+          {step === "camera" ? (
+            <section className="face-step">
+              <button
+                type="button"
+                onClick={() => {
+                  stopCamera();
+                  setStep(
+                    window.matchMedia("(min-width: 768px)").matches
+                      ? "method"
+                      : usableScans.length
+                        ? "scans"
+                        : "intro",
+                  );
+                }}
+                className="mb-6 text-sm text-zinc-400 hover:text-white"
+              >
+                Back
+              </button>
+              <p className="text-xs text-zinc-500">Step 2 of 2</p>
+              <h3 className="mt-3 text-2xl font-semibold text-white">
+                Look at the camera
               </h3>
-              <p className="mt-1 text-xs text-zinc-500">
-                Look at the camera for about two seconds. Keep your face
-                centered and remove anything covering it.
+              <p className="mt-2 text-sm text-zinc-400">
+                Keep still for a moment.
               </p>
-            </div>
-            <div className="relative aspect-4/3 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
-              <video
-                ref={videoRef}
-                muted
-                playsInline
-                className={`h-full w-full scale-x-[-1] object-cover ${cameraReady ? "opacity-100" : "opacity-0"}`}
-              />
-              {!cameraReady ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-500">
-                  <HiCamera className="h-9 w-9" />
-                  <span className="mt-2 text-sm">Camera is off</span>
-                </div>
-              ) : (
-                <div className="pointer-events-none absolute inset-[12%] rounded-[42%] border border-white/70" />
-              )}
-            </div>
-            {!cameraReady ? (
-              <button
-                type="button"
-                onClick={startCamera}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-zinc-100 px-4 py-3 text-sm font-bold text-zinc-950 transition hover:bg-white"
-              >
-                <HiCamera className="h-5 w-5" />
-                Use camera
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={createScan}
-                disabled={capturing}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-red-500 disabled:bg-zinc-700"
-              >
-                {capturing ? (
-                  <HiArrowPath className="h-5 w-5 animate-spin" />
-                ) : (
-                  <HiCheck className="h-5 w-5" />
-                )}
-                {capturing ? "Checking capture..." : "Scan my face"}
-              </button>
-            )}
-            <label className="flex items-start gap-3 rounded-xl border border-zinc-800 p-3 text-xs text-zinc-400">
-              <input
-                type="checkbox"
-                aria-label="Automatic suggestions"
-                checked={autoSuggestions}
-                onChange={(event) => setAutoSuggestions(event.target.checked)}
-                className="mt-0.5 accent-red-600"
-              />
-              Suggest photos from events I join when the match is confident.
-            </label>
-          </section>
-          {mode === "blur" && onManual ? (
-            <button
-              type="button"
-              onClick={onManual}
-              className="w-full rounded-lg py-2 text-xs font-medium text-zinc-500 hover:text-zinc-300"
-            >
-              Select photos and blur areas manually instead
-            </button>
+              <div className="relative mt-6 aspect-4/3 overflow-hidden rounded-xl bg-black">
+                <video
+                  ref={videoRef}
+                  muted
+                  playsInline
+                  className={`h-full w-full scale-x-[-1] object-cover transition-opacity duration-300 ${cameraReady ? "opacity-100" : "opacity-0"}`}
+                />
+                {!cameraReady ? (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    {cameraStarting ? (
+                      <LoadingSpinner size="xl" />
+                    ) : (
+                      <span className="text-sm text-zinc-500">
+                        Camera is off
+                      </span>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+              {cameraReady ? (
+                <button
+                  type="button"
+                  onClick={() => void createScan()}
+                  disabled={capturing}
+                  className="mt-4 min-h-12 w-full rounded-xl bg-red-600 px-5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {capturing ? "Hold still..." : "Continue"}
+                </button>
+              ) : !cameraStarting ? (
+                <button
+                  type="button"
+                  onClick={() => void startCamera()}
+                  className="mt-4 min-h-12 w-full rounded-xl bg-zinc-100 px-5 text-sm font-semibold text-zinc-950 hover:bg-white"
+                >
+                  Turn on camera
+                </button>
+              ) : null}
+            </section>
+          ) : null}
+
+          {step === "processing" ? (
+            <section className="face-step flex min-h-full flex-col items-center justify-center text-center">
+              <LoadingSpinner size="xl" />
+              <h3 className="mt-6 text-lg font-medium text-white">
+                {processingText}
+              </h3>
+              {progress && progress.total > progress.indexed ? (
+                <p className="mt-2 text-sm text-zinc-500">
+                  {progress.indexed} of {progress.total}
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+
+          {step === "scans" ? (
+            <section className="face-step">
+              <p className="mb-6 text-sm text-zinc-400">
+                {mode === "blur"
+                  ? "Choose the face to look for."
+                  : "Choose a saved face."}
+              </p>
+              <div className="divide-y divide-zinc-800 border-y border-zinc-800">
+                {usableScans.map((scan, index) => (
+                  <div
+                    key={scan.id}
+                    className="flex min-h-16 items-center gap-3"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => void search(scan.id)}
+                      className="min-h-16 flex-1 py-3 text-left"
+                    >
+                      <span className="block text-sm font-medium text-white">
+                        Face {index + 1}
+                      </span>
+                      <span className="mt-1 block text-xs text-zinc-500">
+                        Added {new Date(scan.createdAt).toLocaleDateString()}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteScanId(scan.id)}
+                      className="min-h-11 px-2 text-xs text-zinc-500 transition-colors hover:text-red-400"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {mode === "blur" && onManual ? (
+                <button
+                  type="button"
+                  onClick={onManual}
+                  className="mt-6 min-h-11 w-full text-sm text-zinc-400 hover:text-white"
+                >
+                  Choose photos yourself
+                </button>
+              ) : null}
+            </section>
           ) : null}
         </div>
       </aside>
@@ -648,9 +758,9 @@ export default function IncludesMeDrawer({
         isOpen={Boolean(deleteScanId)}
         onClose={() => setDeleteScanId(null)}
         onConfirm={deleteScan}
-        title="Delete face scan"
-        message="This removes the saved template and suggestions created from it. Confirmed mentions and completed blur requests stay unchanged."
-        confirmText="Delete scan"
+        title="Remove face"
+        message="Remove this saved face? You can add it again later."
+        confirmText="Remove"
         cancelText="Cancel"
         danger
       />
@@ -659,16 +769,16 @@ export default function IncludesMeDrawer({
 }
 
 function captureError(reason?: string, fallback?: string) {
-  if (reason === "SPOOF")
-    return "The liveness check did not pass. Use the live camera without a screen or printed photo.";
-  if (reason === "STALE_CAPTURE")
-    return "The capture did not contain enough live camera changes. Try again.";
+  if (reason === "SPOOF") return "Use the live camera, not a photo or screen.";
+  if (reason === "STALE_CAPTURE") return "Hold still, then try again.";
   if (reason === "LOW_QUALITY" || reason === "LOW_SPOOF_QUALITY") {
-    return "The capture quality was too low. Use brighter light and keep the camera steady.";
+    return "Move somewhere brighter and try again.";
   }
-  if (reason === "NO_SINGLE_FACE")
-    return "Keep exactly one face centered in the frame.";
-  if (reason === "FACE_MISMATCH")
-    return "This does not match your existing face scan. Delete your saved face data first if you need to enroll a different person.";
-  return fallback || "Face capture failed.";
+  if (reason === "NO_SINGLE_FACE") {
+    return "Make sure only your face is in the photo.";
+  }
+  if (reason === "FACE_MISMATCH") {
+    return "This does not match your saved face.";
+  }
+  return fallback || "We could not use that scan.";
 }

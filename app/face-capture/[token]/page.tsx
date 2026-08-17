@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import PhoneFaceCapture from "@/components/face/PhoneFaceCapture";
 
 export const metadata: Metadata = {
-  title: "Complete face scan | Hack Club Photos",
+  title: "Face setup | Hack Club Photos",
   robots: { index: false, follow: false },
 };
 export const dynamic = "force-dynamic";

@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import {
-  HiArrowPath,
-  HiCamera,
-  HiCheckCircle,
-  HiShieldCheck,
-} from "react-icons/hi2";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
 type CaptureInfo = {
   status: "created" | "opened" | "processing" | "completed" | "failed";
@@ -18,13 +13,14 @@ type CaptureInfo = {
 export default function PhoneFaceCapture({ token }: { token: string }) {
   const [info, setInfo] = useState<CaptureInfo | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expired, setExpired] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const cameraGeneration = useRef(0);
-  const stopCameraOnUnmount = useEffectEvent(stopCamera);
+  const stopCameraEvent = useEffectEvent(stopCamera);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Effect Events stay out of dependency arrays.
   useEffect(() => {
@@ -36,22 +32,66 @@ export default function PhoneFaceCapture({ token }: { token: string }) {
           if (!cancelled) setExpired(true);
           return;
         }
-        throw new Error("Could not check this capture link.");
+        throw new Error("Could not check this link.");
       }
       const body = (await response.json()) as CaptureInfo;
       if (cancelled) return;
       setInfo(body);
-      if (body.status === "completed") return;
+      if (body.status === "completed" || body.status === "failed") return;
       await fetch(`/api/face/capture-sessions/${token}/opened`, {
         method: "POST",
       });
     }
-    void open().catch(() => setError("Could not open this capture link."));
+    void open().catch(() => setError("Could not open this link."));
     return () => {
       cancelled = true;
-      stopCameraOnUnmount();
+      stopCameraEvent();
     };
   }, [token]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    if (!cameraReady || !video || !stream) return;
+    video.srcObject = stream;
+    void video.play().catch(() => {
+      cameraGeneration.current++;
+      stream.getTracks().forEach((track) => {
+        track.stop();
+      });
+      streamRef.current = null;
+      setCameraReady(false);
+      setCameraStarting(false);
+      setError("The camera could not start.");
+    });
+  }, [cameraReady]);
+
+  useEffect(() => {
+    if (info?.status !== "processing") return;
+    let cancelled = false;
+    let timer: number | undefined;
+    async function poll() {
+      try {
+        const response = await fetch(`/api/face/capture-sessions/${token}`, {
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error();
+        const body = (await response.json()) as CaptureInfo;
+        if (cancelled) return;
+        setInfo(body);
+        if (body.status === "processing") {
+          timer = window.setTimeout(poll, 1000);
+        }
+      } catch {
+        if (!cancelled) timer = window.setTimeout(poll, 2000);
+      }
+    }
+    timer = window.setTimeout(poll, 1000);
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [info?.status, token]);
 
   function stopCamera() {
     cameraGeneration.current++;
@@ -60,14 +100,15 @@ export default function PhoneFaceCapture({ token }: { token: string }) {
     });
     streamRef.current = null;
     setCameraReady(false);
+    setCameraStarting(false);
   }
 
   async function startCamera() {
     setError(null);
+    setCameraStarting(true);
     if (!navigator.mediaDevices?.getUserMedia) {
-      setError(
-        "This browser cannot access a camera. Open the link in Safari or Chrome.",
-      );
+      setCameraStarting(false);
+      setError("This browser cannot use the camera.");
       return;
     }
     const generation = ++cameraGeneration.current;
@@ -87,10 +128,6 @@ export default function PhoneFaceCapture({ token }: { token: string }) {
         return;
       }
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
       setCameraReady(true);
     } catch (cameraError) {
       const denied =
@@ -98,13 +135,15 @@ export default function PhoneFaceCapture({ token }: { token: string }) {
         cameraError.name === "NotAllowedError";
       setError(
         denied
-          ? "Camera permission was denied. Allow camera access and try again."
-          : "The camera could not start. Close other camera apps and try again.",
+          ? "Allow camera access, then try again."
+          : "The camera could not start.",
       );
+    } finally {
+      setCameraStarting(false);
     }
   }
 
-  async function captureFrame(track: MediaStreamTrack) {
+  async function captureFrame() {
     const video = videoRef.current;
     if (!video?.videoWidth || !video.videoHeight) {
       throw new Error("Camera is not ready");
@@ -129,14 +168,13 @@ export default function PhoneFaceCapture({ token }: { token: string }) {
   }
 
   async function completeCapture() {
-    const track = streamRef.current?.getVideoTracks()[0];
-    if (!track) return;
+    if (!streamRef.current?.getVideoTracks()[0] || capturing) return;
     setCapturing(true);
     setError(null);
     try {
       const frames: Blob[] = [];
       for (let index = 0; index < 6; index++) {
-        frames.push(await captureFrame(track));
+        frames.push(await captureFrame());
         if (index < 5) await new Promise((resolve) => setTimeout(resolve, 350));
       }
       stopCamera();
@@ -150,15 +188,21 @@ export default function PhoneFaceCapture({ token }: { token: string }) {
         body: form,
       });
       const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Face scan failed");
+      if (!response.ok) {
+        const message = captureError(body.reason, body.error);
+        setInfo((current) =>
+          current ? { ...current, status: "failed", error: message } : current,
+        );
+        throw new Error(message);
+      }
       setInfo((current) =>
         current ? { ...current, status: "completed" } : current,
       );
-    } catch (captureError) {
+    } catch (captureFailure) {
       setError(
-        captureError instanceof Error
-          ? captureError.message
-          : "Face scan failed",
+        captureFailure instanceof Error
+          ? captureFailure.message
+          : "We could not use that scan.",
       );
     } finally {
       setCapturing(false);
@@ -167,108 +211,125 @@ export default function PhoneFaceCapture({ token }: { token: string }) {
 
   if (expired) {
     return (
-      <Shell>
-        <HiShieldCheck className="h-10 w-10 text-zinc-500" />
-        <h1 className="mt-5 text-2xl font-bold text-white">Link expired</h1>
-        <p className="mt-2 text-zinc-400">
-          Create a new QR code on your computer.
-        </p>
-      </Shell>
+      <PageState
+        title="This link expired"
+        text="Make a new QR code on your computer."
+      />
     );
   }
 
   if (!info) {
-    return (
-      <Shell>
-        {error ? (
-          <>
-            <HiShieldCheck className="h-10 w-10 text-zinc-500" />
-            <h1 className="mt-5 text-2xl font-bold text-white">
-              Could not connect
-            </h1>
-            <p className="mt-2 text-zinc-400">{error}</p>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="mt-6 min-h-12 rounded-xl bg-zinc-800 px-5 font-bold text-white"
-            >
-              Try again
-            </button>
-          </>
-        ) : (
-          <HiArrowPath className="h-8 w-8 animate-spin text-zinc-500" />
-        )}
-      </Shell>
+    return error ? (
+      <PageState title="Could not connect" text={error} action="Try again" />
+    ) : (
+      <PageState loading title="Opening camera setup" />
     );
   }
 
   if (info.status === "completed") {
+    return <PageState title="Done" text="Go back to your computer." />;
+  }
+
+  if (info.status === "failed") {
     return (
-      <Shell>
-        <HiCheckCircle className="h-12 w-12 text-emerald-400" />
-        <h1 className="mt-5 text-2xl font-bold text-white">You're all set</h1>
-        <p className="mt-2 max-w-sm text-zinc-400">
-          Your computer has the scan now. You can close this page.
-        </p>
-      </Shell>
+      <PageState
+        title="That did not work"
+        text={
+          info.error || "Make a new QR code on your computer and try again."
+        }
+      />
     );
   }
 
+  if ((capturing && !cameraReady) || info.status === "processing") {
+    return <PageState loading title="Checking your face" />;
+  }
+
   return (
-    <main className="min-h-dvh bg-zinc-950 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] text-white">
-      <div className="mx-auto flex min-h-[calc(100dvh-2rem)] max-w-lg flex-col">
-        <div className="mb-4 flex items-center gap-2 text-sm font-medium text-zinc-400">
-          <HiShieldCheck className="h-5 w-5 text-red-400" /> Hack Club Photos
-        </div>
-        <div className="relative flex-1 overflow-hidden rounded-[2rem] border border-zinc-800 bg-black">
-          <video
-            ref={videoRef}
-            muted
-            playsInline
-            className="h-full min-h-[58dvh] w-full scale-x-[-1] object-cover"
-          />
-          {!cameraReady ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center">
-              <HiCamera className="h-10 w-10 text-zinc-500" />
-              <h1 className="mt-5 text-2xl font-bold">
-                Complete your face scan
-              </h1>
-              <p className="mt-2 text-sm leading-6 text-zinc-400">
-                {info.eventName ? `For ${info.eventName}. ` : ""}Camera frames
-                are sent for a temporary liveness check and are not stored.
-              </p>
-              <button
-                type="button"
-                onClick={startCamera}
-                className="mt-7 min-h-12 w-full rounded-2xl bg-red-600 px-6 py-3 font-bold text-white active:bg-red-500"
-              >
-                Open front camera
-              </button>
+    <main className="min-h-dvh bg-zinc-950 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] text-white">
+      <div className="mx-auto flex min-h-[calc(100dvh-2.5rem)] max-w-md flex-col">
+        <p className="text-sm font-medium text-zinc-500">Hack Club Photos</p>
+
+        {!cameraReady ? (
+          <section className="face-step flex flex-1 flex-col justify-center py-12">
+            <p className="text-xs text-zinc-500">Step 1 of 2</p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight">
+              Use your front camera
+            </h1>
+            <p className="mt-3 text-zinc-400">This takes a few seconds.</p>
+            {error ? (
+              <p className="mt-5 text-sm text-red-400">{error}</p>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void startCamera()}
+              disabled={cameraStarting}
+              className="mt-8 min-h-12 w-full rounded-xl bg-red-600 px-6 font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+            >
+              {cameraStarting ? "Opening camera..." : "Open camera"}
+            </button>
+          </section>
+        ) : (
+          <section className="face-step flex flex-1 flex-col pt-8">
+            <p className="text-xs text-zinc-500">Step 2 of 2</p>
+            <h1 className="mt-3 text-2xl font-semibold">Look at the camera</h1>
+            <p className="mt-2 text-sm text-zinc-400">
+              Keep still for a moment.
+            </p>
+            <div className="mt-6 min-h-0 flex-1 overflow-hidden rounded-xl bg-black">
+              <video
+                ref={videoRef}
+                muted
+                playsInline
+                className="h-full min-h-[52dvh] w-full scale-x-[-1] object-cover"
+              />
             </div>
-          ) : (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="h-72 w-56 rounded-[48%] border-2 border-white/80 shadow-[0_0_0_999px_rgba(0,0,0,0.28)]" />
-            </div>
-          )}
-        </div>
-        {error ? (
-          <p className="mt-3 rounded-xl border border-red-900 bg-red-950/40 p-3 text-sm text-red-200">
-            {error}
-          </p>
+            {error ? (
+              <p className="mt-3 text-sm text-red-400">{error}</p>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void completeCapture()}
+              disabled={capturing}
+              className="mt-4 min-h-14 w-full rounded-xl bg-red-600 px-6 font-semibold text-white transition-colors active:bg-red-700"
+            >
+              {capturing ? "Hold still..." : "Continue"}
+            </button>
+          </section>
+        )}
+      </div>
+    </main>
+  );
+}
+
+function PageState({
+  title,
+  text,
+  action,
+  loading = false,
+}: {
+  title: string;
+  text?: string;
+  action?: string;
+  loading?: boolean;
+}) {
+  return (
+    <main className="flex min-h-dvh items-center justify-center bg-zinc-950 p-6 text-center text-white">
+      <div className="face-step max-w-sm">
+        {loading ? (
+          <div className="mb-6 flex justify-center">
+            <LoadingSpinner size="xl" />
+          </div>
         ) : null}
-        {cameraReady ? (
+        <h1 className="text-2xl font-semibold">{title}</h1>
+        {text ? <p className="mt-2 text-zinc-400">{text}</p> : null}
+        {action ? (
           <button
             type="button"
-            onClick={completeCapture}
-            disabled={capturing}
-            className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-red-600 px-6 font-bold text-white disabled:bg-zinc-700"
+            onClick={() => window.location.reload()}
+            className="mt-6 min-h-12 rounded-xl bg-zinc-100 px-6 font-semibold text-zinc-950"
           >
-            {capturing ? (
-              <HiArrowPath className="h-5 w-5 animate-spin" />
-            ) : (
-              <HiCamera className="h-5 w-5" />
-            )}
-            {capturing ? "Checking your scan..." : "Take face scan"}
+            {action}
           </button>
         ) : null}
       </div>
@@ -276,10 +337,17 @@ export default function PhoneFaceCapture({ token }: { token: string }) {
   );
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="flex min-h-dvh flex-col items-center justify-center bg-zinc-950 p-6 text-center text-white">
-      {children}
-    </main>
-  );
+function captureError(reason?: string, fallback?: string) {
+  if (reason === "SPOOF") return "Use the live camera, not a photo or screen.";
+  if (reason === "STALE_CAPTURE") return "Hold still, then try again.";
+  if (reason === "LOW_QUALITY" || reason === "LOW_SPOOF_QUALITY") {
+    return "Move somewhere brighter and try again.";
+  }
+  if (reason === "NO_SINGLE_FACE") {
+    return "Make sure only your face is in the photo.";
+  }
+  if (reason === "FACE_MISMATCH") {
+    return "This does not match your saved face.";
+  }
+  return fallback || "We could not use that scan.";
 }

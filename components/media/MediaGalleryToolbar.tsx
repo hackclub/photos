@@ -8,7 +8,6 @@ import {
   HiHeart,
   HiPhoto,
   HiPlay,
-  HiSparkles,
   HiUser,
 } from "react-icons/hi2";
 
@@ -101,14 +100,13 @@ export default function MediaGalleryToolbar({
               <button
                 type="button"
                 onClick={onIncludesMeClick}
-                className={`flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                className={`flex min-h-11 items-center rounded-full border px-4 py-2 text-sm font-medium transition ${
                   includesMeActive
-                    ? "border-cyan-500 bg-cyan-950/50 text-cyan-200"
+                    ? "border-red-600 bg-red-600 text-white"
                     : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800"
                 }`}
               >
-                <HiSparkles className="h-5 w-5" />
-                <span className="hidden sm:inline">Includes me</span>
+                Find me
               </button>
             ) : null}
             <button

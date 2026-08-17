@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
-import { HiCheck, HiClock, HiSparkles, HiXMark } from "react-icons/hi2";
+import { HiXMark } from "react-icons/hi2";
 import {
   submitBlurRequests,
   submitFaceBlurRequests,
 } from "@/app/actions/blur-requests";
 import IncludesMeDrawer from "@/components/face/IncludesMeDrawer";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import type { Event, MediaItem } from "@/types/media";
 import type { BlurDraft, BlurRect } from "./BlurEditorModal";
 import MediaGallery from "./MediaGallery";
@@ -53,9 +54,9 @@ export default function BlurMeGallery({
     return (
       <div className="space-y-4">
         {submitted && (
-          <div className="rounded-2xl border border-green-500/20 bg-green-500/10 p-4 text-sm text-green-300">
-            Thanks for submitting. An admin will review these submissions ASAP.
-          </div>
+          <p className="border-b border-zinc-800 pb-4 text-sm text-zinc-300">
+            Sent. We&apos;ll review it.
+          </p>
         )}
         <MediaGallery
           media={media}
@@ -103,19 +104,19 @@ export default function BlurMeGallery({
 
   return (
     <div className="space-y-4">
-      <div className="sticky top-4 z-30 rounded-2xl border border-red-500/30 bg-red-950/70 p-4 shadow-2xl backdrop-blur">
+      <div className="sticky top-0 z-30 border-b border-zinc-800 bg-zinc-950 px-1 py-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-bold text-white">Blur Me mode</p>
+            <p className="text-sm font-medium text-white">Choose photos</p>
           </div>
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => setReviewing(true)}
               disabled={Object.keys(drafts).length === 0}
-              className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-red-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+              className="min-h-11 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
             >
-              Blur Me ({Object.keys(drafts).length})
+              Review ({Object.keys(drafts).length})
             </button>
             <button
               type="button"
@@ -123,7 +124,7 @@ export default function BlurMeGallery({
                 setEnabled(false);
                 setReviewing(false);
               }}
-              className="rounded-xl border border-white/20 px-4 py-2 text-sm font-bold text-white hover:bg-white/10"
+              className="min-h-11 px-3 text-sm text-zinc-400 hover:text-white"
             >
               Cancel
             </button>
@@ -222,34 +223,38 @@ function FaceBlurReviewModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/90 p-4">
-      <div className="mx-auto max-w-6xl rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-2xl">
-        <div className="mb-5 flex items-start justify-between gap-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-zinc-950 sm:bg-black/90 sm:p-4">
+      <div
+        className="mx-auto min-h-dvh max-w-6xl bg-zinc-950 p-5 sm:min-h-0 sm:rounded-2xl sm:border sm:border-zinc-800"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="face-blur-review-title"
+      >
+        <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <h2 className="flex items-center gap-2 text-xl font-bold text-white">
-              <HiSparkles className="h-5 w-5 text-cyan-400" /> Review matches
+            <h2
+              id="face-blur-review-title"
+              className="text-xl font-semibold text-white"
+            >
+              Choose photos
             </h2>
             <p className="mt-1 text-sm text-zinc-400">
-              High-confidence matches are selected. Remove anything that is not
-              you.
-            </p>
-            <p className="mt-2 text-xs text-zinc-500">
-              After you submit, new matching photos uploaded to this event will
-              also be sent for blur review automatically.
+              Tap any photo that is not you.
             </p>
           </div>
-          <button type="button" onClick={onClose} className="p-2 text-zinc-400">
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 text-zinc-400"
+            aria-label="Close"
+          >
             <HiXMark className="h-6 w-6" />
           </button>
         </div>
         {rows.length === 0 ? (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-12 text-center">
-            <p className="font-medium text-white">
-              No high-confidence matches found.
-            </p>
-            <p className="mt-2 text-sm text-zinc-500">
-              The event may still be indexing. Close this and try again shortly.
-            </p>
+          <div className="py-20 text-center">
+            <p className="font-medium text-white">No matches yet</p>
+            <p className="mt-2 text-sm text-zinc-500">Try again later.</p>
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
@@ -270,10 +275,12 @@ function FaceBlurReviewModal({
                       return next;
                     })
                   }
-                  className={`overflow-hidden rounded-xl border text-left transition ${
+                  aria-pressed={checked}
+                  aria-label={`${checked ? "Remove" : "Add"} ${item.filename}`}
+                  className={`relative aspect-square overflow-hidden rounded-lg border text-left transition ${
                     checked
-                      ? "border-cyan-500 bg-cyan-950/20"
-                      : "border-zinc-800 bg-zinc-900 opacity-55"
+                      ? "border-white opacity-100 ring-1 ring-white"
+                      : "border-zinc-800 opacity-40"
                   }`}
                 >
                   <div
@@ -286,38 +293,29 @@ function FaceBlurReviewModal({
                       backgroundSize: multipleFaces ? "cover" : "240%",
                     }}
                   >
-                    <span
-                      className={`absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full ${
-                        checked
-                          ? "bg-cyan-500 text-zinc-950"
-                          : "bg-zinc-950 text-zinc-500"
-                      }`}
-                    >
-                      {checked ? <HiCheck className="h-4 w-4" /> : null}
-                    </span>
-                  </div>
-                  <div className="p-3">
-                    <p className="truncate text-xs text-zinc-300">
-                      {item.filename}
-                    </p>
-                    <p className="mt-1 text-[11px] text-zinc-500">
-                      {Math.round(match.similarity * 100)}% confidence
-                    </p>
+                    {checked ? (
+                      <span className="absolute right-2 top-2 rounded-md bg-white px-2 py-1 text-[11px] font-medium text-zinc-950">
+                        Selected
+                      </span>
+                    ) : null}
                   </div>
                 </button>
               );
             })}
           </div>
         )}
-        <div className="mt-5 flex justify-end">
+        <div className="sticky bottom-0 mt-6 border-t border-zinc-800 bg-zinc-950 py-4">
+          <p className="mb-3 text-xs text-zinc-500">
+            New matches from this event will be checked too.
+          </p>
           <button
             type="button"
             onClick={submit}
             disabled={submitting || selected.size === 0}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white disabled:bg-zinc-700"
+            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-5 text-sm font-semibold text-white disabled:bg-zinc-700"
           >
-            {submitting ? <HiClock className="h-4 w-4 animate-spin" /> : null}
-            Submit {selected.size} for review
+            {submitting ? <LoadingSpinner size="sm" /> : null}
+            {submitting ? "Sending..." : `Send ${selected.size}`}
           </button>
         </div>
       </div>
@@ -350,35 +348,38 @@ function BlurReviewModal({
     else alert(result.error || "Failed to submit blur requests");
   };
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/90 p-4">
-      <div className="mx-auto max-w-5xl rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-2xl">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-zinc-950 sm:bg-black/90 sm:p-4">
+      <div
+        className="mx-auto min-h-dvh max-w-5xl bg-zinc-950 p-5 sm:min-h-0 sm:rounded-2xl sm:border sm:border-zinc-800"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="blur-review-title"
+      >
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-white">
-              Review blur requests
+            <h2
+              id="blur-review-title"
+              className="text-xl font-semibold text-white"
+            >
+              Check photos
             </h2>
-            <p className="text-sm text-zinc-400">
-              Preview before admin review.
-            </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="text-zinc-400 hover:text-white"
+            aria-label="Close"
           >
             <HiXMark className="h-6 w-6" />
           </button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {drafts.map((draft) => (
-            <div
-              key={draft.media.id}
-              className="rounded-xl border border-zinc-800 bg-zinc-900 p-2"
-            >
+            <div key={draft.media.id}>
               <img
                 src={draft.previewDataUrl}
                 alt={draft.media.filename}
-                className="aspect-square w-full rounded-lg object-cover"
+                className="aspect-square w-full rounded-lg border border-zinc-800 object-cover"
               />
               <div className="mt-2 flex items-center justify-between gap-2">
                 <p className="truncate text-xs text-zinc-400">
@@ -387,7 +388,7 @@ function BlurReviewModal({
                 <button
                   type="button"
                   onClick={() => onRemove(draft.media.id)}
-                  className="text-xs font-bold text-red-400"
+                  className="min-h-10 px-2 text-xs font-medium text-zinc-400 hover:text-red-400"
                 >
                   Remove
                 </button>
@@ -395,11 +396,11 @@ function BlurReviewModal({
             </div>
           ))}
         </div>
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="sticky bottom-0 mt-6 flex justify-end gap-2 border-t border-zinc-800 bg-zinc-950 py-4">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl bg-zinc-800 px-4 py-2 text-sm font-bold text-white"
+            className="min-h-12 px-4 text-sm font-medium text-zinc-400 hover:text-white"
           >
             Back
           </button>
@@ -407,9 +408,10 @@ function BlurReviewModal({
             type="button"
             onClick={submit}
             disabled={submitting || drafts.length === 0}
-            className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2 text-sm font-bold text-white disabled:bg-zinc-700"
+            className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-red-600 px-6 text-sm font-semibold text-white disabled:bg-zinc-700"
           >
-            {submitting && <HiClock className="h-4 w-4 animate-spin" />}Submit
+            {submitting ? <LoadingSpinner size="sm" /> : null}
+            {submitting ? "Sending..." : "Submit"}
           </button>
         </div>
       </div>

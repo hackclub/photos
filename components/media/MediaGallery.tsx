@@ -540,12 +540,9 @@ export default function MediaGallery({
       )}
 
       {includesMeActive && sortedMedia.length === 0 ? (
-        <div className="rounded-xl border border-cyan-900/50 bg-cyan-950/15 px-5 py-10 text-center">
-          <p className="font-medium text-white">No confident matches yet</p>
-          <p className="mt-1 text-sm text-zinc-500">
-            This event may still be indexing. Open Includes me to check
-            progress.
-          </p>
+        <div className="px-5 py-14 text-center">
+          <p className="font-medium text-white">No photos found</p>
+          <p className="mt-1 text-sm text-zinc-500">Try again later.</p>
         </div>
       ) : null}
 
@@ -563,7 +560,7 @@ export default function MediaGallery({
                 key={item.id}
                 className={`group relative aspect-square overflow-hidden rounded-xl border bg-zinc-800 transition-all duration-300 hover:shadow-xl md:hover:scale-[1.02] ${
                   item.suggestedMention
-                    ? "border-cyan-500/80 hover:border-cyan-400"
+                    ? "border-zinc-500 hover:border-zinc-400"
                     : "border-zinc-800 hover:border-zinc-700"
                 }`}
               >
@@ -669,8 +666,8 @@ export default function MediaGallery({
                 )}
                 {item.suggestedMention ? (
                   <div className="absolute inset-x-2 top-2 z-20 flex items-center justify-between gap-2">
-                    <span className="rounded-full border border-cyan-500/50 bg-cyan-950/90 px-2 py-1 text-[11px] font-semibold text-cyan-200">
-                      Suggested mention
+                    <span className="rounded-full bg-black/75 px-2 py-1 text-[11px] font-medium text-white">
+                      Is this you?
                     </span>
                   </div>
                 ) : null}
