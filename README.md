@@ -18,13 +18,13 @@ No more digging for Google Photos Links, photos.hackclub.com stores photos in or
 
 ## Running it for Dev
 
-You'll need Node 20+, a Postgres DB, and an S3 bucket, KV (Redis) Is Optional for Ratelimits.
+You'll need Node 24+, Bun, a Postgres DB, and an S3 bucket. Redis is required for distributed rate limits in production.
 
 1.  **Get the code**
     ```bash
     git clone https://github.com/hackclub/photos.git
     cd photos
-    npm install
+     bun install
     ```
 
 2.  **Set up env**
@@ -33,15 +33,17 @@ You'll need Node 20+, a Postgres DB, and an S3 bucket, KV (Redis) Is Optional fo
     # Fill in your creds!
     ```
 
-3.  **Push schema**
-    ```bash
-    npm run db:push
-    ```
+3.  **Run migrations**
+     ```bash
+     bun run db:migrate
+     ```
 
-4.  **Run dev** 
-    ```bash
-    npm run dev
-    ```
+4.  **Run dev**
+     ```bash
+     bun run dev
+     ```
+
+Production deploys should run `bun run db:migrate` as a release step before serving the new application version. The Vercel build itself does not connect to Postgres.
 
 ## License
 

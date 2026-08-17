@@ -1,6 +1,7 @@
 import { eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
+  apiKeys,
   commentLikes,
   dataExports,
   events,
@@ -91,6 +92,10 @@ export async function deleteUserContent(userId: string) {
     await tx.delete(mediaLikes).where(eq(mediaLikes.userId, userId));
     await tx.delete(commentLikes).where(eq(commentLikes.userId, userId));
     await tx.delete(dataExports).where(eq(dataExports.userId, userId));
+    await tx
+      .update(apiKeys)
+      .set({ isRevoked: true })
+      .where(eq(apiKeys.userId, userId));
     const allMediaDeleted = successfulMediaIds.length === userMedia.length;
     const allEventsDeleted = successfulEventIds.length === userEvents.length;
     const allSeriesDeleted = successfulSeriesIds.length === userSeries.length;
@@ -107,6 +112,8 @@ export async function deleteUserContent(userId: string) {
           socialLinks: null,
           slackId: null,
           hcaAccessToken: null,
+          hcaRefreshToken: null,
+          isGlobalAdmin: false,
           isBanned: false,
           deletedAt: new Date(),
           updatedAt: new Date(),

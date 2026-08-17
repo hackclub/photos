@@ -3,10 +3,16 @@ import {
   ListObjectsV2Command,
   type ListObjectsV2CommandOutput,
 } from "@aws-sdk/client-s3";
-import { inArray } from "drizzle-orm";
+import { inArray, or } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { dataExports, events, media, series } from "@/lib/db/schema";
+import {
+  blurRequests,
+  dataExports,
+  events,
+  media,
+  series,
+} from "@/lib/db/schema";
 import { logger, serializeError } from "@/lib/logger";
 import { deleteFromS3Batch, s3Client } from "@/lib/media/s3";
 export const maxDuration = 300;
@@ -72,19 +78,47 @@ export async function GET(req: NextRequest) {
       if (candidates.length > 0) {
         const candidateKeys = candidates.map((c: _Object) => c.Key!);
         const foundKeys = new Set<string>();
-        const mediaS3Keys = await db
-          .select({ key: media.s3Key })
+        const mediaKeys = await db
+          .select({
+            s3Key: media.s3Key,
+            thumbnailS3Key: media.thumbnailS3Key,
+            originalS3Key: media.originalS3Key,
+            originalThumbnailS3Key: media.originalThumbnailS3Key,
+            blurredS3Key: media.blurredS3Key,
+            blurredThumbnailS3Key: media.blurredThumbnailS3Key,
+          })
           .from(media)
-          .where(inArray(media.s3Key, candidateKeys));
-        for (const k of mediaS3Keys) {
-          foundKeys.add(k.key);
+          .where(
+            or(
+              inArray(media.s3Key, candidateKeys),
+              inArray(media.thumbnailS3Key, candidateKeys),
+              inArray(media.originalS3Key, candidateKeys),
+              inArray(media.originalThumbnailS3Key, candidateKeys),
+              inArray(media.blurredS3Key, candidateKeys),
+              inArray(media.blurredThumbnailS3Key, candidateKeys),
+            ),
+          );
+        for (const item of mediaKeys) {
+          for (const key of Object.values(item)) {
+            if (key) foundKeys.add(key);
+          }
         }
-        const mediaThumbKeys = await db
-          .select({ key: media.thumbnailS3Key })
-          .from(media)
-          .where(inArray(media.thumbnailS3Key, candidateKeys));
-        for (const k of mediaThumbKeys) {
-          if (k.key) foundKeys.add(k.key);
+        const blurKeys = await db
+          .select({
+            blurredS3Key: blurRequests.blurredS3Key,
+            blurredThumbnailS3Key: blurRequests.blurredThumbnailS3Key,
+          })
+          .from(blurRequests)
+          .where(
+            or(
+              inArray(blurRequests.blurredS3Key, candidateKeys),
+              inArray(blurRequests.blurredThumbnailS3Key, candidateKeys),
+            ),
+          );
+        for (const item of blurKeys) {
+          for (const key of Object.values(item)) {
+            if (key) foundKeys.add(key);
+          }
         }
         const eventBannerKeys = await db
           .select({ key: events.bannerS3Key })

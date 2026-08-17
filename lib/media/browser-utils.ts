@@ -359,6 +359,36 @@ async function generateVideoThumbnail(file: File, signal?: AbortSignal) {
   }
 }
 
+export async function generateVideoThumbnailFromUrl(
+  src: string,
+  signal?: AbortSignal,
+): Promise<Blob | null> {
+  const video = document.createElement("video");
+  video.preload = "metadata";
+  video.muted = true;
+  video.playsInline = true;
+  video.src = src;
+  try {
+    await waitForVideoEvent(video, "loadedmetadata", signal);
+    const seekTo = Number.isFinite(video.duration)
+      ? Math.min(1, Math.max(0, video.duration / 10))
+      : 0;
+    video.currentTime = seekTo;
+    await waitForVideoEvent(video, "seeked", signal);
+    throwIfAborted(signal);
+    return await drawThumbnail(
+      video.videoWidth,
+      video.videoHeight,
+      (ctx, size) => {
+        ctx.drawImage(video, 0, 0, size.width, size.height);
+      },
+    );
+  } finally {
+    video.removeAttribute("src");
+    video.load();
+  }
+}
+
 async function drawThumbnail(
   sourceWidth: number,
   sourceHeight: number,

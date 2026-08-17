@@ -4,10 +4,12 @@ import {
 } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
+import { getUserContext } from "@/lib/auth-api";
 import { db } from "@/lib/db";
 import { events, series } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
+import { can } from "@/lib/policy";
 export const dynamic = "force-dynamic";
 
 export async function GET(
@@ -32,6 +34,7 @@ export async function GET(
 
   try {
     let s3Key: string | null = null;
+    let isPublic = false;
     switch (type) {
       case "event-banner": {
         const event = await db.query.events.findFirst({
@@ -39,6 +42,13 @@ export async function GET(
         });
         if (!event || !event.bannerS3Key) {
           return new NextResponse("Not Found", { status: 404 });
+        }
+        isPublic = event.visibility === "public";
+        if (!isPublic) {
+          const { user, error } = await getUserContext();
+          if (!user || !(await can(user, "view", "event", event))) {
+            return error ?? new NextResponse("Unauthorized", { status: 401 });
+          }
         }
         s3Key = event.bannerS3Key;
         break;
@@ -49,6 +59,13 @@ export async function GET(
         });
         if (!seriesItem || !seriesItem.bannerS3Key) {
           return new NextResponse("Not Found", { status: 404 });
+        }
+        isPublic = seriesItem.visibility === "public";
+        if (!isPublic) {
+          const { user, error } = await getUserContext();
+          if (!user || !(await can(user, "view", "series", seriesItem))) {
+            return error ?? new NextResponse("Unauthorized", { status: 401 });
+          }
         }
         s3Key = seriesItem.bannerS3Key;
         break;
@@ -100,7 +117,9 @@ export async function GET(
     if (s3Response.ContentRange) {
       headers.set("Content-Range", s3Response.ContentRange);
     }
-    const cacheControl = "public, max-age=31536000, immutable";
+    const cacheControl = isPublic
+      ? "public, max-age=3600, stale-while-revalidate=86400"
+      : "private, no-store";
     headers.set("Cache-Control", cacheControl);
     headers.set("CDN-Cache-Control", cacheControl);
     headers.set("Cloudflare-CDN-Cache-Control", cacheControl);

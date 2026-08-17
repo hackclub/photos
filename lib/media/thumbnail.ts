@@ -1,12 +1,5 @@
-import { existsSync } from "node:fs";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import type { Readable } from "node:stream";
-import ffmpeg from "fluent-ffmpeg";
-import type { Sharp } from "sharp";
 import { logger } from "@/lib/logger";
-import { runFfmpegCommand } from "@/lib/media/ffmpeg";
 import sharp, {
   createSharp,
   MAX_BUFFERED_IMAGE_BYTES,
@@ -36,21 +29,6 @@ export async function processImageUpload(
   return await withImageProcessingSlot(() =>
     processImageUploadInternal(input, mediaId, uploadedBy, eventId, mimeType),
   );
-}
-
-async function encodeJpegThumbnail(image: Sharp) {
-  return await image
-    .rotate()
-    .resize(400, 400, {
-      fit: "cover",
-      position: "attention",
-      withoutEnlargement: false,
-      kernel: sharp.kernel.lanczos3,
-    })
-    .flatten({ background: "#111111" })
-    .normalise()
-    .jpeg({ quality: 76, mozjpeg: true, progressive: true })
-    .toBuffer();
 }
 
 async function buildRobustImageThumbnail(buffer: Buffer) {
@@ -188,10 +166,7 @@ async function generateAndUploadThumbnailInternal(
       return null;
     }
     if (isVideo) {
-      return await withImageProcessingSlot(
-        () => generateVideoThumbnail(input, mediaId, signal, tags, duration),
-        signal,
-      );
+      return null;
     }
     if (typeof input === "string") {
       logger.error("Image thumbnail generation requires a Buffer input");
@@ -240,98 +215,19 @@ export async function generateAndUploadThumbnail(
   }
 }
 
-async function generateVideoThumbnail(
-  input: Buffer | string,
-  mediaId: string,
-  signal?: AbortSignal,
-  tags?: Record<string, string>,
-  knownDuration?: number,
-): Promise<string | null> {
-  if (signal?.aborted) return null;
-  const tempDir = path.join(os.tmpdir(), "video-thumbnails");
-  if (!existsSync(tempDir)) {
-    await mkdir(tempDir, { recursive: true });
-  }
-  const tempVideoPath = path.join(tempDir, `${mediaId}-input.tmp`);
-  const tempThumbnailPath = path.join(tempDir, `${mediaId}-thumb.jpg`);
-  let inputPath = tempVideoPath;
-  try {
-    if (Buffer.isBuffer(input)) {
-      await writeFile(tempVideoPath, input);
-    } else {
-      inputPath = input;
-    }
-    if (signal?.aborted) return null;
-    let screenshotTimestamp = "00:00:01.000";
-    const duration = knownDuration;
-    if (duration !== undefined && duration < 1) {
-      screenshotTimestamp = "00:00:00.000";
-    }
-    if (signal?.aborted) return null;
-    const extractFrame = (timestamp: string) => {
-      const command = ffmpeg(inputPath);
-      return runFfmpegCommand(
-        command,
-        () => {
-          command.screenshots({
-            count: 1,
-            folder: tempDir,
-            filename: `${mediaId}-thumb.jpg`,
-            timestamps: [timestamp],
-          });
-        },
-        { signal },
-      );
-    };
-    try {
-      await extractFrame(screenshotTimestamp);
-    } catch (error) {
-      if (screenshotTimestamp !== "00:00:00.000") {
-        await extractFrame("00:00:00.000");
-      } else {
-        throw error;
-      }
-    }
-    if (signal?.aborted) return null;
-    const { readFile } = await import("node:fs/promises");
-    const thumbnailBuffer = await readFile(tempThumbnailPath);
-    const processedThumbnail = await encodeJpegThumbnail(
-      createSharp(thumbnailBuffer),
-    );
-    if (signal?.aborted) return null;
-    const thumbnailS3Key = getThumbnailS3Key(mediaId);
-    await uploadToS3(
-      processedThumbnail,
-      thumbnailS3Key,
-      "image/jpeg",
-      signal,
-      tags,
-    );
-    return thumbnailS3Key;
-  } catch (error) {
-    logger.error("Video thumbnail generation error:", error);
-    return null;
-  } finally {
-    try {
-      if (Buffer.isBuffer(input) && existsSync(tempVideoPath)) {
-        await unlink(tempVideoPath);
-      }
-      if (existsSync(tempThumbnailPath)) {
-        await unlink(tempThumbnailPath);
-      }
-    } catch (cleanupError) {
-      logger.error("Error cleaning up temp files:", cleanupError);
-    }
-  }
-}
 export async function deleteMediaAndThumbnail(
   s3Key: string,
   thumbnailS3Key: string | null,
+  relatedS3Keys: (string | null | undefined)[] = [],
 ): Promise<void> {
   await deleteFromS3(s3Key);
-  if (thumbnailS3Key && thumbnailS3Key !== s3Key) {
+  for (const key of new Set(
+    [thumbnailS3Key, ...relatedS3Keys].filter(
+      (value): value is string => Boolean(value) && value !== s3Key,
+    ),
+  )) {
     try {
-      await deleteFromS3(thumbnailS3Key);
+      await deleteFromS3(key);
     } catch (_error) {}
   }
 }
@@ -354,6 +250,10 @@ export async function deleteBatchMedia(
     id: string;
     s3Key: string;
     thumbnailS3Key: string | null;
+    originalS3Key?: string | null;
+    originalThumbnailS3Key?: string | null;
+    blurredS3Key?: string | null;
+    blurredThumbnailS3Key?: string | null;
   }[],
 ): Promise<{
   successfulIds: string[];
@@ -366,8 +266,14 @@ export async function deleteBatchMedia(
   const ids: string[] = [];
   for (const item of mediaItems) {
     keysToDelete.push(item.s3Key);
-    if (item.thumbnailS3Key && item.thumbnailS3Key !== item.s3Key) {
-      keysToDelete.push(item.thumbnailS3Key);
+    for (const key of [
+      item.thumbnailS3Key,
+      item.originalS3Key,
+      item.originalThumbnailS3Key,
+      item.blurredS3Key,
+      item.blurredThumbnailS3Key,
+    ]) {
+      if (key && key !== item.s3Key) keysToDelete.push(key);
     }
     ids.push(item.id);
   }

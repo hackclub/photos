@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  serverExternalPackages: ["mediainfo.js"],
   allowedDevOrigins: [
     "192.168.0.32",
     ...(process.env.NEXT_ALLOWED_DEV_ORIGINS?.split(",")
@@ -9,7 +10,7 @@ const nextConfig: NextConfig = {
       .filter(Boolean) ?? []),
   ],
   outputFileTracingIncludes: {
-    "/*": [],
+    "/*": ["./node_modules/mediainfo.js/dist/MediaInfoModule.wasm"],
   },
   reactCompiler: true,
   images: {

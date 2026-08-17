@@ -217,8 +217,14 @@ export async function getUserProfileData(userId: string) {
         if (p.event.bannerS3Key) {
           bannerUrl = getAssetProxyUrl("event-banner", p.event.id);
         }
+        const {
+          inviteCode: _inviteCode,
+          bannerS3Key: _bannerS3Key,
+          createdById: _createdById,
+          ...safeEvent
+        } = p.event;
         return {
-          ...p.event,
+          ...safeEvent,
           joinedAt: p.joinedAt,
           mediaCount: mediaCountByEventId.get(p.event.id) ?? 0,
           participantCount: participantCountByEventId.get(p.event.id) ?? 0,

@@ -36,6 +36,7 @@ export function publicMedia(item: typeof media.$inferSelect) {
     fileSize: item.fileSize,
     width: item.width,
     height: item.height,
+    duration: item.duration,
     latitude: item.latitude,
     longitude: item.longitude,
     exifData: item.exifData,

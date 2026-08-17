@@ -71,6 +71,13 @@
       "when": 1783984863397,
       "tag": "0009_spooky_miss_america",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786887617180,
+      "tag": "0010_wealthy_clint_barton",
+      "breakpoints": true
     }
   ]
 }

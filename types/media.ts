@@ -7,6 +7,7 @@ export interface MediaItem {
   mimeType: string;
   width: number | null;
   height: number | null;
+  duration?: number | null;
   exifData: Record<string, unknown> | null;
   latitude?: number | null;
   longitude?: number | null;

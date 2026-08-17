@@ -31,10 +31,13 @@ services/vision-worker/app/__pycache__/
 # local face model weights
 services/vision-worker/models/
 
-# package manager artifacts (choose one; repo uses npm via Dockerfile)
+# package manager artifacts (the repository uses Bun)
 yarn.lock
 pnpm-lock.yaml
 package-lock.json
+
+# local native SDK artifacts
+roc-*/
 
 app/api/v1/mobile
 mobile/*

@@ -35,6 +35,9 @@ const resolveS3Region = (): string => {
 const requireEnv = (name: string): string => {
   const value = process.env[name]?.trim();
   if (!value) {
+    if (process.env.NEXT_PHASE === "phase-production-build") {
+      return `build-placeholder-${name.toLowerCase()}`;
+    }
     throw new Error(`Missing required environment variable: ${name}`);
   }
   return value;

@@ -1,17 +1,9 @@
-import { createWriteStream, existsSync } from "node:fs";
-import { mkdir, readFile, unlink } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import type { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { eq, gt } from "drizzle-orm";
-import ffmpeg from "fluent-ffmpeg";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
 import { logger, serializeError } from "@/lib/logger";
-import { runFfmpegCommand } from "@/lib/media/ffmpeg";
 import {
   createSharp,
   MAX_BUFFERED_IMAGE_BYTES,
@@ -26,6 +18,8 @@ import { ALLOWED_IMAGE_TYPES } from "@/lib/media/validation";
 const BATCH_SIZE = 500;
 const REPAIR_CONCURRENCY = 2;
 const MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024;
+const MAX_DURATION_MS = 10 * 60 * 1000;
+export const maxDuration = 800;
 const repairState = globalThis as typeof globalThis & {
   __thumbnailRepairRunning?: boolean;
 };
@@ -45,11 +39,12 @@ async function mapLimit<T, R>(
   items: T[],
   limit: number,
   fn: (item: T) => Promise<R>,
+  shouldContinue?: () => boolean,
 ) {
   const results: R[] = [];
   let index = 0;
   async function worker() {
-    while (index < items.length) {
+    while (index < items.length && (shouldContinue?.() ?? true)) {
       const current = items[index++];
       results.push(await fn(current));
     }
@@ -84,29 +79,6 @@ async function getObjectBuffer(keys: string[], maxBytes: number) {
       return Buffer.concat(chunks, size);
     } catch (error) {
       lastError = error;
-    }
-  }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("No source object found");
-}
-
-async function downloadObjectToFile(keys: string[], outputPath: string) {
-  let lastError: unknown;
-  for (const key of keys) {
-    try {
-      const response = await s3Client.send(
-        new GetObjectCommand({ Bucket: process.env.S3_BUCKET_NAME, Key: key }),
-      );
-      if (!response.Body) throw new Error("S3 object had no body");
-      await pipeline(
-        response.Body as Readable,
-        createWriteStream(outputPath, { flags: "w" }),
-      );
-      return;
-    } catch (error) {
-      lastError = error;
-      await unlink(outputPath).catch(() => {});
     }
   }
   throw lastError instanceof Error
@@ -165,57 +137,6 @@ async function fallbackImageThumbnail(
   return thumbnailS3Key;
 }
 
-async function fallbackVideoThumbnail(
-  inputPath: string,
-  mediaId: string,
-  tags: Record<string, string>,
-) {
-  const tempDir = path.join(os.tmpdir(), "repair-thumbnails");
-  await mkdir(tempDir, { recursive: true });
-  const outputPath = path.join(tempDir, `${mediaId}-thumb.jpg`);
-  const timestamps = ["00:00:01.000", "00:00:00.000", "00:00:02.000", "10%"];
-  try {
-    for (const timestamp of timestamps) {
-      try {
-        const command = ffmpeg(inputPath).outputOptions([
-          "-frames:v 1",
-          "-q:v 3",
-        ]);
-        await runFfmpegCommand(command, () => {
-          command.screenshots({
-            count: 1,
-            folder: tempDir,
-            filename: `${mediaId}-thumb.jpg`,
-            timestamps: [timestamp],
-          });
-        });
-        if (existsSync(outputPath)) break;
-      } catch {
-        if (existsSync(outputPath)) break;
-      }
-    }
-    if (!existsSync(outputPath))
-      throw new Error("No video thumbnail extracted");
-    const thumbnailBuffer = await createSharp(await readFile(outputPath), {
-      failOn: "none",
-    })
-      .resize(400, 400, { fit: "cover", position: "center" })
-      .jpeg({ quality: 82, mozjpeg: true })
-      .toBuffer();
-    const thumbnailS3Key = getThumbnailS3Key(mediaId);
-    await uploadToS3(
-      thumbnailBuffer,
-      thumbnailS3Key,
-      "image/jpeg",
-      undefined,
-      tags,
-    );
-    return thumbnailS3Key;
-  } finally {
-    await unlink(outputPath).catch(() => {});
-  }
-}
-
 export async function GET(request: NextRequest) {
   const startedAt = Date.now();
   const authHeader = request.headers.get("authorization");
@@ -240,94 +161,71 @@ export async function GET(request: NextRequest) {
       orderBy: (m, { asc }) => [asc(m.id)],
       limit: BATCH_SIZE,
     });
-    const results = await mapLimit(rows, REPAIR_CONCURRENCY, async (item) => {
-      if (
-        item.mimeType.startsWith("image/") &&
-        !ALLOWED_IMAGE_TYPES.includes(item.mimeType)
-      ) {
-        return { repaired: 0, failed: 0 };
-      }
-      const hasThumbnail = item.thumbnailS3Key
-        ? await thumbnailIsValid(item.thumbnailS3Key)
-        : false;
-      if (hasThumbnail) return { repaired: 0, failed: 0 };
-      try {
-        const canonicalThumbnailS3Key = getThumbnailS3Key(item.id);
+    const results = await mapLimit(
+      rows,
+      REPAIR_CONCURRENCY,
+      async (item) => {
         if (
-          item.thumbnailS3Key !== canonicalThumbnailS3Key &&
-          (await thumbnailIsValid(canonicalThumbnailS3Key))
+          (item.mimeType.startsWith("image/") &&
+            !ALLOWED_IMAGE_TYPES.includes(item.mimeType)) ||
+          item.mimeType.startsWith("video/")
         ) {
-          await db
-            .update(media)
-            .set({ thumbnailS3Key: canonicalThumbnailS3Key })
-            .where(eq(media.id, item.id));
-          return { repaired: 1, failed: 0 };
+          return { repaired: 0, failed: 0 };
         }
-        const sourceKeys = [
-          item.s3Key,
-          item.blurredS3Key,
-          item.originalS3Key,
-        ].filter((key): key is string => Boolean(key));
-        const tags = { uploadedBy: item.uploadedById, eventId: item.eventId };
-        let thumbnailS3Key: string | null = null;
-        if (item.mimeType.startsWith("video/")) {
-          const tempDir = path.join(os.tmpdir(), "repair-thumbnails");
-          await mkdir(tempDir, { recursive: true });
-          const sourcePath = path.join(tempDir, `${item.id}-source`);
-          try {
-            await downloadObjectToFile(sourceKeys, sourcePath);
-            thumbnailS3Key = await generateAndUploadThumbnail(
-              sourcePath,
-              item.mimeType,
-              item.id,
-              undefined,
-              tags,
-            );
-            if (!thumbnailS3Key) {
-              thumbnailS3Key = await fallbackVideoThumbnail(
-                sourcePath,
-                item.id,
-                tags,
-              );
-            }
-          } finally {
-            await unlink(sourcePath).catch(() => {});
+        const hasThumbnail = item.thumbnailS3Key
+          ? await thumbnailIsValid(item.thumbnailS3Key)
+          : false;
+        if (hasThumbnail) return { repaired: 0, failed: 0 };
+        try {
+          const canonicalThumbnailS3Key = getThumbnailS3Key(item.id);
+          if (
+            item.thumbnailS3Key !== canonicalThumbnailS3Key &&
+            (await thumbnailIsValid(canonicalThumbnailS3Key))
+          ) {
+            await db
+              .update(media)
+              .set({ thumbnailS3Key: canonicalThumbnailS3Key })
+              .where(eq(media.id, item.id));
+            return { repaired: 1, failed: 0 };
           }
-        } else {
           const buffer = await getObjectBuffer(
-            sourceKeys,
+            [item.s3Key, item.blurredS3Key, item.originalS3Key].filter(
+              (key): key is string => Boolean(key),
+            ),
             MAX_BUFFERED_IMAGE_BYTES,
           );
-          thumbnailS3Key = await generateAndUploadThumbnail(
+          const tags = { uploadedBy: item.uploadedById, eventId: item.eventId };
+          let thumbnailS3Key = await generateAndUploadThumbnail(
             buffer,
             item.mimeType,
             item.id,
             undefined,
             tags,
           );
-          if (!thumbnailS3Key && item.mimeType.startsWith("image/")) {
+          if (!thumbnailS3Key) {
             thumbnailS3Key = await fallbackImageThumbnail(
               buffer,
               item.id,
               tags,
             );
           }
+          if (!thumbnailS3Key)
+            throw new Error("Thumbnail generation returned null");
+          await db
+            .update(media)
+            .set({ thumbnailS3Key })
+            .where(eq(media.id, item.id));
+          return { repaired: 1, failed: 0 };
+        } catch (error) {
+          logger.error(
+            { mediaId: item.id, error: serializeError(error) },
+            "thumbnail repair failed",
+          );
+          return { repaired: 0, failed: 1 };
         }
-        if (!thumbnailS3Key)
-          throw new Error("Thumbnail generation returned null");
-        await db
-          .update(media)
-          .set({ thumbnailS3Key })
-          .where(eq(media.id, item.id));
-        return { repaired: 1, failed: 0 };
-      } catch (error) {
-        logger.error(
-          { mediaId: item.id, error: serializeError(error) },
-          "thumbnail repair failed",
-        );
-        return { repaired: 0, failed: 1 };
-      }
-    });
+      },
+      () => Date.now() - startedAt < MAX_DURATION_MS,
+    );
     const repaired = results.reduce((sum, result) => sum + result.repaired, 0);
     const failed = results.reduce((sum, result) => sum + result.failed, 0);
     const nextCursor =

@@ -2,10 +2,14 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-if (!process.env.DATABASE_URL) {
+const isNextBuild = process.env.NEXT_PHASE === "phase-production-build";
+
+if (!process.env.DATABASE_URL && !isNextBuild) {
   throw new Error("DATABASE_URL environment variable is not set");
 }
-const connectionString = process.env.DATABASE_URL;
+const connectionString =
+  process.env.DATABASE_URL ??
+  "postgres://build:build@127.0.0.1:5432/build_placeholder";
 const globalQueryClient = global as unknown as {
   queryClient?: postgres.Sql;
 };

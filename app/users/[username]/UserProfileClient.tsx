@@ -93,7 +93,7 @@ interface Event {
   location: string | null;
   locationCity?: string | null;
   visibility?: "public" | "unlisted" | "auth_required";
-  bannerS3Key: string | null;
+  bannerS3Key?: string | null;
   bannerUrl?: string | null;
   joinedAt?: Date;
   series?: {

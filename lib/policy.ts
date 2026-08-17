@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   eventAdmins,
@@ -325,7 +325,7 @@ export async function getUserContext(
 ): Promise<UserContext | null> {
   if (!userId) return null;
   const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
+    where: and(eq(users.id, userId), isNull(users.deletedAt)),
     columns: {
       id: true,
       slackId: true,

@@ -6,15 +6,16 @@ import { media } from "@/lib/db/schema";
 import { logger, serializeError } from "@/lib/logger";
 import { extractExifData } from "@/lib/media/exif";
 import { createSharp } from "@/lib/media/image-processing";
-import { getSignedDownloadUrl, S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
+import { S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
 import { ALLOWED_IMAGE_TYPES } from "@/lib/media/validation";
-import { extractVideoMetadata } from "@/lib/media/video-metadata";
+import { extractVideoMetadataFromS3Key } from "@/lib/media/video-metadata";
 
 const BATCH_SIZE = 200;
 const REPAIR_CONCURRENCY = 8;
-const MAX_DURATION_MS = 2 * 60 * 60 * 1000;
+const MAX_DURATION_MS = 10 * 60 * 1000;
 const PER_MEDIA_TIMEOUT_MS = 45_000;
 const IMAGE_RANGE_STEPS = [2 * 1024 * 1024, 8 * 1024 * 1024];
+export const maxDuration = 800;
 const repairState = globalThis as typeof globalThis & {
   __exifRepairRunning?: boolean;
 };
@@ -111,8 +112,7 @@ async function extractVideoMetadataFromKeys(keys: string[]) {
   let lastError: unknown;
   for (const key of keys) {
     try {
-      const signedUrl = await getSignedDownloadUrl(key, 5 * 60);
-      const metadata = await extractVideoMetadata(signedUrl, {
+      const metadata = await extractVideoMetadataFromS3Key(key, {
         timeoutMs: PER_MEDIA_TIMEOUT_MS,
       });
       if (metadata) return metadata;
@@ -253,6 +253,7 @@ async function repairExifForMedia(item: MediaRow) {
         longitude,
         width,
         height,
+        duration: (finalExif?.duration as number | undefined) ?? item.duration,
       })
       .where(eq(media.id, item.id));
     return { scanned: 1, skipped: 0, repaired: 1, failed: 0 };

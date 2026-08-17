@@ -14,7 +14,7 @@ import {
   MAX_BUFFERED_IMAGE_BYTES,
   withMediaBufferingSlot,
 } from "@/lib/media/image-processing";
-import { S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
+import { getSignedUploadUrl, S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
 import {
   generateAndUploadThumbnail,
   getThumbnailS3Key,
@@ -192,6 +192,139 @@ async function regenerateAndFetchValidThumbnail(
   return await fetchValidThumbnail(regeneratedThumbnailKey, request);
 }
 
+async function isAllowedToViewMedia(
+  mediaItem: typeof media.$inferSelect & {
+    event: {
+      visibility: string;
+    };
+  },
+  request: NextRequest,
+) {
+  if (mediaItem.event.visibility === "public") {
+    return true;
+  }
+  let { user } = await getUserContext();
+  if (!user) {
+    const mobileToken = request.nextUrl.searchParams.get("mobileToken");
+    const sessionUser = mobileToken
+      ? await verifySessionToken(mobileToken)
+      : null;
+    if (sessionUser) {
+      const dbUser = await db.query.users.findFirst({
+        where: eq(users.id, sessionUser.id),
+        columns: {
+          id: true,
+          slackId: true,
+          isGlobalAdmin: true,
+          isBanned: true,
+        },
+        with: {
+          seriesAdminRoles: { columns: { seriesId: true } },
+          eventAdminRoles: { columns: { eventId: true } },
+        },
+      });
+      if (dbUser && !dbUser.isBanned) {
+        user = {
+          id: dbUser.id,
+          slackId: dbUser.slackId,
+          isGlobalAdmin: dbUser.isGlobalAdmin,
+          isBanned: dbUser.isBanned || false,
+          seriesAdmins: dbUser.seriesAdminRoles,
+          eventAdmins: dbUser.eventAdminRoles,
+        };
+      }
+    }
+  }
+  if (user) {
+    return await can(user, "view", "media", mediaItem);
+  }
+  return false;
+}
+
+const videoThumbnailUploadGlobal = globalThis as typeof globalThis & {
+  __photosPendingVideoThumbnailUploads?: Map<string, Promise<string>>;
+};
+const pendingVideoThumbnailUploads =
+  videoThumbnailUploadGlobal.__photosPendingVideoThumbnailUploads ?? new Map();
+videoThumbnailUploadGlobal.__photosPendingVideoThumbnailUploads =
+  pendingVideoThumbnailUploads;
+
+export async function POST(
+  request: NextRequest,
+  {
+    params,
+  }: {
+    params: Promise<{
+      mediaId: string;
+      variant?: string[];
+    }>;
+  },
+) {
+  const { mediaId } = await params;
+  if (!/^[0-9a-f-]{36}$/i.test(mediaId)) {
+    return new NextResponse("Media not found", { status: 404 });
+  }
+  const mediaItem = await db.query.media.findFirst({
+    where: eq(media.id, mediaId),
+    with: {
+      event: true,
+    },
+  });
+  if (!mediaItem) {
+    return new NextResponse("Media not found", { status: 404 });
+  }
+  if (!mediaItem.mimeType.startsWith("video/")) {
+    return NextResponse.json(
+      { error: "Video thumbnails are generated client-side" },
+      { status: 415 },
+    );
+  }
+  if (mediaItem.blurStatus === "pending") {
+    return NextResponse.json(
+      { error: "This media is currently under review" },
+      { status: 423 },
+    );
+  }
+  if (!(await isAllowedToViewMedia(mediaItem, request))) {
+    return new NextResponse("Unauthorized", { status: 401 });
+  }
+  const canonicalThumbnailS3Key = getThumbnailS3Key(mediaItem.id);
+  if (mediaItem.thumbnailS3Key) {
+    return NextResponse.json({ uploadUrl: null, exists: true });
+  }
+  const existing = pendingVideoThumbnailUploads.get(mediaItem.id);
+  if (existing) {
+    try {
+      return NextResponse.json({ uploadUrl: await existing, exists: false });
+    } catch {
+      return NextResponse.json(
+        { error: "Thumbnail upload URL generation failed" },
+        { status: 500 },
+      );
+    }
+  }
+  const generation = getSignedUploadUrl(
+    canonicalThumbnailS3Key,
+    "image/jpeg",
+    5 * 60,
+  );
+  pendingVideoThumbnailUploads.set(mediaItem.id, generation);
+  try {
+    const uploadUrl = await generation;
+    return NextResponse.json({ uploadUrl, exists: false });
+  } catch (error) {
+    logger.error("Failed to generate video thumbnail upload URL:", error);
+    return NextResponse.json(
+      { error: "Thumbnail upload URL generation failed" },
+      { status: 500 },
+    );
+  } finally {
+    if (pendingVideoThumbnailUploads.get(mediaItem.id) === generation) {
+      pendingVideoThumbnailUploads.delete(mediaItem.id);
+    }
+  }
+}
+
 export async function GET(
   request: NextRequest,
   {
@@ -232,46 +365,7 @@ export async function GET(
       { status: 423 },
     );
   }
-  let isAllowed = false;
-  if (mediaItem.event.visibility === "public") {
-    isAllowed = true;
-  } else {
-    let { user } = await getUserContext();
-    if (!user) {
-      const mobileToken = searchParams.get("mobileToken");
-      const sessionUser = mobileToken
-        ? await verifySessionToken(mobileToken)
-        : null;
-      if (sessionUser) {
-        const dbUser = await db.query.users.findFirst({
-          where: eq(users.id, sessionUser.id),
-          columns: {
-            id: true,
-            slackId: true,
-            isGlobalAdmin: true,
-            isBanned: true,
-          },
-          with: {
-            seriesAdminRoles: { columns: { seriesId: true } },
-            eventAdminRoles: { columns: { eventId: true } },
-          },
-        });
-        if (dbUser && !dbUser.isBanned) {
-          user = {
-            id: dbUser.id,
-            slackId: dbUser.slackId,
-            isGlobalAdmin: dbUser.isGlobalAdmin,
-            isBanned: dbUser.isBanned || false,
-            seriesAdmins: dbUser.seriesAdminRoles,
-            eventAdmins: dbUser.eventAdminRoles,
-          };
-        }
-      }
-    }
-    if (user) {
-      isAllowed = await can(user, "view", "media", mediaItem);
-    }
-  }
+  const isAllowed = await isAllowedToViewMedia(mediaItem, request);
   if (!isAllowed) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
@@ -282,6 +376,13 @@ export async function GET(
     return new NextResponse("Unsupported image format", {
       status: 415,
     });
+  }
+  if (
+    variant === "thumbnail" &&
+    mediaItem.mimeType.startsWith("video/") &&
+    !mediaItem.thumbnailS3Key
+  ) {
+    return new NextResponse("Thumbnail not available", { status: 404 });
   }
   let s3Key = mediaItem.s3Key;
   let filename = contentDispositionFilename(mediaItem.filename);
@@ -401,19 +502,13 @@ export async function GET(
     headers.set("CDN-Cache-Control", "no-store");
     headers.set("Cloudflare-CDN-Cache-Control", "no-store");
   } else if (mediaItem.event.visibility === "public") {
-    const browserCache =
-      variant === "thumbnail"
-        ? "public, max-age=31536000, immutable"
-        : "public, max-age=86400, stale-while-revalidate=604800";
-    const cdnCache =
-      variant === "thumbnail"
-        ? "public, max-age=31536000, immutable"
-        : "public, max-age=31536000, stale-while-revalidate=604800";
+    const browserCache = "public, max-age=3600, stale-while-revalidate=86400";
+    const cdnCache = "public, max-age=3600, stale-while-revalidate=86400";
     headers.set("Cache-Control", browserCache);
     headers.set("CDN-Cache-Control", cdnCache);
     headers.set("Cloudflare-CDN-Cache-Control", cdnCache);
   } else {
-    headers.set("Cache-Control", "private, max-age=3600");
+    headers.set("Cache-Control", "private, no-store");
   }
   if (download) {
     headers.set("Content-Disposition", `attachment; filename="${filename}"`);

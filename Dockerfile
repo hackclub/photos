@@ -17,12 +17,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN bun run build
 
-FROM mwader/static-ffmpeg:8.1.1 AS ffmpeg
-
-FROM oven/bun:1.3.6 AS runtime-deps
-COPY --from=ffmpeg /ffmpeg /ffprobe /usr/local/bin/
-
-FROM runtime-deps AS runner
+FROM oven/bun:1.3.6 AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

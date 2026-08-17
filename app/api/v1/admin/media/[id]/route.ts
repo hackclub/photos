@@ -184,7 +184,12 @@ export async function DELETE(
   try {
     const item = await getMedia(id);
     if (!item) return Response.json({ error: "Not found" }, { status: 404 });
-    await deleteMediaAndThumbnail(item.s3Key, item.thumbnailS3Key);
+    await deleteMediaAndThumbnail(item.s3Key, item.thumbnailS3Key, [
+      item.originalS3Key,
+      item.originalThumbnailS3Key,
+      item.blurredS3Key,
+      item.blurredThumbnailS3Key,
+    ]);
     await db.delete(media).where(eq(media.id, id));
     await auditLog(auth.user.id, "delete", "media", id, {
       viaAdminApiKey: true,

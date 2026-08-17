@@ -1,5 +1,6 @@
 "use server";
 import { randomUUID } from "node:crypto";
+import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { and, eq, inArray, or } from "drizzle-orm";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { auditLog } from "@/lib/audit";
@@ -9,10 +10,18 @@ import { db } from "@/lib/db";
 import { eventParticipants, events, media, series } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { extractExifData } from "@/lib/media/exif";
-import { deleteFromS3, getMediaProxyUrl, uploadToS3 } from "@/lib/media/s3";
+import { createSharp } from "@/lib/media/image-processing";
+import {
+  deleteFromS3,
+  getMediaProxyUrl,
+  S3_BUCKET_NAME,
+  s3Client,
+  uploadToS3,
+} from "@/lib/media/s3";
 import {
   deleteMediaAndThumbnail,
   generateAndUploadThumbnail,
+  getThumbnailS3Key,
   processBanner,
   processImageUpload,
 } from "@/lib/media/thumbnail";
@@ -27,6 +36,79 @@ import { publicMedia } from "@/lib/public-data";
 import { checkStorageLimit } from "@/lib/storage";
 
 const MAX_DIRECT_ACTION_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+export async function markMediaThumbnailReady(mediaId: string) {
+  try {
+    const session = await getSession();
+    if (!session) return { success: false, error: "Unauthorized" };
+    const user = await getUserContext(session.id);
+    if (!user) return { success: false, error: "Unauthorized" };
+    if (!/^[0-9a-f-]{36}$/i.test(mediaId)) {
+      return { success: false, error: "Invalid media ID" };
+    }
+    const item = await db.query.media.findFirst({
+      where: eq(media.id, mediaId),
+      with: { event: true },
+    });
+    if (!item) return { success: false, error: "Media not found" };
+    if (item.thumbnailS3Key) return { success: true };
+    if (!item.mimeType.startsWith("video/")) {
+      return { success: false, error: "Unsupported media type" };
+    }
+    if (!(await can(user, "view", "media", item))) {
+      return { success: false, error: "Forbidden" };
+    }
+    const canonicalThumbnailS3Key = getThumbnailS3Key(mediaId);
+    let contentLength: number | undefined;
+    try {
+      const head = await s3Client.send(
+        new HeadObjectCommand({
+          Bucket: S3_BUCKET_NAME,
+          Key: canonicalThumbnailS3Key,
+        }),
+      );
+      contentLength = head.ContentLength;
+    } catch {
+      return { success: false, error: "Thumbnail not uploaded yet" };
+    }
+    if (!contentLength || contentLength > 5 * 1024 * 1024) {
+      return { success: false, error: "Invalid thumbnail size" };
+    }
+    const object = await s3Client.send(
+      new GetObjectCommand({
+        Bucket: S3_BUCKET_NAME,
+        Key: canonicalThumbnailS3Key,
+      }),
+    );
+    if (!object.Body) {
+      return { success: false, error: "Thumbnail not uploaded yet" };
+    }
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for await (const chunk of object.Body as AsyncIterable<Uint8Array>) {
+      size += chunk.length;
+      if (size > 5 * 1024 * 1024) {
+        return { success: false, error: "Invalid thumbnail size" };
+      }
+      chunks.push(chunk);
+    }
+    const thumbnail = Buffer.concat(chunks, size);
+    const metadata = await createSharp(thumbnail, {
+      failOn: "none",
+    }).metadata();
+    if (metadata.format !== "jpeg" || !metadata.width || !metadata.height) {
+      return { success: false, error: "Invalid thumbnail format" };
+    }
+    await db
+      .update(media)
+      .set({ thumbnailS3Key: canonicalThumbnailS3Key })
+      .where(eq(media.id, mediaId));
+    return { success: true };
+  } catch (error) {
+    logger.error("Error marking media thumbnail ready:", error);
+    return { success: false, error: "Failed to mark thumbnail ready" };
+  }
+}
 export async function uploadBanner(
   entityType: "event" | "series",
   entityId: string,
@@ -443,6 +525,7 @@ async function uploadMediaInternal(formData: FormData) {
           exifData,
           width,
           height,
+          duration: (exifData?.duration as number | undefined) ?? null,
           takenAt,
           latitude,
           longitude,
@@ -534,7 +617,12 @@ export async function deleteMedia(mediaId: string) {
     if (!(await can(user, "delete", "media", mediaItem))) {
       return { success: false, error: "Forbidden" };
     }
-    await deleteMediaAndThumbnail(mediaItem.s3Key, mediaItem.thumbnailS3Key);
+    await deleteMediaAndThumbnail(mediaItem.s3Key, mediaItem.thumbnailS3Key, [
+      mediaItem.originalS3Key,
+      mediaItem.originalThumbnailS3Key,
+      mediaItem.blurredS3Key,
+      mediaItem.blurredThumbnailS3Key,
+    ]);
     await db.delete(media).where(eq(media.id, mediaId));
     await auditLog(user.id, "delete", "media", mediaId);
     try {

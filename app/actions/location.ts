@@ -9,8 +9,8 @@ export async function searchLocation(query: string) {
   try {
     const session = await getSession();
     const user = await getUserContext(session?.id);
-    if (user?.isBanned) {
-      return { success: true, locations: [] };
+    if (!user || user.isBanned) {
+      return { success: false, error: "Unauthorized" };
     }
     const response = await fetch(
       `${NOMINATIM_API_URL}/search?format=json&q=${encodeURIComponent(normalizedQuery)}&limit=1&addressdetails=1`,
@@ -18,6 +18,7 @@ export async function searchLocation(query: string) {
         headers: {
           "User-Agent": "Hack Club Photos App",
         },
+        signal: AbortSignal.timeout(5_000),
       },
     );
     if (!response.ok) throw new Error("Failed to search location");

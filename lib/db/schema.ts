@@ -199,6 +199,7 @@ export const media = pgTable(
     fileSize: bigint("file_size", { mode: "number" }).notNull(),
     width: integer("width"),
     height: integer("height"),
+    duration: doublePrecision("duration"),
     latitude: doublePrecision("latitude"),
     longitude: doublePrecision("longitude"),
     exifData: jsonb("exif_data"),

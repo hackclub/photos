@@ -27,16 +27,12 @@ import {
   S3_BUCKET_NAME,
   s3Client,
 } from "@/lib/media/s3";
-import {
-  generateAndUploadThumbnail,
-  getThumbnailS3Key,
-  processImageUpload,
-} from "@/lib/media/thumbnail";
+import { getThumbnailS3Key, processImageUpload } from "@/lib/media/thumbnail";
 import {
   isUnsupportedImageBuffer,
   validateMediaFile,
 } from "@/lib/media/validation";
-import { extractVideoMetadata } from "@/lib/media/video-metadata";
+import { extractVideoMetadataFromS3Key } from "@/lib/media/video-metadata";
 import { can, getUserContext } from "@/lib/policy";
 import { publicMedia } from "@/lib/public-data";
 import { checkStorageLimit } from "@/lib/storage";
@@ -560,52 +556,33 @@ export async function finalizeUpload(
       } else if (data.mimeType.startsWith("video/")) {
         try {
           await withVideoStagingSlot(async () => {
-            const getCommand = new GetObjectCommand({
-              Bucket: S3_BUCKET_NAME,
-              Key: data.s3Key,
-            });
-            const s3Object = await s3Client.send(getCommand);
-            if (!s3Object.Body) return;
-            const { writeFile, unlink } = await import("node:fs/promises");
-            const { join } = await import("node:path");
-            const { tmpdir } = await import("node:os");
-            const tempFilePath = join(
-              tmpdir(),
-              `video-${mediaId}-${randomUUID()}.tmp`,
+            const videoMetadata = await extractVideoMetadataFromS3Key(
+              data.s3Key,
             );
-            try {
-              const stream = s3Object.Body as NodeJS.ReadableStream;
-              await writeFile(tempFilePath, stream);
-              const metadataPromise = extractVideoMetadata(tempFilePath);
-              const thumbnailPromise = generateAndUploadThumbnail(
-                tempFilePath,
-                data.mimeType,
-                mediaId,
-                undefined,
-                { uploadedBy: user.id, eventId },
-                undefined,
-              );
-              const [videoMetadata, generatedThumbnailKey] = await Promise.all([
-                metadataPromise,
-                thumbnailPromise,
-              ]);
-              if (videoMetadata) {
-                serverExifData = {
-                  width: videoMetadata.width,
-                  height: videoMetadata.height,
-                  dateTimeOriginal: videoMetadata.creationTime,
-                  duration: videoMetadata.duration,
-                  make: videoMetadata.make,
-                  model: videoMetadata.model,
-                  gpsLatitude: videoMetadata.latitude,
-                  gpsLongitude: videoMetadata.longitude,
-                };
-              }
-              if (generatedThumbnailKey) {
-                thumbnailS3Key = generatedThumbnailKey;
-              }
-            } finally {
-              await unlink(tempFilePath).catch(() => {});
+            if (videoMetadata) {
+              serverExifData = {
+                width: videoMetadata.width ?? undefined,
+                height: videoMetadata.height ?? undefined,
+                dateTimeOriginal: videoMetadata.creationTime,
+                duration: videoMetadata.duration,
+                make: videoMetadata.make,
+                model: videoMetadata.model,
+                gpsLatitude: videoMetadata.latitude,
+                gpsLongitude: videoMetadata.longitude,
+                codecName: videoMetadata.codecName,
+                codecLongName: videoMetadata.codecLongName,
+                pixelFormat: videoMetadata.pixelFormat,
+                rotation: videoMetadata.rotation,
+                frameRate: videoMetadata.frameRate,
+                formatName: videoMetadata.formatName,
+                formatLongName: videoMetadata.formatLongName,
+                ...(videoMetadata.formatTags
+                  ? { formatTags: videoMetadata.formatTags }
+                  : {}),
+                ...(videoMetadata.streamTags
+                  ? { streamTags: videoMetadata.streamTags }
+                  : {}),
+              };
             }
           });
         } catch (e) {
@@ -640,6 +617,7 @@ export async function finalizeUpload(
         exifData: finalExifData,
         width: (finalExifData?.width as number | undefined) || data.width,
         height: (finalExifData?.height as number | undefined) || data.height,
+        duration: (finalExifData?.duration as number | undefined) ?? null,
         latitude,
         longitude,
         takenAt: takenAt,

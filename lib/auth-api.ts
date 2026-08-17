@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -48,6 +48,7 @@ export async function validateApiKey(requireUpload: boolean = false) {
             slackId: true,
             isGlobalAdmin: true,
             isBanned: true,
+            deletedAt: true,
             storageLimit: true,
           },
         },
@@ -56,7 +57,7 @@ export async function validateApiKey(requireUpload: boolean = false) {
     if (!apiKey) {
       return null;
     }
-    if (apiKey.user.isBanned) {
+    if (apiKey.user.isBanned || apiKey.user.deletedAt) {
       return null;
     }
     if (requireUpload && !apiKey.canUpload) {
@@ -125,7 +126,7 @@ export async function getUserContext(): Promise<{
     };
   }
   const user = await db.query.users.findFirst({
-    where: eq(users.id, session.id),
+    where: and(eq(users.id, session.id), isNull(users.deletedAt)),
     columns: {
       id: true,
       slackId: true,

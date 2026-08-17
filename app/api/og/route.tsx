@@ -24,11 +24,13 @@ export const runtime = "nodejs";
 const OG_BASE_URL =
   process.env.NEXT_PUBLIC_APP_URL || "https://photos.hackclub.com";
 const PUBLIC_IMAGE_CACHE_HEADERS = {
-  "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
-  "CDN-Cache-Control":
-    "public, max-age=31536000, stale-while-revalidate=604800",
+  "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+  "CDN-Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
   "Cloudflare-CDN-Cache-Control":
-    "public, max-age=31536000, stale-while-revalidate=604800",
+    "public, max-age=3600, stale-while-revalidate=86400",
+};
+const PRIVATE_IMAGE_CACHE_HEADERS = {
+  "Cache-Control": "private, no-store",
 };
 
 function absoluteUrl(path: string) {
@@ -41,6 +43,7 @@ function baseCard(
   icon?: React.ReactNode,
   label?: string,
   image?: string,
+  isPublic = true,
 ) {
   return new ImageResponse(
     <div
@@ -192,7 +195,13 @@ function baseCard(
         }}
       />
     </div>,
-    { width: 1200, height: 630, headers: PUBLIC_IMAGE_CACHE_HEADERS },
+    {
+      width: 1200,
+      height: 630,
+      headers: isPublic
+        ? PUBLIC_IMAGE_CACHE_HEADERS
+        : PRIVATE_IMAGE_CACHE_HEADERS,
+    },
   );
 }
 
@@ -234,6 +243,7 @@ export async function GET(request: Request) {
         <HiCalendar style={{ width: 64, height: 64 }} />,
         "Event",
         bannerUrl,
+        event.visibility === "public",
       );
     }
     if (type === "series" && id) {
@@ -255,6 +265,7 @@ export async function GET(request: Request) {
         <HiRectangleStack style={{ width: 64, height: 64 }} />,
         "Series",
         bannerUrl,
+        seriesData.visibility === "public",
       );
     }
     if (type === "user" && id) {

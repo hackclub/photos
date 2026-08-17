@@ -364,6 +364,7 @@ async function handlePost(req: NextRequest) {
           globalAdminOnlyDelete,
           width,
           height,
+          duration: (exifData?.duration as number | undefined) ?? null,
           takenAt,
           latitude,
           longitude,

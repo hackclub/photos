@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { EncryptJWT, jwtDecrypt, jwtVerify, SignJWT } from "jose";
 import { cookies, headers } from "next/headers";
 import { HACK_CLUB_AUTH_URL } from "@/lib/constants";
@@ -11,8 +11,9 @@ import { db } from "./db";
 import { users } from "./db/schema";
 
 const nextAuthSecret = process.env.NEXTAUTH_SECRET;
+const isNextBuild = process.env.NEXT_PHASE === "phase-production-build";
 
-if (!nextAuthSecret) {
+if (!nextAuthSecret && !isNextBuild) {
   if (process.env.NODE_ENV === "production") {
     throw new Error("NEXTAUTH_SECRET is required in production");
   }
@@ -306,6 +307,9 @@ export async function createOrUpdateUser(
   });
 
   if (existingUser) {
+    if (existingUser.deletedAt) {
+      throw new Error("This account has been deleted");
+    }
     await db
       .update(users)
       .set({
@@ -373,7 +377,7 @@ export async function createOrUpdateUser(
 export async function refreshUser(userId: string) {
   try {
     const dbUser = await db.query.users.findFirst({
-      where: eq(users.id, userId),
+      where: and(eq(users.id, userId), isNull(users.deletedAt)),
     });
     if (!dbUser?.hcaAccessToken) return null;
 

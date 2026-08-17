@@ -21,6 +21,7 @@ import ConfirmModal from "../ui/ConfirmModal";
 import ServerActionModal from "../ui/ServerActionModal";
 import ChangeOwnerModal from "./ChangeOwnerModal";
 import MediaGalleryToolbar from "./MediaGalleryToolbar";
+import OnDemandVideoThumb from "./OnDemandVideoThumb";
 import VideoIndicator from "./VideoIndicator";
 
 const PhotoDetailModal = dynamic(() => import("./PhotoDetailModal"), {
@@ -556,7 +557,14 @@ export default function MediaGallery({
                     alt={item.filename}
                   />
 
-                  {isVideo && url && <VideoIndicator size="lg" />}
+                  {isVideo && !item.thumbnailS3Key && (
+                    <OnDemandVideoThumb
+                      mediaId={item.id}
+                      className="absolute inset-0 h-full w-full"
+                    />
+                  )}
+
+                  {isVideo && <VideoIndicator size="lg" />}
 
                   {sortBy === "date" && (
                     <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-lg bg-black/70 px-2 py-1 text-xs text-white backdrop-blur-sm">

@@ -12,6 +12,7 @@
       "!**/.VSCodeCounter",
       "!**/node_modules",
       "!**/.next",
+      "!roc-*",
       "!mobile"
     ]
   },

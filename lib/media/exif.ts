@@ -56,6 +56,7 @@ function toJsonSafeExifValue(value: unknown): unknown {
 function toJsonSafeExif(exif: Record<string, unknown>) {
   const safeExif: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(exif)) {
+    if (key === "Thumbnail" || key === "Screenshot") continue;
     const safeValue = toJsonSafeExifValue(value);
     if (safeValue !== undefined) safeExif[key] = safeValue;
   }
@@ -84,6 +85,8 @@ export async function extractExifData(
       return await exifr.parse(buf, {
         gps: true,
         mergeOutput: true,
+        xmp: true,
+        iptc: true,
         ...(isTiff ? { tiff: true } : {}),
       });
     };
