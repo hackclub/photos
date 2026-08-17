@@ -75,7 +75,7 @@ Set the project Node.js version to `24.x` if it is not detected from `package.js
 
 The application runs on Vercel, but its stateful services remain external:
 
-- Postgres: use a pooled connection for `DATABASE_URL` and a direct connection for `MIGRATION_DATABASE_URL` when available. Vercel uses at most two runtime connections per function instance.
+- Postgres: use a pooled connection for `DATABASE_URL` and a direct connection for `MIGRATION_DATABASE_URL` when available. Each function instance pools up to `DATABASE_MAX_CONNECTIONS` (default 40) through the pooler.
 - Redis: set `REDIS_URL`. Production uses Redis for distributed rate limits, multipart-upload state, and short-lived phone capture handoffs.
 - S3-compatible storage: set the S3 variables below and configure bucket CORS for the production domain and any preview domains that need browser uploads.
 - Vision worker: deploy `services/vision-worker/Dockerfile` on Linux x64 and keep its HTTP endpoint private.
