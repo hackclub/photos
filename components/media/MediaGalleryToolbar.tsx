@@ -5,6 +5,7 @@ import {
   HiCalendar,
   HiCheckCircle,
   HiClock,
+  HiFaceSmile,
   HiHeart,
   HiPhoto,
   HiPlay,
@@ -95,29 +96,14 @@ export default function MediaGalleryToolbar({
         )}
 
         {!selectionMode ? (
-          <div className="flex items-center gap-2">
-            {showIncludesMe ? (
-              <button
-                type="button"
-                onClick={onIncludesMeClick}
-                className={`flex min-h-11 items-center rounded-full border px-4 py-2 text-sm font-medium transition ${
-                  includesMeActive
-                    ? "border-red-600 bg-red-600 text-white"
-                    : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800"
-                }`}
-              >
-                Find me
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setSelectionMode(true)}
-              className="flex min-h-11 items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium transition hover:border-zinc-700 hover:bg-zinc-800"
-            >
-              <HiCheckCircle className="w-5 h-5" />
-              <span className="hidden sm:inline">Select</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setSelectionMode(true)}
+            className="flex min-h-11 items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium transition hover:border-zinc-700 hover:bg-zinc-800"
+          >
+            <HiCheckCircle className="w-5 h-5" />
+            <span className="hidden sm:inline">Select</span>
+          </button>
         ) : null}
       </div>
 
@@ -211,6 +197,20 @@ export default function MediaGalleryToolbar({
             </button>
           </div>
         )}
+        {!selectionMode && showIncludesMe ? (
+          <button
+            type="button"
+            onClick={onIncludesMeClick}
+            className={`flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition sm:ml-auto ${
+              includesMeActive
+                ? "border-red-600 bg-red-600 text-white"
+                : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800"
+            }`}
+          >
+            <HiFaceSmile className="w-5 h-5" />
+            <span>Find me</span>
+          </button>
+        ) : null}
       </div>
     </div>
   );
