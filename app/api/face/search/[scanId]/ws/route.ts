@@ -1,5 +1,5 @@
 import { experimental_upgradeWebSocket } from "@vercel/functions";
-import { and, count, eq, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -24,7 +24,10 @@ async function getProgress(eventId: string) {
       .from(mediaFaceScans)
       .innerJoin(media, eq(media.id, mediaFaceScans.mediaId))
       .where(
-        and(eq(media.eventId, eventId), eq(mediaFaceScans.status, "ready")),
+        and(
+          eq(media.eventId, eventId),
+          inArray(mediaFaceScans.status, ["ready", "skipped"]),
+        ),
       ),
   ]);
   return { indexed: ready?.count ?? 0, total: total?.count ?? 0 };
