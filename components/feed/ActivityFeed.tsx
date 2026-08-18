@@ -58,8 +58,10 @@ export default function ActivityFeed({
   const itemsLengthRef = useRef(0);
   const itemsRef = useRef<FeedItemType[]>([]);
   const isFetchingRef = useRef(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [isLive, setIsLive] = useState(false);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [newlyAddedIds, setNewlyAddedIds] = useState<Set<string>>(new Set());
@@ -152,16 +154,20 @@ export default function ActivityFeed({
     const maxReconnectDelay = 30000;
     const connect = () => {
       if (disposed) return;
-      eventSourceRef.current?.close();
-      const eventSource = new EventSource("/api/feed/stream");
-      eventSourceRef.current = eventSource;
-      eventSource.onopen = () => {
+      socketRef.current?.close();
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const socket = new WebSocket(
+        `${protocol}//${window.location.host}/api/feed/stream`,
+      );
+      socketRef.current = socket;
+      socket.onopen = () => {
         setIsLive(true);
         reconnectAttempt = 0;
         setReconnectAttempts(0);
       };
-      eventSource.onmessage = (event) => {
+      socket.onmessage = (event) => {
         try {
+          if (typeof event.data !== "string") return;
           const data = JSON.parse(event.data);
           if (
             (data.type === "new_photo" ||
@@ -220,36 +226,36 @@ export default function ActivityFeed({
             });
           }
         } catch (err) {
-          logger.error("SSE message parse error:", err);
+          logger.error("WebSocket message parse error:", err);
         }
       };
-      eventSource.onerror = (err) => {
-        if (disposed || eventSourceRef.current !== eventSource) return;
-        logger.error("[ActivityFeed] SSE error:", err);
+      socket.onerror = (err) => {
+        if (disposed || socketRef.current !== socket) return;
+        logger.error("[ActivityFeed] WebSocket error:", err);
         setIsLive(false);
-        if (
-          eventSource.readyState === EventSource.CLOSED &&
-          !reconnectTimeoutRef.current
-        ) {
-          reconnectAttempt++;
-          setReconnectAttempts(reconnectAttempt);
-          const delay = Math.min(
-            1000 * 2 ** (reconnectAttempt - 1),
-            maxReconnectDelay,
-          );
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectTimeoutRef.current = null;
-            connect();
-          }, delay) as unknown as NodeJS.Timeout;
-        }
+      };
+      socket.onclose = () => {
+        if (disposed || socketRef.current !== socket) return;
+        setIsLive(false);
+        if (reconnectTimeoutRef.current) return;
+        reconnectAttempt++;
+        setReconnectAttempts(reconnectAttempt);
+        const delay = Math.min(
+          1000 * 2 ** (reconnectAttempt - 1),
+          maxReconnectDelay,
+        );
+        reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = null;
+          connect();
+        }, delay);
       };
     };
     connect();
     return () => {
       disposed = true;
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
       }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
@@ -259,7 +265,7 @@ export default function ActivityFeed({
     };
   }, [type]);
   useEffect(() => {
-    if (eventSourceRef.current) {
+    if (type === "global" || socketRef.current) {
       return;
     }
     const pollForNew = async () => {
@@ -307,7 +313,7 @@ export default function ActivityFeed({
         clearInterval(pollIntervalRef.current);
       }
     };
-  }, [fetchData, pollInterval]);
+  }, [fetchData, pollInterval, type]);
   useEffect(() => {
     if (!loadMoreRef.current || !hasMore) return;
     observerRef.current = new IntersectionObserver(

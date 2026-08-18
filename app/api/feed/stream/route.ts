@@ -1,3 +1,8 @@
+import { randomUUID } from "node:crypto";
+import {
+  experimental_upgradeWebSocket,
+  type WebSocketData,
+} from "@vercel/functions";
 import { and, eq, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
@@ -11,63 +16,62 @@ import {
 } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import { can, getUserContext } from "@/lib/policy";
+import { getRedisClient } from "@/lib/rate-limit";
 import { toPublicUser } from "@/lib/user-display";
 
 type FeedClient = {
   userId?: string;
   heartbeat: ReturnType<typeof setInterval>;
   expires: ReturnType<typeof setTimeout>;
-  abortSignal: AbortSignal;
-  onAbort: () => void;
+  socket: WebSocket;
 };
 
 const feedGlobal = globalThis as typeof globalThis & {
-  __photosFeedClients?: Map<ReadableStreamDefaultController, FeedClient>;
+  __photosFeedClients?: Map<WebSocket, FeedClient>;
+  __photosFeedRedisSubscriber?: ReturnType<
+    NonNullable<ReturnType<typeof getRedisClient>>["duplicate"]
+  >;
+  __photosFeedRedisSubscriberPromise?: Promise<void>;
 };
 const clients = feedGlobal.__photosFeedClients ?? new Map();
 feedGlobal.__photosFeedClients = clients;
 const MAX_FEED_CLIENTS = 1_000;
 const MAX_FEED_CONNECTION_AGE_MS = 6 * 60 * 60 * 1000;
+const FEED_REDIS_CHANNEL = "photos:feed:updates";
+const MAX_SOCKET_BUFFERED_BYTES = 1_000_000;
+const instanceId = randomUUID();
 
-function removeClient(
-  controller: ReadableStreamDefaultController,
-  close = false,
-) {
-  const client = clients.get(controller);
+function removeClient(socket: WebSocket, close = false) {
+  const client = clients.get(socket);
   if (!client) return;
   clearInterval(client.heartbeat);
   clearTimeout(client.expires);
-  client.abortSignal.removeEventListener("abort", client.onAbort);
-  clients.delete(controller);
-  if (close) {
-    try {
-      controller.close();
-    } catch (_error) {}
-  }
+  clients.delete(socket);
+  if (close && socket.readyState === socket.OPEN) socket.close(1000);
 }
 
-function enqueueForClient(
-  controller: ReadableStreamDefaultController,
-  data: string,
-) {
-  if (controller.desiredSize !== null && controller.desiredSize <= 0) {
-    removeClient(controller, true);
+function sendToClient(socket: WebSocket, data: string) {
+  if (socket.readyState !== socket.OPEN) {
+    removeClient(socket);
     return false;
   }
-  controller.enqueue(data);
+  if (socket.bufferedAmount > MAX_SOCKET_BUFFERED_BYTES) {
+    removeClient(socket, true);
+    return false;
+  }
+  socket.send(data);
   return true;
 }
 
-export async function notifyFeedUpdate(activityData: Record<string, unknown>) {
+async function sendFeedUpdate(activityData: Record<string, unknown>) {
   const data = JSON.stringify(activityData);
   if (activityData.type === "photo_deleted") {
-    let _sent = 0;
-    for (const [controller] of clients.entries()) {
+    for (const [socket] of clients.entries()) {
       try {
-        if (enqueueForClient(controller, `data: ${data}\n\n`)) _sent++;
+        sendToClient(socket, data);
       } catch (err) {
-        logger.error("[SSE] Error sending to client (removing):", err);
-        removeClient(controller);
+        logger.error("[WebSocket] Error sending to client (removing):", err);
+        removeClient(socket);
       }
     }
     return;
@@ -77,77 +81,102 @@ export async function notifyFeedUpdate(activityData: Record<string, unknown>) {
   if (!event?.id) {
     return;
   }
-  let _sentCount = 0;
-  let _skipCount = 0;
-  for (const [controller, client] of clients.entries()) {
+  const clientEntries = [...clients.entries()];
+  const users = new Map(
+    await Promise.all(
+      [...new Set(clientEntries.map(([, client]) => client.userId))].map(
+        async (userId) => [userId, await getUserContext(userId)] as const,
+      ),
+    ),
+  );
+  for (const [socket, client] of clientEntries) {
     try {
-      const user = await getUserContext(client.userId);
-      if (user?.isBanned) {
-        _skipCount++;
-        continue;
-      }
-      const hasAccess = await can(user, "view", "event", event);
-      if (hasAccess) {
-        if (enqueueForClient(controller, `data: ${data}\n\n`)) _sentCount++;
-      } else {
-        _skipCount++;
+      const user = users.get(client.userId);
+      if (!user?.isBanned && (await can(user, "view", "event", event))) {
+        sendToClient(socket, data);
       }
     } catch (err) {
-      logger.error("[SSE] Error sending to client (removing):", err);
-      removeClient(controller);
+      logger.error("[WebSocket] Error sending to client (removing):", err);
+      removeClient(socket);
     }
   }
 }
+
+async function ensureRedisSubscriber() {
+  const redis = getRedisClient();
+  if (!redis) return;
+  if (!feedGlobal.__photosFeedRedisSubscriberPromise) {
+    const subscriber = redis.duplicate();
+    feedGlobal.__photosFeedRedisSubscriber = subscriber;
+    feedGlobal.__photosFeedRedisSubscriberPromise = (async () => {
+      if (subscriber.status === "wait") await subscriber.connect();
+      await subscriber.subscribe(FEED_REDIS_CHANNEL);
+      subscriber.on("message", (_channel, message) => {
+        try {
+          const envelope = JSON.parse(message) as {
+            origin: string;
+            activityData: Record<string, unknown>;
+          };
+          if (envelope.origin !== instanceId) {
+            void sendFeedUpdate(envelope.activityData);
+          }
+        } catch (error) {
+          logger.error("[WebSocket] Invalid Redis feed message:", error);
+        }
+      });
+    })().catch((error) => {
+      logger.error("[WebSocket] Redis subscriber unavailable:", error);
+      feedGlobal.__photosFeedRedisSubscriberPromise = undefined;
+    });
+  }
+  await feedGlobal.__photosFeedRedisSubscriberPromise;
+}
+
+export async function notifyFeedUpdate(activityData: Record<string, unknown>) {
+  await sendFeedUpdate(activityData);
+  const redis = getRedisClient();
+  if (!redis) return;
+  try {
+    if (redis.status === "wait") await redis.connect();
+    await redis.publish(
+      FEED_REDIS_CHANNEL,
+      JSON.stringify({ origin: instanceId, activityData }),
+    );
+  } catch (error) {
+    logger.error("[WebSocket] Failed to publish feed update:", error);
+  }
+}
+
 export async function GET(request: NextRequest) {
   const session = await getSession();
   const user = await getUserContext(session?.id);
   if (user?.isBanned) {
     return new Response("Forbidden", { status: 403 });
   }
-  let streamController: ReadableStreamDefaultController | undefined;
-  const stream = new ReadableStream({
-    start(controller) {
-      streamController = controller;
-      controller.enqueue(`: connected\n\n`);
-      const heartbeat = setInterval(() => {
-        try {
-          enqueueForClient(controller, `: heartbeat\n\n`);
-        } catch (_err) {
-          removeClient(controller);
-        }
-      }, 30000);
-      const onAbort = () => removeClient(controller, true);
-      while (clients.size >= MAX_FEED_CLIENTS) {
-        const oldestController = clients.keys().next().value;
-        if (!oldestController) break;
-        removeClient(oldestController, true);
+  void ensureRedisSubscriber();
+  return experimental_upgradeWebSocket((socket) => {
+    while (clients.size >= MAX_FEED_CLIENTS) {
+      const oldestSocket = clients.keys().next().value;
+      if (!oldestSocket) break;
+      removeClient(oldestSocket, true);
+    }
+    const heartbeat = setInterval(() => {
+      try {
+        sendToClient(socket, JSON.stringify({ type: "heartbeat" }));
+      } catch (error) {
+        logger.error("[WebSocket] Heartbeat failed:", error);
+        removeClient(socket);
       }
-      const expires = setTimeout(
-        () => removeClient(controller, true),
-        MAX_FEED_CONNECTION_AGE_MS,
-      );
-      clients.set(controller, {
-        userId: session?.id,
-        heartbeat,
-        expires,
-        abortSignal: request.signal,
-        onAbort,
-      });
-      request.signal.addEventListener("abort", onAbort, { once: true });
-      if (request.signal.aborted) onAbort();
-    },
-    cancel() {
-      if (streamController) removeClient(streamController);
-    },
-  });
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-      Connection: "keep-alive",
-      "X-Content-Type-Options": "nosniff",
-      Vary: "Cookie, Authorization",
-    },
+    }, 30_000);
+    const expires = setTimeout(
+      () => removeClient(socket, true),
+      MAX_FEED_CONNECTION_AGE_MS,
+    );
+    clients.set(socket, { userId: session?.id, heartbeat, expires, socket });
+    socket.on("close", () => removeClient(socket));
+    socket.on("error", () => removeClient(socket));
+    socket.on("message", (_data: WebSocketData) => {});
+    sendToClient(socket, JSON.stringify({ type: "connected" }));
   });
 }
 export async function broadcastNewPhoto(mediaId: string) {

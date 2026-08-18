@@ -29,6 +29,7 @@
     "@trpc/client": "^11.18.0",
     "@trpc/server": "^11.18.0",
     "@vercel/analytics": "^2.0.1",
+    "@vercel/functions": "^3.9.3",
     "@vercel/speed-insights": "^2.0.0",
     "archiver": "^8.0.0",
     "date-fns": "^4.4.0",
@@ -58,6 +59,7 @@
     "tailwind-merge": "^3.6.0",
     "use-debounce": "^10.1.1",
     "use-supercluster": "^1.2.0",
+    "ws": "^8.21.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
