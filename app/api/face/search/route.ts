@@ -138,7 +138,7 @@ export async function POST(request: Request) {
       .where(
         and(
           eq(media.eventId, body.eventId),
-          eq(mediaFaceScans.status, "ready"),
+          inArray(mediaFaceScans.status, ["ready", "skipped"]),
         ),
       ),
   ]);

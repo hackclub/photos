@@ -93,7 +93,11 @@ export default function FaceAdminClient() {
   }
 
   const ready = state.events.reduce(
-    (sum, event) => sum + (event.scans.ready ?? 0),
+    (sum, event) => sum + (event.scans.ready ?? 0) + (event.scans.skipped ?? 0),
+    0,
+  );
+  const skipped = state.events.reduce(
+    (sum, event) => sum + (event.scans.skipped ?? 0),
     0,
   );
   const total = state.events.reduce((sum, event) => sum + event.imageCount, 0);
@@ -112,6 +116,9 @@ export default function FaceAdminClient() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Indexed photos" value={`${ready}/${total}`} />
+        {skipped > 0 ? (
+          <Stat label="Skipped" value={skipped.toLocaleString()} tone="amber" />
+        ) : null}
         <Stat label="Queued" value={queued.toLocaleString()} />
         <Stat
           label="Active"
@@ -275,7 +282,9 @@ export default function FaceAdminClient() {
         </div>
         <div className="max-h-[520px] divide-y divide-zinc-800 overflow-y-auto">
           {state.events.map((event) => {
-            const indexed = event.scans.ready ?? 0;
+            const indexed =
+              (event.scans.ready ?? 0) + (event.scans.skipped ?? 0);
+            const skippedCount = event.scans.skipped ?? 0;
             return (
               <div
                 key={event.id}
@@ -287,6 +296,7 @@ export default function FaceAdminClient() {
                   </p>
                   <p className="mt-1 text-xs text-zinc-500">
                     {indexed}/{event.imageCount} indexed · {event.status}
+                    {skippedCount > 0 ? ` · ${skippedCount} skipped` : ""}
                   </p>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">

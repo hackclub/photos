@@ -131,7 +131,14 @@ export async function queueMediaForFaceIndexing(
     where: eq(mediaFaceScans.mediaId, item.id),
   });
   if (!options.force && (existing?.attemptCount ?? 0) >= 3) {
-    return { queued: false, reason: "retry_limit" as const };
+    // Retry budget exhausted (likely an unprocessable image). Mark it skipped so
+    // it stops blocking the event from finalising as indexed.
+    await db
+      .update(mediaFaceScans)
+      .set({ status: "skipped", updatedAt: new Date() })
+      .where(eq(mediaFaceScans.mediaId, item.id));
+    await finalizeEventIfIndexed(item.eventId, eventIndex.revision);
+    return { queued: false, reason: "skipped" as const };
   }
   if (
     !options.force &&
@@ -284,6 +291,22 @@ export async function rebuildEventFaceIndex(eventId: string) {
   return queuePendingFaceMedia({ eventId, limit: 500 });
 }
 
+function isPermanentJobFailure(error?: string | null): boolean {
+  if (!error) return false;
+  const message = error.toLowerCase();
+  return (
+    message.includes("invalid image") ||
+    message.includes("empty template") ||
+    message.includes("could not decode") ||
+    message.includes("unsupported") ||
+    message.includes("corrupt") ||
+    message.includes("no image data") ||
+    message.includes("invalid enco") ||
+    message.includes("too big") ||
+    message.includes("exceeds")
+  );
+}
+
 function normalizeFace(face: VisionFace) {
   const detection = face.detection;
   const imageWidth = detection.image_width || 1;
@@ -407,25 +430,32 @@ async function persistCompletedJob(
         eq(mediaFaceScans.workerJobId, jobId),
       ),
     );
+  await finalizeEventIfIndexed(item.eventId, eventIndex.revision);
+  return true;
+}
+
+export async function finalizeEventIfIndexed(
+  eventId: string,
+  revision: number,
+) {
   const [remaining] = await db
     .select({ count: count() })
     .from(media)
     .leftJoin(mediaFaceScans, eq(mediaFaceScans.mediaId, media.id))
     .where(
       and(
-        eq(media.eventId, item.eventId),
+        eq(media.eventId, eventId),
         sql`${media.mimeType} like 'image/%'`,
-        sql`(${mediaFaceScans.mediaId} is null or ${mediaFaceScans.status} != 'ready' or ${mediaFaceScans.eventIndexRevision} != ${eventIndex.revision})`,
+        sql`(${mediaFaceScans.mediaId} is null or ${mediaFaceScans.status} not in ('ready','skipped') or ${mediaFaceScans.eventIndexRevision} != ${revision})`,
       ),
     );
   if ((remaining?.count ?? 0) === 0) {
     await db
       .update(eventFaceIndexes)
       .set({ status: "ready", indexedAt: new Date(), updatedAt: new Date() })
-      .where(eq(eventFaceIndexes.eventId, item.eventId));
-    await refreshEventFaceSuggestions(item.eventId);
+      .where(eq(eventFaceIndexes.eventId, eventId));
+    await refreshEventFaceSuggestions(eventId);
   }
-  return true;
 }
 
 export async function syncFaceIndexJobs(limit = 100) {
@@ -458,11 +488,19 @@ export async function syncFaceIndexJobs(limit = 100) {
         continue;
       }
       if (job.status === "failed") {
+        const terminal = isPermanentJobFailure(job.error);
+        const nextStatus =
+          job.error === "Cancelled"
+            ? "cancelled"
+            : terminal
+              ? "skipped"
+              : "failed";
         await db
           .update(mediaFaceScans)
           .set({
-            status: job.error === "Cancelled" ? "cancelled" : "failed",
+            status: nextStatus as typeof mediaFaceScans.$inferSelect.status,
             lastError: job.error?.slice(0, 500) ?? "Vision job failed",
+            completedAt: terminal ? new Date() : null,
             updatedAt: new Date(),
           })
           .where(
@@ -471,6 +509,18 @@ export async function syncFaceIndexJobs(limit = 100) {
               eq(mediaFaceScans.workerJobId, jobId),
             ),
           );
+        if (terminal) {
+          const mediaRow = await db.query.media.findFirst({
+            where: eq(media.id, row.mediaId),
+            columns: { eventId: true },
+          });
+          if (mediaRow?.eventId) {
+            await finalizeEventIfIndexed(
+              mediaRow.eventId,
+              row.eventIndexRevision,
+            );
+          }
+        }
         summary.failed++;
         continue;
       }

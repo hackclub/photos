@@ -50,6 +50,7 @@ export const faceJobStatusEnum = pgEnum("face_job_status", [
   "ready",
   "failed",
   "cancelled",
+  "skipped",
 ]);
 export const faceIndexStatusEnum = pgEnum("face_index_status", [
   "disabled",

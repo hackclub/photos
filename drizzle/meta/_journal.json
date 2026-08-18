@@ -92,6 +92,13 @@
       "when": 1786969153551,
       "tag": "0012_messy_doctor_spectrum",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787057388594,
+      "tag": "0013_add_skipped_face_job_status",
+      "breakpoints": true
     }
   ]
 }

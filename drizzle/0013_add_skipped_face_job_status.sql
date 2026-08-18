@@ -1,0 +1,1 @@
+ALTER TYPE "public"."face_job_status" ADD VALUE 'skipped';
