@@ -92,6 +92,7 @@ export default function IncludesMeDrawer({
   const phonePollRef = useRef<number | null>(null);
   const phonePollGenerationRef = useRef(0);
   const searchAbortRef = useRef<AbortController | null>(null);
+  const searchWsRef = useRef<WebSocket | null>(null);
   const cameraGenerationRef = useRef(0);
   const completedPhoneScanRef = useRef<string | null>(null);
   const usableScans = scans.filter((scan) => canUseScan(scan, mode));
@@ -164,6 +165,8 @@ export default function IncludesMeDrawer({
     stopPhoneCapture();
     searchAbortRef.current?.abort();
     searchAbortRef.current = null;
+    searchWsRef.current?.close();
+    searchWsRef.current = null;
   }
 
   function beginSetup() {
@@ -286,48 +289,117 @@ export default function IncludesMeDrawer({
     }
   }
 
+  async function runSearch(scanId: string) {
+    const response = await fetch("/api/face/search", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ eventId, scanId, mode, poll: false }),
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || "Could not search photos");
+    return body as {
+      scanId: string;
+      matches: FaceMatch[];
+      progress: { indexed: number; total: number; status: string };
+    };
+  }
+
   async function search(scanId: string, poll = false) {
     searchAbortRef.current?.abort();
     const controller = new AbortController();
     searchAbortRef.current = controller;
+    searchWsRef.current?.close();
     setProcessingText("Looking through photos");
     setStep("processing");
     setError(null);
-    try {
-      const response = await fetch("/api/face/search", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ eventId, scanId, mode, poll }),
-        signal: controller.signal,
-      });
-      const body = await response.json();
-      if (!response.ok)
-        throw new Error(body.error || "Could not search photos");
-      setProgress(body.progress);
-      const complete = body.progress.indexed >= body.progress.total;
-      if (mode === "filter" || complete) onApply(body.matches, body.scanId);
-      if (complete) {
+    setProgress(null);
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(
+      `${protocol}//${window.location.host}/api/face/search/${scanId}/ws?eventId=${encodeURIComponent(eventId)}`,
+    );
+    searchWsRef.current = ws;
+    let done = false;
+
+    ws.onerror = () => {
+      // fall through to polling
+    };
+
+    const applyWhenDone = async () => {
+      if (done) return;
+      done = true;
+      ws.close();
+      searchWsRef.current = null;
+      try {
+        const body = await runSearch(scanId);
+        setProgress(body.progress);
+        onApply(body.matches, body.scanId);
         onClose();
-      } else {
-        pollRef.current = window.setTimeout(
-          () => void search(scanId, true),
-          2500,
+      } catch (searchError) {
+        if (
+          searchError instanceof DOMException &&
+          searchError.name === "AbortError"
+        ) {
+          return;
+        }
+        setError(
+          searchError instanceof Error
+            ? searchError.message
+            : "Could not search photos",
         );
+        setStep(usableScans.length > 0 ? "scans" : "intro");
       }
-    } catch (searchError) {
-      if (
-        searchError instanceof DOMException &&
-        searchError.name === "AbortError"
-      ) {
-        return;
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as {
+          type: "progress" | "done";
+          indexed?: number;
+          total?: number;
+        };
+        if (data.type === "progress" && data.indexed != null) {
+          setProgress({
+            indexed: data.indexed,
+            total: data.total ?? 0,
+            status: "indexing",
+          });
+          if (data.total != null && data.indexed >= data.total) {
+            void applyWhenDone();
+          }
+        } else if (data.type === "done") {
+          void applyWhenDone();
+        }
+      } catch (_error) {
+        // ignore malformed frames
       }
-      setError(
-        searchError instanceof Error
-          ? searchError.message
-          : "Could not search photos",
+    };
+
+    ws.onopen = () => {
+      // progress arrives via onmessage
+    };
+    ws.onclose = () => {
+      if (done) return;
+      // WS unavailable or closed before completion: fall back to polling.
+      if (controller.signal.aborted) return;
+      pollRef.current = window.setTimeout(
+        () => void search(scanId, true),
+        2500,
       );
-      setStep(usableScans.length > 0 ? "scans" : "intro");
-    }
+    };
+
+    // If the WS never opens (e.g. unsupported), fall back to a single poll.
+    const wsTimeout = window.setTimeout(() => {
+      if (ws.readyState === WebSocket.OPEN || done) return;
+      ws.close();
+      searchWsRef.current = null;
+      if (controller.signal.aborted) return;
+      pollRef.current = window.setTimeout(
+        () => void search(scanId, true),
+        2500,
+      );
+    }, 3000);
+    ws.addEventListener("open", () => window.clearTimeout(wsTimeout));
   }
 
   async function deleteScan() {
@@ -705,10 +777,22 @@ export default function IncludesMeDrawer({
               <h3 className="mt-6 text-lg font-medium text-white">
                 {processingText}
               </h3>
-              {progress && progress.total > progress.indexed ? (
-                <p className="mt-2 text-sm text-zinc-500">
-                  {progress.indexed} of {progress.total}
-                </p>
+              {progress && progress.total > 0 ? (
+                <div className="mt-2 text-sm text-zinc-500">
+                  {progress.indexed >= progress.total ? (
+                    <p>Running your search…</p>
+                  ) : (
+                    <>
+                      <p>
+                        {progress.indexed} of {progress.total} photos indexed
+                      </p>
+                      <p className="mt-1 text-zinc-600">
+                        {progress.total - progress.indexed} still to index —
+                        we'll run your search as soon as they're done
+                      </p>
+                    </>
+                  )}
+                </div>
               ) : null}
             </section>
           ) : null}

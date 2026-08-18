@@ -17,6 +17,10 @@ import {
   searchFaceScanInEvent,
   syncFaceIndexJobs,
 } from "@/lib/face-indexing";
+import {
+  publishFaceSearchDone,
+  publishFaceSearchProgress,
+} from "@/lib/face-search-stream";
 import { can, getUserContext } from "@/lib/policy";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -148,6 +152,15 @@ export async function POST(request: Request) {
       matches: matches.length,
     });
   }
+  const progress = {
+    indexed: ready?.count ?? 0,
+    total: total?.count ?? 0,
+    status: currentIndex?.status ?? "queued",
+  };
+  void publishFaceSearchProgress(body.eventId, progress);
+  if (progress.total > 0 && progress.indexed >= progress.total) {
+    void publishFaceSearchDone(body.eventId);
+  }
   return NextResponse.json({
     scanId: scan.id,
     matches: matches.flatMap((match) => {
@@ -165,10 +178,6 @@ export async function POST(request: Request) {
         },
       ];
     }),
-    progress: {
-      indexed: ready?.count ?? 0,
-      total: total?.count ?? 0,
-      status: currentIndex?.status ?? "queued",
-    },
+    progress,
   });
 }
