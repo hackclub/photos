@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 const UPLOAD_QUIPS = [
   "Orpheus is roaring at the upload queue to make it go faster.",
@@ -73,9 +73,6 @@ export default function LoadingQuip({
   type = "upload",
   className = "",
 }: LoadingQuipProps) {
-  const [quipIndex, setQuipIndex] = useState(0);
-  const [displayedText, setDisplayedText] = useState("");
-  const [isTyping, setIsTyping] = useState(true);
   const quips =
     type === "map"
       ? MAP_QUIPS
@@ -84,45 +81,12 @@ export default function LoadingQuip({
         : type === "delete"
           ? DELETE_QUIPS
           : UPLOAD_QUIPS;
-  useEffect(() => {
-    setQuipIndex(Math.floor(Math.random() * quips.length));
-  }, [quips]);
-  useEffect(() => {
-    const currentQuip = quips[quipIndex];
-    let timeout: ReturnType<typeof setTimeout>;
-    if (isTyping) {
-      if (displayedText.length < currentQuip.length) {
-        timeout = setTimeout(
-          () => {
-            setDisplayedText(currentQuip.slice(0, displayedText.length + 1));
-          },
-          30 + Math.random() * 20,
-        );
-      } else {
-        timeout = setTimeout(() => {
-          setIsTyping(false);
-        }, 3000);
-      }
-    } else {
-      if (displayedText.length > 0) {
-        timeout = setTimeout(() => {
-          setDisplayedText(displayedText.slice(0, -1));
-        }, 10);
-      } else {
-        setQuipIndex((prev) => (prev + 1) % quips.length);
-        setIsTyping(true);
-      }
-    }
-    return () => clearTimeout(timeout);
-  }, [displayedText, isTyping, quipIndex, quips]);
+  const [quipIndex] = useState(() => Math.floor(Math.random() * quips.length));
   return (
     <div
       className={`font-mono text-sm md:text-base text-zinc-400 min-h-[1.5em] flex items-center justify-center ${className}`}
     >
-      <span>
-        {displayedText}
-        <span className="animate-pulse ml-0.5 inline-block w-2 h-4 bg-zinc-500 align-middle" />
-      </span>
+      <span>{quips[quipIndex]}</span>
     </div>
   );
 }
