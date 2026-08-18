@@ -18,6 +18,7 @@ import { deleteMedia, getDownloadUrl } from "@/app/actions/media";
 import IncludesMeDrawer from "@/components/face/IncludesMeDrawer";
 import { useMediaGalleryData } from "@/hooks/useMediaGallery";
 import { logger } from "@/lib/client-logger";
+import { resolveMediaDate } from "@/lib/media/exif";
 import type { Event, MediaItem } from "@/types/media";
 import ConfirmModal from "../ui/ConfirmModal";
 import ServerActionModal from "../ui/ServerActionModal";
@@ -597,20 +598,9 @@ export default function MediaGallery({
                     <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-lg bg-black/70 px-2 py-1 text-xs text-white backdrop-blur-sm">
                       <HiClock className="w-3 h-3" />
                       <span>
-                        {new Date(
-                          (
-                            item.exifData as {
-                              DateTimeOriginal?: string;
-                              dateTimeOriginal?: string;
-                            }
-                          )?.DateTimeOriginal ||
-                            (
-                              item.exifData as {
-                                DateTimeOriginal?: string;
-                                dateTimeOriginal?: string;
-                              }
-                            )?.dateTimeOriginal ||
-                            item.uploadedAt,
+                        {resolveMediaDate(
+                          item.exifData,
+                          item.uploadedAt,
                         ).toLocaleDateString("en-US", {
                           year: "numeric",
                           month: "2-digit",

@@ -17,7 +17,7 @@ import {
 } from "@/lib/db/schema";
 import { queueMediaForFaceIndexing } from "@/lib/face-indexing";
 import { logger } from "@/lib/logger";
-import { extractExifData } from "@/lib/media/exif";
+import { extractExifData, resolveTrustedDate } from "@/lib/media/exif";
 import { uploadToS3 } from "@/lib/media/s3";
 import {
   deleteMediaAndThumbnail,
@@ -339,6 +339,8 @@ async function handlePost(req: NextRequest) {
     }
     let inserted: typeof media.$inferSelect;
     try {
+      // Trust only plausible (>= 2015) capture dates; fall back to upload time.
+      takenAt = resolveTrustedDate(takenAt, new Date());
       [inserted] = await db
         .insert(media)
         .values({

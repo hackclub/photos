@@ -19,6 +19,7 @@ import {
   formatExposureTime,
   formatFocalLength,
   formatISO,
+  resolveMediaDate,
 } from "@/lib/media/exif";
 
 export async function generateMetadata({
@@ -93,7 +94,6 @@ export default async function SharedMediaPage({
     exif.exposureTime !== undefined ||
     exif.iso !== undefined;
   const hasLocation = false;
-  const hasTakenDate = exif.dateTimeOriginal;
   const rawUrl = `/share/${token}/raw`;
   return (
     <div className="min-h-screen bg-black text-zinc-100 flex flex-col">
@@ -162,8 +162,9 @@ export default async function SharedMediaPage({
                 <div className="flex items-center gap-2">
                   <HiOutlineCalendar className="w-5 h-5 text-zinc-400" />
                   <span>
-                    {new Date(
-                      hasTakenDate || media.uploadedAt,
+                    {resolveMediaDate(
+                      media.exifData as Record<string, unknown> | null,
+                      media.uploadedAt,
                     ).toLocaleDateString("en-US", {
                       month: "long",
                       day: "numeric",

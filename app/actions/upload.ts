@@ -12,7 +12,11 @@ import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
 import { queueMediaForFaceIndexing } from "@/lib/face-indexing";
 import { logger } from "@/lib/logger";
-import { type ExifData, extractExifData } from "@/lib/media/exif";
+import {
+  type ExifData,
+  extractExifData,
+  resolveTrustedDate,
+} from "@/lib/media/exif";
 import {
   MAX_BUFFERED_IMAGE_BYTES,
   withMediaBufferingSlot,
@@ -550,8 +554,11 @@ export async function finalizeUpload(
       };
     }
     const finalExifData = mergeExifData(serverExifData, data.exifData);
-    const dateValue = finalExifData?.dateTimeOriginal ?? data.takenAt;
-    const takenAt = dateValue ? new Date(dateValue as string) : null;
+    const dateValue =
+      (finalExifData?.dateTimeOriginal as string | undefined) ?? data.takenAt;
+    // Trust the exif capture date only if it's plausible (>= 2015),
+    // otherwise fall back to the upload time.
+    const takenAt = resolveTrustedDate(dateValue, new Date());
     const latitude = (finalExifData?.gpsLatitude as number | undefined) ?? null;
     const longitude =
       (finalExifData?.gpsLongitude as number | undefined) ?? null;

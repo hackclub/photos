@@ -1,5 +1,6 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { resolveMediaDate } from "@/lib/media/exif";
 import type { Event, MediaItem } from "@/types/media";
 
 function getMediaProxyUrl(
@@ -72,19 +73,9 @@ export function useMediaGalleryData(
     });
     return [...filteredMedia].sort((a, b) => {
       if (sortBy === "date") {
-        const aExif = a.exifData as {
-          DateTimeOriginal?: string;
-          dateTimeOriginal?: string;
-        } | null;
-        const bExif = b.exifData as {
-          DateTimeOriginal?: string;
-          dateTimeOriginal?: string;
-        } | null;
-        const aDate =
-          aExif?.DateTimeOriginal || aExif?.dateTimeOriginal || a.uploadedAt;
-        const bDate =
-          bExif?.DateTimeOriginal || bExif?.dateTimeOriginal || b.uploadedAt;
-        const diff = new Date(bDate).getTime() - new Date(aDate).getTime();
+        const aDate = resolveMediaDate(a.exifData, a.uploadedAt);
+        const bDate = resolveMediaDate(b.exifData, b.uploadedAt);
+        const diff = bDate.getTime() - aDate.getTime();
         return dateOrder === "desc" ? diff : -diff;
       }
       if (sortBy === "uploader") {

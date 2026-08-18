@@ -18,6 +18,42 @@ export interface ExifData {
   orientation?: number | string;
 }
 
+// EXIF capture dates before this are considered untrustworthy. Hack Club
+// photos have no media from before 2015, so when a photo claims to be older
+// it almost always means the camera clock / exif wasn't set correctly. In
+// those cases we fall back to the upload date instead. The raw exif date is
+// still stored in exifData so it is not lost, we just don't use it.
+export const MIN_TRUSTED_TAKEN_MS = Date.UTC(2015, 0, 1);
+
+export function resolveTrustedDate(
+  candidate: string | Date | null | undefined,
+  fallback: string | Date | null | undefined,
+): Date | null {
+  if (candidate != null && candidate !== "") {
+    const d = new Date(candidate);
+    if (!Number.isNaN(d.getTime()) && d.getTime() >= MIN_TRUSTED_TAKEN_MS) {
+      return d;
+    }
+  }
+  if (fallback == null || fallback === "") return null;
+  const fb = new Date(fallback);
+  return Number.isNaN(fb.getTime()) ? null : fb;
+}
+
+// Resolve a sortable/settable capture date from a media item's exif, falling
+// back to the upload date for untrustworthy (pre-2015) exif capture dates.
+export function resolveMediaDate(
+  exifData: Record<string, unknown> | null | undefined,
+  uploadedAt: Date | string,
+): Date {
+  const exif = exifData as
+    | { DateTimeOriginal?: string; dateTimeOriginal?: string }
+    | null
+    | undefined;
+  const candidate = exif?.DateTimeOriginal || exif?.dateTimeOriginal;
+  return resolveTrustedDate(candidate, uploadedAt) ?? new Date(uploadedAt);
+}
+
 function toIsoDate(value: unknown) {
   if (!value) return undefined;
   if (value instanceof Date && !Number.isNaN(value.getTime())) {

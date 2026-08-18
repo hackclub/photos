@@ -4,7 +4,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { media } from "@/lib/db/schema";
 import { logger, serializeError } from "@/lib/logger";
-import { extractExifData } from "@/lib/media/exif";
+import { extractExifData, resolveTrustedDate } from "@/lib/media/exif";
 import { createSharp } from "@/lib/media/image-processing";
 import { S3_BUCKET_NAME, s3Client } from "@/lib/media/s3";
 import { ALLOWED_IMAGE_TYPES } from "@/lib/media/validation";
@@ -168,12 +168,6 @@ async function extractImageMetadataFromKeys(keys: string[], mimeType: string) {
   return bestExif;
 }
 
-function validDate(value: unknown) {
-  if (!value) return null;
-  const date = new Date(value as string);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 function encodeCursor(cutoff: Date, item: MediaRow) {
   return `${cutoff.toISOString()}|${item.uploadedAt.toISOString()}|${item.id}`;
 }
@@ -233,7 +227,8 @@ async function repairExifForMedia(item: MediaRow) {
     const finalExif = mergeExifData(extractedExif, getExifObject(item));
     const dateValue =
       (finalExif?.dateTimeOriginal as string | undefined) ?? undefined;
-    const takenAt = validDate(dateValue) ?? item.takenAt;
+    // Only trust plausible (>= 2015) dates; fall back to the upload date.
+    const takenAt = resolveTrustedDate(dateValue, item.uploadedAt);
     const latitude =
       (finalExif?.gpsLatitude as number | undefined) ?? item.latitude;
     const longitude =

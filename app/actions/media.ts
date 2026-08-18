@@ -13,7 +13,7 @@ import {
   rebuildEventFaceIndex,
 } from "@/lib/face-indexing";
 import { logger } from "@/lib/logger";
-import { extractExifData } from "@/lib/media/exif";
+import { extractExifData, resolveTrustedDate } from "@/lib/media/exif";
 import { createSharp } from "@/lib/media/image-processing";
 import {
   deleteFromS3,
@@ -514,6 +514,8 @@ async function uploadMediaInternal(formData: FormData) {
     }
     let inserted: typeof media.$inferSelect;
     try {
+      // Trust only plausible (>= 2015) capture dates; fall back to upload time.
+      takenAt = resolveTrustedDate(takenAt, new Date());
       [inserted] = await db
         .insert(media)
         .values({
