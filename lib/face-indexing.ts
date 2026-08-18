@@ -297,6 +297,7 @@ function isPermanentJobFailure(error?: string | null): boolean {
   return (
     message.includes("invalid image") ||
     message.includes("empty template") ||
+    message.includes("predates version") ||
     message.includes("could not decode") ||
     message.includes("unsupported") ||
     message.includes("corrupt") ||
@@ -395,10 +396,24 @@ async function persistCompletedJob(
 
   try {
     for (const detection of detections) {
-      await enrollVisionTemplate(eventIndex.galleryId, detection.template, {
-        detectionId: detection.id,
-        mediaId: detection.mediaId,
-      });
+      try {
+        await enrollVisionTemplate(eventIndex.galleryId, detection.template, {
+          detectionId: detection.id,
+          mediaId: detection.mediaId,
+        });
+      } catch (enrollError) {
+        const message = enrollError instanceof Error ? enrollError.message : "";
+        if (isPermanentJobFailure(message)) {
+          // Unprocessable template (e.g. empty/garbage). Drop this detection
+          // instead of failing the whole photo; it cannot be indexed.
+          logger.warn(
+            `Skipping unenrollable face template for ${item.id}`,
+            enrollError,
+          );
+          continue;
+        }
+        throw enrollError;
+      }
     }
   } catch (error) {
     await db
