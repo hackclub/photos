@@ -8,11 +8,11 @@
   "crons": [
     {
       "path": "/api/cron/slack-notifications",
-      "schedule": "* * * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/faces",
-      "schedule": "* * * * *"
+      "schedule": "*/5 * * * *"
     }
   ]
 }

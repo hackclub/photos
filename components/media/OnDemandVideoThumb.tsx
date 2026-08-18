@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { markMediaThumbnailReady } from "@/app/actions/media";
 import { logger } from "@/lib/client-logger";
@@ -71,11 +72,13 @@ export default function OnDemandVideoThumb({
 
   if (!posterUrl) return <div className={className} />;
   return (
-    <img
+    <Image
       src={posterUrl}
       alt=""
+      fill
+      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
       draggable={false}
-      className={`${className ?? ""} object-cover`}
+      className="object-cover"
     />
   );
 }

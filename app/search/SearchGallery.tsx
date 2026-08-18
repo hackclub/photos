@@ -1,5 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
@@ -114,7 +115,7 @@ function LazySearchGalleryImage({ src, alt }: { src?: string; alt: string }) {
         </div>
       )}
       {isVisible && src && (
-        <img
+        <Image
           key={src}
           src={
             retryCount > 0
@@ -122,10 +123,9 @@ function LazySearchGalleryImage({ src, alt }: { src?: string; alt: string }) {
               : src
           }
           alt={alt}
-          loading="eager"
-          decoding="async"
-          fetchPriority="low"
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-out ${
+          fill
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+          className={`object-cover transition-opacity duration-700 ease-out ${
             isLoaded ? "opacity-100" : "opacity-0"
           }`}
           onLoad={() => setIsLoaded(true)}

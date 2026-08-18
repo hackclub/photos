@@ -52,7 +52,7 @@ export default function FaceAdminClient() {
     void refreshOnInterval(true);
     const interval = window.setInterval(() => {
       if (document.visibilityState === "visible") void refreshOnInterval(true);
-    }, 3500);
+    }, 20000);
     return () => window.clearInterval(interval);
   }, []);
 

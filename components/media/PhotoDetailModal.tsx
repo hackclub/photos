@@ -1,5 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -1346,24 +1347,26 @@ export default function PhotoDetailModal({
                 }}
               >
                 {!imageLoaded && thumbnailUrl && (
-                  <img
+                  <Image
                     src={thumbnailUrl}
                     alt={media.filename}
-                    decoding="async"
-                    fetchPriority="high"
-                    className="absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain opacity-100 blur-[1px] scale-[1.005] transition-opacity duration-300"
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 70vw"
+                    priority
+                    className="select-none object-contain opacity-100 blur-[1px] scale-[1.005] transition-opacity duration-300"
                     aria-hidden="true"
                   />
                 )}
                 {effectiveUrl && (
-                  <img
+                  <Image
                     ref={blurImageRef}
                     src={effectiveUrl}
                     alt={media.filename}
-                    decoding="async"
-                    fetchPriority="high"
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 70vw"
+                    priority
                     draggable={false}
-                    className={`absolute inset-0 h-full max-h-full w-full max-w-full select-none object-contain transition-opacity duration-500 ease-out ${
+                    className={`select-none object-contain transition-opacity duration-500 ease-out ${
                       imageLoaded ? "opacity-100" : "opacity-0"
                     }`}
                     onLoad={() => {

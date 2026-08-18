@@ -7,6 +7,7 @@ import { logger } from "@/lib/client-logger";
 import "leaflet/dist/leaflet.css";
 import "leaflet-defaulticon-compatibility";
 import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css";
+import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -596,7 +597,7 @@ export default function PhotoMap() {
                   <div className="min-w-45 sm:min-w-50">
                     {(photo.thumbnailUrl || photoUrls[photo.id]) && (
                       <div className="relative mb-2 rounded-lg overflow-hidden">
-                        <img
+                        <Image
                           src={photo.thumbnailUrl || photoUrls[photo.id]}
                           alt={photo.filename}
                           width={200}
@@ -672,10 +673,12 @@ export default function PhotoMap() {
                               className="aspect-square bg-zinc-800 rounded-lg overflow-hidden relative"
                             >
                               {url && (
-                                <img
+                                <Image
                                   src={url}
                                   alt={photo.filename}
-                                  className="absolute inset-0 w-full h-full object-cover"
+                                  fill
+                                  sizes="200px"
+                                  className="object-cover"
                                 />
                               )}
                               {photo.mimeType.startsWith("video/") && (

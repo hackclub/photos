@@ -148,6 +148,12 @@ export async function notifyFeedUpdate(activityData: Record<string, unknown>) {
 }
 
 export async function GET(request: NextRequest) {
+  if (
+    request.headers.get("upgrade")?.toLowerCase() !== "websocket" &&
+    request.headers.get("connection")?.toLowerCase() !== "upgrade"
+  ) {
+    return new Response("Expected WebSocket connection", { status: 400 });
+  }
   const session = await getSession();
   const user = await getUserContext(session?.id);
   if (user?.isBanned) {

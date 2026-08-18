@@ -1,5 +1,6 @@
 "use client";
 import { Anton } from "next/font/google";
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
@@ -25,14 +26,15 @@ const ROWS = [
 function StripImage({ src, eager }: { src: string; eager: boolean }) {
   const [loaded, setLoaded] = useState(false);
   return (
-    <div className="h-full aspect-[4/3] shrink-0 overflow-hidden bg-zinc-900">
-      <img
+    <div className="relative h-full aspect-[4/3] shrink-0 overflow-hidden bg-zinc-900">
+      <Image
         src={src}
         alt=""
-        loading={eager ? "eager" : "lazy"}
-        decoding="async"
+        fill
+        sizes="(max-width: 640px) 50vw, 300px"
+        priority={eager}
         onLoad={() => setLoaded(true)}
-        className={`h-full w-full object-cover transition-opacity duration-700 ease-out ${
+        className={`object-cover transition-opacity duration-700 ease-out ${
           loaded ? "opacity-100" : "opacity-0"
         }`}
       />

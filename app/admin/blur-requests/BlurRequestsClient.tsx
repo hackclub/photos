@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { type PointerEvent, useEffect, useRef, useState } from "react";
 import { HiCheck, HiPlus, HiXMark } from "react-icons/hi2";
 import {
@@ -61,10 +62,12 @@ export default function BlurRequestsClient() {
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-zinc-800">
-                  <img
+                  <Image
                     src={`/media/${request.media.id}/thumbnail`}
                     alt=""
-                    className="h-full w-full object-cover"
+                    fill
+                    sizes="56px"
+                    className="object-cover"
                     style={
                       request.source !== "manual" && request.regions?.[0]
                         ? {

@@ -1,5 +1,6 @@
 "use client";
 import { Anton } from "next/font/google";
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { twMerge } from "tailwind-merge";
@@ -53,13 +54,13 @@ export default function LandingHero({
                   key={`r1-${i}`}
                   className="relative w-64 h-48 rounded-xl overflow-hidden shadow-2xl flex-shrink-0"
                 >
-                  <img
+                  <Image
                     src={src}
                     alt=""
-                    loading={i < 3 ? "eager" : "lazy"}
-                    decoding="async"
-                    fetchPriority={i < 2 ? "high" : "low"}
-                    className="absolute inset-0 w-full h-full object-cover"
+                    fill
+                    sizes="256px"
+                    priority={i < 3}
+                    className="object-cover"
                   />
                 </div>
               ))}
@@ -76,13 +77,13 @@ export default function LandingHero({
                   key={`r2-${i}`}
                   className="relative w-80 h-60 rounded-xl overflow-hidden shadow-2xl flex-shrink-0"
                 >
-                  <img
+                  <Image
                     src={src}
                     alt=""
-                    loading={i < 2 ? "eager" : "lazy"}
-                    decoding="async"
-                    fetchPriority="low"
-                    className="absolute inset-0 w-full h-full object-cover"
+                    fill
+                    sizes="320px"
+                    priority={i < 2}
+                    className="object-cover"
                   />
                 </div>
               ))}
@@ -99,13 +100,12 @@ export default function LandingHero({
                   key={`r3-${i}`}
                   className="relative w-64 h-48 rounded-xl overflow-hidden shadow-2xl flex-shrink-0"
                 >
-                  <img
+                  <Image
                     src={src}
                     alt=""
-                    loading="lazy"
-                    decoding="async"
-                    fetchPriority="low"
-                    className="absolute inset-0 w-full h-full object-cover"
+                    fill
+                    sizes="256px"
+                    className="object-cover"
                   />
                 </div>
               ))}

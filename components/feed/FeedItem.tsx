@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import Link from "next/link";
 import { HiChatBubbleLeft, HiHeart, HiPhoto } from "react-icons/hi2";
 import VideoIndicator from "../media/VideoIndicator";
@@ -113,13 +114,13 @@ export default function FeedItem({
               </div>
             ) : (
               <>
-                <img
+                <Image
                   src={imageUrl}
                   alt={item.media.filename}
-                  loading={index < 6 ? "eager" : "lazy"}
-                  decoding="async"
-                  fetchPriority={index < 3 ? "high" : "low"}
-                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover/media:scale-105"
+                  fill
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                  priority={index < 3}
+                  className="object-cover transition-transform duration-700 group-hover/media:scale-105"
                 />
                 {isVideo && <VideoIndicator size="lg" />}
               </>

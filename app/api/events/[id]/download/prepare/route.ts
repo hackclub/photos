@@ -129,7 +129,7 @@ async function handlePost(
     const tempPath = join(tmpdir(), `hackclub-photos-${downloadId}.zip`);
     const metadataPath = join(tmpdir(), `hackclub-photos-${downloadId}.json`);
     const output = createWriteStream(tempPath);
-    const archive = new ZipArchive({ zlib: { level: 6 } });
+    const archive = new ZipArchive({ zlib: { level: 1 } });
     cleanupTempPath = tempPath;
     cleanupMetadataPath = metadataPath;
     activeOutput = output;

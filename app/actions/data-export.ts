@@ -239,7 +239,7 @@ async function processDataExport(exportId: string, userId: string) {
     const downloadId = randomBytes(16).toString("hex");
     const tempPath = join(tmpdir(), `data-export-${downloadId}.zip`);
     const output = createWriteStream(tempPath);
-    const archive = new ZipArchive({ zlib: { level: 6 } });
+    const archive = new ZipArchive({ zlib: { level: 1 } });
     cleanupTempPath = tempPath;
     activeOutput = output;
     activeArchive = archive;

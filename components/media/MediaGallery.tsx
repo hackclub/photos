@@ -1,5 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   HiArrowDownTray,
@@ -85,18 +86,17 @@ function LazyGalleryImage({ src, alt }: { src?: string; alt: string }) {
         </div>
       )}
       {isVisible && src && (
-        <img
+        <Image
           src={
             retryCount > 0
               ? `${src}${src.includes("?") ? "&" : "?"}retry=${retryCount}`
               : src
           }
           alt={alt}
-          decoding="async"
-          loading="eager"
-          fetchPriority="low"
+          fill
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
           key={`${src}-${retryCount}`}
-          className={`h-full w-full object-cover transition-opacity duration-700 ease-out ${
+          className={`object-cover transition-opacity duration-700 ease-out ${
             isLoaded ? "opacity-100" : "opacity-0"
           }`}
           onLoad={() => setIsLoaded(true)}

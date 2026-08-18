@@ -39,6 +39,13 @@ export async function GET(
       case "event-banner": {
         const event = await db.query.events.findFirst({
           where: eq(events.id, id),
+          columns: {
+            id: true,
+            seriesId: true,
+            visibility: true,
+            createdById: true,
+            bannerS3Key: true,
+          },
         });
         if (!event || !event.bannerS3Key) {
           return new NextResponse("Not Found", { status: 404 });
@@ -56,6 +63,11 @@ export async function GET(
       case "series-banner": {
         const seriesItem = await db.query.series.findFirst({
           where: eq(series.id, id),
+          columns: {
+            id: true,
+            visibility: true,
+            bannerS3Key: true,
+          },
         });
         if (!seriesItem || !seriesItem.bannerS3Key) {
           return new NextResponse("Not Found", { status: 404 });

@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { twMerge } from "tailwind-merge";
 
@@ -49,13 +50,13 @@ export default function Hero({
                   key={`${src}-${index}`}
                   className="relative h-full aspect-[16/9] sm:aspect-[4/3] flex-shrink-0 border-r border-zinc-900/50"
                 >
-                  <img
+                  <Image
                     src={src}
                     alt=""
-                    loading={index < 4 ? "eager" : "lazy"}
-                    decoding="async"
-                    fetchPriority={index < 2 ? "high" : "low"}
-                    className="absolute inset-0 w-full h-full object-cover blur-[4px]"
+                    fill
+                    sizes="(max-width: 640px) 100vw, 33vw"
+                    priority={index < 4}
+                    className="object-cover blur-[4px]"
                   />
                 </div>
               ))}
