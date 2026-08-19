@@ -14,12 +14,15 @@ import {
   getMediaComments,
   toggleMediaLike,
 } from "@/app/actions/social";
+import { createShareLink } from "@/app/actions/sharing";
+import { deleteMedia } from "@/app/actions/media";
 import { getMapData } from "@/app/actions/map";
 import { globalSearch } from "@/app/actions/search";
 import { getRandomMediaIds } from "@/app/actions/signage";
 import { getSession } from "@/lib/auth";
+import { APP_URL } from "@/lib/constants";
 import { db } from "@/lib/db";
-import { eventParticipants, media, mediaLikes } from "@/lib/db/schema";
+import { eventParticipants, media, mediaLikes, users } from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 import {
   augmentMediaWithPermissions,
@@ -328,6 +331,10 @@ export const appRouter = t.router({
             width: item.width,
             height: item.height,
             caption: item.caption,
+            exifData: item.exifData,
+            latitude: item.latitude,
+            longitude: item.longitude,
+            takenAt: item.takenAt,
             uploadedAt: item.uploadedAt,
             url: getMediaProxyUrl(item.id),
             thumbnailUrl: getMediaProxyUrl(item.id, "thumbnail"),
@@ -638,6 +645,152 @@ export const appRouter = t.router({
           .mutation(async ({ input }) => {
             return await leaveEvent(input.eventId);
           }),
+        participants: protectedProcedure
+          .input(z.object({ eventId: z.string().uuid() }))
+          .query(async ({ input }) => {
+            const rows = await db.query.eventParticipants.findMany({
+              where: eq(eventParticipants.eventId, input.eventId),
+              with: { user: true },
+              limit: 200,
+            });
+            return rows.map((row) =>
+              toPublicUser({
+                id: row.user.id,
+                preferredName: row.user.preferredName,
+                handle: row.user.handle,
+                slackId: row.user.slackId,
+                isGlobalAdmin: row.user.isGlobalAdmin,
+              }),
+            );
+          }),
+      }),
+      media: t.router({
+        delete: protectedProcedure
+          .input(z.object({ mediaId: z.string().uuid() }))
+          .mutation(async ({ input }) => {
+            const res = await deleteMedia(input.mediaId);
+            return { success: res.success, error: res.error };
+          }),
+        my: protectedProcedure
+          .input(
+            z.object({
+              limit: z.number().min(1).max(200).optional(),
+              offset: z.number().min(0).optional(),
+            }),
+          )
+          .query(async ({ ctx, input }) => {
+            const limit = input.limit ?? 100;
+            const offset = input.offset ?? 0;
+            const items = await db.query.media.findMany({
+              where: eq(media.uploadedById, ctx.session.id),
+              orderBy: desc(media.uploadedAt),
+              limit,
+              offset,
+              with: {
+                event: { columns: { id: true, name: true, slug: true } },
+              },
+            });
+            const ids = items.map((item) => item.id);
+            const likeRows = ids.length
+              ? await db
+                  .select({ mediaId: mediaLikes.mediaId, value: count() })
+                  .from(mediaLikes)
+                  .where(inArray(mediaLikes.mediaId, ids))
+                  .groupBy(mediaLikes.mediaId)
+              : [];
+            const likeMap = new Map(
+              likeRows.map((row) => [row.mediaId, row.value]),
+            );
+            return items.map((item) => ({
+              id: item.id,
+              filename: item.filename,
+              mimeType: item.mimeType,
+              width: item.width,
+              height: item.height,
+              caption: item.caption,
+              uploadedAt: item.uploadedAt,
+              url: getMediaProxyUrl(item.id),
+              thumbnailUrl: getMediaProxyUrl(item.id, "thumbnail"),
+              likeCount: likeMap.get(item.id) ?? 0,
+              event: item.event
+                ? {
+                    id: item.event.id,
+                    name: item.event.name,
+                    slug: item.event.slug,
+                  }
+                : null,
+            }));
+          }),
+      }),
+      users: t.router({
+        byHandle: protectedProcedure
+          .input(z.object({ handle: z.string().min(1).max(40) }))
+          .query(async ({ input }) => {
+            const user = await db.query.users.findFirst({
+              where: eq(users.handle, input.handle),
+              columns: {
+                id: true,
+                name: true,
+                handle: true,
+                preferredName: true,
+                slackId: true,
+                isGlobalAdmin: true,
+                isBanned: true,
+                bio: true,
+              },
+            });
+            if (!user || user.isBanned) {
+              throw new TRPCError({ code: "NOT_FOUND" });
+            }
+            const items = await db.query.media.findMany({
+              where: eq(media.uploadedById, user.id),
+              orderBy: desc(media.uploadedAt),
+              limit: 200,
+              with: {
+                event: { columns: { id: true, name: true, slug: true } },
+              },
+            });
+            const ids = items.map((item) => item.id);
+            const likeRows = ids.length
+              ? await db
+                  .select({ mediaId: mediaLikes.mediaId, value: count() })
+                  .from(mediaLikes)
+                  .where(inArray(mediaLikes.mediaId, ids))
+                  .groupBy(mediaLikes.mediaId)
+              : [];
+            const likeMap = new Map(
+              likeRows.map((row) => [row.mediaId, row.value]),
+            );
+            return {
+              user: toPublicUser({
+                id: user.id,
+                preferredName: user.preferredName,
+                handle: user.handle,
+                slackId: user.slackId,
+                isGlobalAdmin: user.isGlobalAdmin,
+              }),
+              bio: user.bio ?? null,
+              media: items.map((item) => ({
+                id: item.id,
+                filename: item.filename,
+                mimeType: item.mimeType,
+                width: item.width,
+                height: item.height,
+                caption: item.caption,
+                uploadedAt: item.uploadedAt,
+                url: getMediaProxyUrl(item.id),
+                thumbnailUrl: getMediaProxyUrl(item.id, "thumbnail"),
+                likeCount: likeMap.get(item.id) ?? 0,
+                event: item.event
+                  ? {
+                      id: item.event.id,
+                      name: item.event.name,
+                      slug: item.event.slug,
+                    }
+                  : null,
+              })),
+            };
+          }),
       }),
       social: t.router({
         like: protectedProcedure
@@ -667,6 +820,15 @@ export const appRouter = t.router({
               );
             }),
         }),
+      }),
+      share: t.router({
+        create: protectedProcedure
+          .input(z.object({ mediaId: z.string().uuid() }))
+          .mutation(async ({ input }) => {
+            const res = await createShareLink(input.mediaId, "view");
+            if (!res.success) return { success: false, error: res.error };
+            return { success: true, url: `${APP_URL}/share/${res.token}` };
+          }),
       }),
       upload: t.router({
         presign: protectedProcedure
