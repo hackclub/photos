@@ -352,6 +352,7 @@ export default function IncludesMeDrawer({
     };
 
     ws.onmessage = (event) => {
+      if (!event.data) return;
       try {
         const data = JSON.parse(event.data) as {
           type: "progress" | "done";
