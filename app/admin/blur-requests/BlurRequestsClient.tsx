@@ -154,6 +154,8 @@ function ReviewPanel({
   const [regions, setRegions] = useState<Rect[]>(request.regions || []);
   const [selectedRegion, setSelectedRegion] = useState(0);
   const [blurIntensity, setBlurIntensity] = useState(12);
+  const [suggestedIntensity, setSuggestedIntensity] = useState(12);
+  const [manuallyAdjusted, setManuallyAdjusted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -161,6 +163,9 @@ function ReviewPanel({
     setUrls(null);
     setRegions(request.regions || []);
     setSelectedRegion(0);
+    setBlurIntensity(12);
+    setSuggestedIntensity(12);
+    setManuallyAdjusted(false);
     setError(null);
     let current = true;
     void getBlurRequestUrls(request.id).then((result) => {
@@ -201,6 +206,16 @@ function ReviewPanel({
   const removeSelected = () => {
     setRegions((prev) => prev.filter((_, index) => index !== selectedRegion));
     setSelectedRegion((index) => Math.max(0, index - 1));
+  };
+  const updateSuggestedIntensity = (width: number, height: number) => {
+    const largestRegion = regions.reduce(
+      (largest, region) =>
+        Math.max(region.width * width, region.height * height, largest),
+      0,
+    );
+    const next = Math.max(8, Math.min(24, Math.round(largestRegion / 48)));
+    setSuggestedIntensity(next);
+    if (!manuallyAdjusted) setBlurIntensity(next);
   };
   const approve = async () => {
     if (!urls || regions.length === 0) return;
@@ -303,8 +318,10 @@ function ReviewPanel({
               imageUrl={urls.originalUrl}
               regions={regions}
               selectedRegion={selectedRegion}
+              blurIntensity={blurIntensity}
               onSelect={setSelectedRegion}
               onChange={setRegions}
+              onImageSize={updateSuggestedIntensity}
             />
           ) : (
             <div className="flex justify-center py-20">
@@ -319,13 +336,33 @@ function ReviewPanel({
               <span>Blur intensity</span>
               <span className="font-mono text-zinc-500">{blurIntensity}px</span>
             </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-cyan-300">
+                {manuallyAdjusted
+                  ? "Manual setting"
+                  : "Suggested for this photo"}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setBlurIntensity(suggestedIntensity);
+                  setManuallyAdjusted(false);
+                }}
+                className="text-zinc-500 underline hover:text-white"
+              >
+                Use {suggestedIntensity}px
+              </button>
+            </div>
             <input
               type="range"
               min="4"
               max="24"
               step="2"
               value={blurIntensity}
-              onChange={(event) => setBlurIntensity(Number(event.target.value))}
+              onChange={(event) => {
+                setBlurIntensity(Number(event.target.value));
+                setManuallyAdjusted(true);
+              }}
               className="w-full accent-red-600"
             />
           </label>
@@ -369,14 +406,18 @@ function RegionEditor({
   imageUrl,
   regions,
   selectedRegion,
+  blurIntensity,
   onSelect,
   onChange,
+  onImageSize,
 }: {
   imageUrl: string;
   regions: Rect[];
   selectedRegion: number;
+  blurIntensity: number;
   onSelect: (index: number) => void;
   onChange: (regions: Rect[]) => void;
+  onImageSize: (width: number, height: number) => void;
 }) {
   const [start, setStart] = useState<{ x: number; y: number } | null>(null);
   const [draft, setDraft] = useState<Rect | null>(null);
@@ -450,6 +491,12 @@ function RegionEditor({
         alt="Edit blur regions"
         className="block w-full select-none"
         draggable={false}
+        onLoad={(event) =>
+          onImageSize(
+            event.currentTarget.naturalWidth,
+            event.currentTarget.naturalHeight,
+          )
+        }
       />
       {shown.map((region, index) => (
         <button
@@ -466,12 +513,13 @@ function RegionEditor({
               offsetY: p.y - region.y,
             });
           }}
-          className={`absolute border-2 ${selectedRegion === index ? "border-red-400 bg-red-500/25" : "border-white/80 bg-white/10"}`}
+          className={`absolute border-2 backdrop-blur-sm ${selectedRegion === index ? "border-red-400 bg-red-500/25" : "border-white/80 bg-white/10"}`}
           style={{
             left: `${region.x * 100}%`,
             top: `${region.y * 100}%`,
             width: `${region.width * 100}%`,
             height: `${region.height * 100}%`,
+            backdropFilter: `blur(${Math.max(4, blurIntensity / 2)}px)`,
           }}
           aria-label={`Select region ${index + 1}`}
         >
