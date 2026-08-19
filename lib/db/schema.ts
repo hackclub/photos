@@ -507,7 +507,7 @@ export const faceSystemSettings = pgTable("face_system_settings", {
   maxFaces: integer("max_faces").notNull().default(300),
   suggestionThreshold: doublePrecision("suggestion_threshold")
     .notNull()
-    .default(0.55),
+    .default(0.5),
   blurThreshold: doublePrecision("blur_threshold").notNull().default(0.82),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
