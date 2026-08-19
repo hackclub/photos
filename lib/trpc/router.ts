@@ -1,6 +1,19 @@
 import { initTRPC, TRPCError } from "@trpc/server";
+import { randomUUID } from "node:crypto";
 import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
+import {
+  checkHandleAvailability,
+  completeOnboarding,
+} from "@/app/actions/onboarding";
+import { getGlobalFeed } from "@/app/actions/feed";
+import { updatePrivacyPreferences } from "@/app/actions/privacy";
+import { joinEvent, leaveEvent } from "@/app/actions/events";
+import {
+  createComment,
+  getMediaComments,
+  toggleMediaLike,
+} from "@/app/actions/social";
 import { getMapData } from "@/app/actions/map";
 import { globalSearch } from "@/app/actions/search";
 import { getRandomMediaIds } from "@/app/actions/signage";
@@ -14,7 +27,18 @@ import {
   getAccessibleEventIdsForUser,
   getUserContext,
 } from "@/lib/policy";
+import { queueMediaForFaceIndexing } from "@/lib/face-indexing";
+import {
+  deleteFromS3,
+  getSignedDownloadUrl,
+  getSignedUploadUrl,
+} from "@/lib/media/s3";
+import { extractExifData, resolveTrustedDate } from "@/lib/media/exif";
+import { processImageUpload } from "@/lib/media/thumbnail";
+import { isUnsupportedImageBuffer } from "@/lib/media/validation";
+import { checkStorageLimit } from "@/lib/storage";
 import { getSlackAvatarUrl, toPublicUser } from "@/lib/user-display";
+import { logger, serializeError } from "@/lib/logger";
 
 export async function createTRPCContext() {
   let token: string | null = null;
@@ -489,6 +513,50 @@ export const appRouter = t.router({
         };
       }),
     webSession: protectedProcedure.query(() => ({ ok: true })),
+    feed: t.router({
+      page: protectedProcedure
+        .input(z.object({ limit: z.number().min(1).max(100).optional() }))
+        .query(async ({ input }) => {
+          const res = await getGlobalFeed(input.limit ?? 50, 0);
+          if (!res.success || !res.items) return { items: [] };
+          return {
+            items: res.items
+              .filter((item) => item.media)
+              .map((item) => ({
+                id: item.id,
+                type: item.type,
+                timestamp: item.timestamp,
+                media: {
+                  id: item.media!.id,
+                  filename: item.media!.filename,
+                  mimeType: item.media!.mimeType,
+                  width: item.media!.width,
+                  height: item.media!.height,
+                  uploadedAt: item.media!.uploadedAt,
+                  likeCount: item.media!.likeCount,
+                  commentCount: item.media!.commentCount,
+                  thumbnailUrl: getMediaProxyUrl(item.media!.id, "thumbnail"),
+                  url: getMediaProxyUrl(item.media!.id),
+                },
+                event: item.event?.id
+                  ? {
+                      id: item.event.id,
+                      name: item.event.name ?? "",
+                      slug: item.event.slug ?? "",
+                    }
+                  : null,
+                user: item.user
+                  ? {
+                      id: item.user.id ?? "",
+                      name: item.user.name ?? "",
+                      handle: item.user.handle ?? null,
+                      avatarUrl: item.user.avatarUrl,
+                    }
+                  : null,
+              })),
+          };
+        }),
+    }),
     mapData: protectedProcedure.query(async () => {
       const result = await getMapData();
       if (!result.success || !result.data) return result;
@@ -519,6 +587,226 @@ export const appRouter = t.router({
           })),
         },
       };
+    }),
+    attendee: t.router({
+      auth: t.router({
+        checkHandle: t.procedure
+          .input(z.object({ handle: z.string().min(1).max(20) }))
+          .mutation(async ({ input }) => {
+            return await checkHandleAvailability(input.handle);
+          }),
+        completeOnboarding: protectedProcedure
+          .input(
+            z.object({
+              handle: z.string().min(3).max(20),
+              matchingEnabled: z.boolean().optional(),
+              eventId: z.string().uuid().optional(),
+            }),
+          )
+          .mutation(async ({ ctx, input }) => {
+            const res = await completeOnboarding({ handle: input.handle });
+            if (!res.success) return res;
+            if (input.matchingEnabled !== undefined) {
+              await updatePrivacyPreferences({
+                matchingEnabled: input.matchingEnabled,
+                autoSuggestionsEnabled: true,
+                hideProfile: false,
+                hideMentions: false,
+                hideAiSuggestions: false,
+              });
+            }
+            if (input.eventId) {
+              const join = await joinEvent(input.eventId);
+              if (!join.success) return join;
+            }
+            return { success: true };
+          }),
+      }),
+      events: t.router({
+        join: protectedProcedure
+          .input(
+            z.object({
+              eventId: z.string().uuid(),
+              inviteCode: z.string().optional(),
+            }),
+          )
+          .mutation(async ({ input }) => {
+            return await joinEvent(input.eventId, input.inviteCode);
+          }),
+        leave: protectedProcedure
+          .input(z.object({ eventId: z.string().uuid() }))
+          .mutation(async ({ input }) => {
+            return await leaveEvent(input.eventId);
+          }),
+      }),
+      social: t.router({
+        like: protectedProcedure
+          .input(z.object({ mediaId: z.string().uuid() }))
+          .mutation(async ({ input }) => {
+            return await toggleMediaLike(input.mediaId);
+          }),
+        comments: t.router({
+          list: protectedProcedure
+            .input(z.object({ mediaId: z.string().uuid() }))
+            .query(async ({ input }) => {
+              return await getMediaComments(input.mediaId);
+            }),
+          create: protectedProcedure
+            .input(
+              z.object({
+                mediaId: z.string().uuid(),
+                content: z.string().min(1).max(1000),
+                parentCommentId: z.string().uuid().optional(),
+              }),
+            )
+            .mutation(async ({ input }) => {
+              return await createComment(
+                input.mediaId,
+                input.content,
+                input.parentCommentId,
+              );
+            }),
+        }),
+      }),
+      upload: t.router({
+        presign: protectedProcedure
+          .input(
+            z.object({
+              filename: z.string().min(1),
+              mimeType: z.string().min(1),
+              size: z.number().min(1),
+              eventId: z.string().uuid(),
+            }),
+          )
+          .mutation(async ({ ctx, input }) => {
+            const user = await getUserContext(ctx.session.id);
+            if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
+            if (!(await can(user, "upload", "event", input.eventId))) {
+              throw new TRPCError({ code: "FORBIDDEN" });
+            }
+            const storageCheck = await checkStorageLimit(
+              user.id,
+              input.size,
+              user,
+            );
+            if (!storageCheck.allowed) {
+              throw new TRPCError({
+                code: "PAYLOAD_TOO_LARGE",
+                message: "Storage limit exceeded",
+              });
+            }
+            const ext =
+              input.filename.split(".").pop()?.toLowerCase() || "bin";
+            const safeExt = /^[a-z0-9]{1,12}$/.test(ext) ? ext : "bin";
+            const mediaId = randomUUID();
+            const s3Key = `media/${mediaId}/original.${safeExt}`;
+            const uploadUrl = await getSignedUploadUrl(s3Key, input.mimeType);
+            return { mediaId, s3Key, uploadUrl, eventId: input.eventId };
+          }),
+        complete: protectedProcedure
+          .input(
+            z.object({
+              mediaId: z.string().uuid(),
+              s3Key: z.string().min(1),
+              eventId: z.string().uuid(),
+              filename: z.string().min(1),
+              mimeType: z.string().min(1),
+              size: z.number().min(1),
+              caption: z.string().max(500).optional(),
+            }),
+          )
+          .mutation(async ({ ctx, input }) => {
+            const user = await getUserContext(ctx.session.id);
+            if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
+            if (!(await can(user, "upload", "event", input.eventId))) {
+              throw new TRPCError({ code: "FORBIDDEN" });
+            }
+            const src = await getSignedDownloadUrl(input.s3Key);
+            const res = await fetch(src);
+            if (!res.ok) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Uploaded object is missing",
+              });
+            }
+            const bytes = Buffer.from(await res.arrayBuffer());
+            if (isUnsupportedImageBuffer(bytes)) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Unsupported image format",
+              });
+            }
+            let thumbnailS3Key: string | null = null;
+            let width: number | null = null;
+            let height: number | null = null;
+            let takenAt: Date | null = null;
+            let latitude: number | null = null;
+            let longitude: number | null = null;
+            if (input.mimeType.startsWith("image/")) {
+              try {
+                const exif = await extractExifData(bytes, input.mimeType);
+                if (exif) {
+                  takenAt = exif.dateTimeOriginal
+                    ? new Date(exif.dateTimeOriginal)
+                    : null;
+                  latitude = exif.gpsLatitude ?? null;
+                  longitude = exif.gpsLongitude ?? null;
+                }
+                const processed = await processImageUpload(
+                  bytes,
+                  input.mediaId,
+                  user.id,
+                  input.eventId,
+                  input.mimeType,
+                );
+                thumbnailS3Key = processed.thumbnailS3Key ?? null;
+                width = processed.width ?? null;
+                height = processed.height ?? null;
+              } catch (e) {
+                logger.error(
+                  { error: serializeError(e) },
+                  "mobile upload image processing failed",
+                );
+              }
+            }
+            try {
+              const [row] = await db
+                .insert(media)
+                .values({
+                  id: input.mediaId,
+                  eventId: input.eventId,
+                  uploadedById: user.id,
+                  s3Key: input.s3Key,
+                  s3Url: input.s3Key,
+                  thumbnailS3Key,
+                  filename: input.filename,
+                  mimeType: input.mimeType,
+                  fileSize: input.size,
+                  width,
+                  height,
+                  takenAt: resolveTrustedDate(takenAt, new Date()),
+                  latitude,
+                  longitude,
+                  caption: input.caption ?? null,
+                  uploadedAt: new Date(),
+                })
+                .returning();
+              queueMediaForFaceIndexing(input.mediaId).catch((e) =>
+                logger.error(
+                  { error: serializeError(e) },
+                  "queue face index failed",
+                ),
+              );
+              return { success: true, media: { id: row.id } };
+            } catch (e) {
+              await deleteFromS3(input.s3Key).catch(() => {});
+              throw new TRPCError({
+                code: "INTERNAL_SERVER_ERROR",
+                message: "Failed to save media",
+              });
+            }
+          }),
+      }),
     }),
   }),
 });
