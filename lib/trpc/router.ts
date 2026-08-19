@@ -16,13 +16,23 @@ import {
 } from "@/app/actions/social";
 import { createShareLink } from "@/app/actions/sharing";
 import { deleteMedia } from "@/app/actions/media";
+import { getMediaTags } from "@/app/actions/tags";
+import { getMediaMentions } from "@/app/actions/mentions";
+import { createReport } from "@/app/actions/reports";
 import { getMapData } from "@/app/actions/map";
 import { globalSearch } from "@/app/actions/search";
 import { getRandomMediaIds } from "@/app/actions/signage";
 import { getSession } from "@/lib/auth";
 import { APP_URL } from "@/lib/constants";
 import { db } from "@/lib/db";
-import { eventParticipants, media, mediaLikes, users } from "@/lib/db/schema";
+import {
+  eventParticipants,
+  media,
+  mediaLikes,
+  mediaMentions,
+  series,
+  users,
+} from "@/lib/db/schema";
 import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
 import {
   augmentMediaWithPermissions,
@@ -344,6 +354,54 @@ export const appRouter = t.router({
           })),
         };
       }),
+    series: t.procedure.query(async ({ ctx }) => {
+      const accessibleIds = await getAccessibleEventIdsForUser(ctx.session?.id);
+      const allSeries = await db.query.series.findMany({
+        orderBy: desc(series.createdAt),
+        with: { events: true },
+      });
+      const accessibleEventSet = new Set(accessibleIds);
+      const visible = allSeries.filter(
+        (s) =>
+          s.visibility === "public" ||
+          s.visibility === "auth_required" ||
+          s.events.some((e) => accessibleEventSet.has(e.id)),
+      );
+      const result = await Promise.all(
+        visible.map(async (s) => {
+          const eventIds = s.events.map((e) => e.id);
+          const [mediaCount] = eventIds.length
+            ? await db
+                .select({ value: count() })
+                .from(media)
+                .where(inArray(media.eventId, eventIds))
+            : [{ value: 0 }];
+          const firstMedia = eventIds.length
+            ? await db.query.media.findFirst({
+                where: inArray(media.eventId, eventIds),
+                orderBy: desc(media.uploadedAt),
+                columns: { id: true },
+              })
+            : null;
+          return {
+            id: s.id,
+            name: s.name,
+            slug: s.slug,
+            description: s.description,
+            visibility: s.visibility,
+            bannerUrl: s.bannerS3Key
+              ? getAssetProxyUrl("series-banner", s.id)
+              : null,
+            firstMediaUrl: firstMedia
+              ? getMediaProxyUrl(firstMedia.id, "thumbnail")
+              : null,
+            eventCount: s.events.length,
+            mediaCount: mediaCount?.value ?? 0,
+          };
+        }),
+      );
+      return result;
+    }),
     seriesBySlug: protectedProcedure
       .input(z.object({ slug: z.string().min(1).max(160) }))
       .query(async ({ ctx, input }) => {
@@ -671,6 +729,34 @@ export const appRouter = t.router({
             const res = await deleteMedia(input.mediaId);
             return { success: res.success, error: res.error };
           }),
+        tags: protectedProcedure
+          .input(z.object({ mediaId: z.string().uuid() }))
+          .query(async ({ input }) => {
+            const res = await getMediaTags(input.mediaId);
+            if (!res.success) return { tags: [] };
+            return { tags: res.tags ?? [] };
+          }),
+        mentions: protectedProcedure
+          .input(z.object({ mediaId: z.string().uuid() }))
+          .query(async ({ input }) => {
+            const res = await getMediaMentions(input.mediaId);
+            if (!res.success) return { users: [] };
+            return { users: res.mentions ?? [] };
+          }),
+        downloadUrl: protectedProcedure
+          .input(z.object({ mediaId: z.string().uuid() }))
+          .query(async ({ ctx, input }) => {
+            const user = await getUserContext(ctx.session.id);
+            const item = await db.query.media.findFirst({
+              where: eq(media.id, input.mediaId),
+              columns: { id: true, s3Key: true, mimeType: true, filename: true },
+            });
+            if (!item) throw new TRPCError({ code: "NOT_FOUND" });
+            if (!(await can(user, "view", "media", item))) {
+              throw new TRPCError({ code: "FORBIDDEN" });
+            }
+            return { url: await getSignedDownloadUrl(item.s3Key) };
+          }),
         my: protectedProcedure
           .input(
             z.object({
@@ -737,21 +823,93 @@ export const appRouter = t.router({
                 isGlobalAdmin: true,
                 isBanned: true,
                 bio: true,
+                socialLinks: true,
+                createdAt: true,
               },
             });
             if (!user || user.isBanned) {
               throw new TRPCError({ code: "NOT_FOUND" });
             }
-            const items = await db.query.media.findMany({
-              where: eq(media.uploadedById, user.id),
-              orderBy: desc(media.uploadedAt),
-              limit: 200,
+
+            const withEvent = {
               with: {
                 event: { columns: { id: true, name: true, slug: true } },
               },
-            });
-            const ids = items.map((item) => item.id);
-            const likeRows = ids.length
+            } as const;
+
+            const [uploads, likeRows, mentionRows, participations] =
+              await Promise.all([
+                db.query.media.findMany({
+                  ...withEvent,
+                  where: eq(media.uploadedById, user.id),
+                  orderBy: desc(media.uploadedAt),
+                  limit: 500,
+                }),
+                db.query.mediaLikes.findMany({
+                  where: eq(mediaLikes.userId, user.id),
+                  orderBy: desc(mediaLikes.createdAt),
+                  limit: 500,
+                  with: {
+                    media: {
+                      columns: {
+                        id: true,
+                        filename: true,
+                        mimeType: true,
+                        width: true,
+                        height: true,
+                        caption: true,
+                        uploadedAt: true,
+                      },
+                      with: {
+                        event: { columns: { id: true, name: true, slug: true } },
+                      },
+                    },
+                  },
+                }),
+                db.query.mediaMentions.findMany({
+                  where: eq(mediaMentions.userId, user.id),
+                  orderBy: desc(mediaMentions.createdAt),
+                  limit: 500,
+                  with: {
+                    media: {
+                      columns: {
+                        id: true,
+                        filename: true,
+                        mimeType: true,
+                        width: true,
+                        height: true,
+                        caption: true,
+                        uploadedAt: true,
+                      },
+                      with: {
+                        event: { columns: { id: true, name: true, slug: true } },
+                      },
+                    },
+                  },
+                }),
+                db.query.eventParticipants.findMany({
+                  where: eq(eventParticipants.userId, user.id),
+                  orderBy: desc(eventParticipants.joinedAt),
+                  limit: 200,
+                  with: {
+                    event: true,
+                  },
+                }),
+              ]);
+
+            const likes = likeRows
+              .map((r) => r.media)
+              .filter((m): m is NonNullable<typeof m> => !!m);
+            const mentions = mentionRows
+              .map((r) => r.media)
+              .filter((m): m is NonNullable<typeof m> => !!m);
+
+            const ids = [
+              ...new Set(
+                [...uploads, ...likes, ...mentions].map((m) => m.id),
+              ),
+            ];
+            const likeRows2 = ids.length
               ? await db
                   .select({ mediaId: mediaLikes.mediaId, value: count() })
                   .from(mediaLikes)
@@ -759,18 +917,11 @@ export const appRouter = t.router({
                   .groupBy(mediaLikes.mediaId)
               : [];
             const likeMap = new Map(
-              likeRows.map((row) => [row.mediaId, row.value]),
+              likeRows2.map((row) => [row.mediaId, row.value]),
             );
-            return {
-              user: toPublicUser({
-                id: user.id,
-                preferredName: user.preferredName,
-                handle: user.handle,
-                slackId: user.slackId,
-                isGlobalAdmin: user.isGlobalAdmin,
-              }),
-              bio: user.bio ?? null,
-              media: items.map((item) => ({
+
+            const mapMedia = (list: (typeof uploads)[number][]) =>
+              list.map((item) => ({
                 id: item.id,
                 filename: item.filename,
                 mimeType: item.mimeType,
@@ -788,7 +939,64 @@ export const appRouter = t.router({
                       slug: item.event.slug,
                     }
                   : null,
-              })),
+              }));
+
+            const mapLikeMedia = (
+              list: { id: string; filename: string; mimeType: string; width: number | null; height: number | null; caption: string | null; uploadedAt: Date; event: { id: string; name: string; slug: string } | null }[],
+            ) =>
+              list.map((item) => ({
+                id: item.id,
+                filename: item.filename,
+                mimeType: item.mimeType,
+                width: item.width,
+                height: item.height,
+                caption: item.caption,
+                uploadedAt: item.uploadedAt,
+                url: getMediaProxyUrl(item.id),
+                thumbnailUrl: getMediaProxyUrl(item.id, "thumbnail"),
+                likeCount: likeMap.get(item.id) ?? 0,
+                event: item.event,
+              }));
+
+            return {
+              user: toPublicUser({
+                id: user.id,
+                preferredName: user.preferredName,
+                handle: user.handle,
+                slackId: user.slackId,
+                isGlobalAdmin: user.isGlobalAdmin,
+              }),
+              bio: user.bio ?? null,
+              socialLinks: user.socialLinks ?? null,
+              createdAt: user.createdAt,
+              stats: {
+                photos: uploads.filter((m) => m.mimeType.startsWith("image/"))
+                  .length,
+                videos: uploads.filter((m) => m.mimeType.startsWith("video/"))
+                  .length,
+                likes: likes.length,
+                mentions: mentions.length,
+                events: participations.length,
+              },
+              uploads: mapMedia(uploads),
+              likes: mapLikeMedia(likes as any),
+              mentions: mapLikeMedia(mentions as any),
+              events: participations.map((p) => {
+                const ev = p.event;
+                return {
+                  id: ev.id,
+                  name: ev.name,
+                  slug: ev.slug,
+                  description: ev.description,
+                  eventDate: ev.eventDate,
+                  location: ev.location,
+                  locationCity: ev.locationCity,
+                  visibility: ev.visibility,
+                  bannerUrl: ev.bannerS3Key
+                    ? getAssetProxyUrl("event-banner", ev.id)
+                    : null,
+                };
+              }),
             };
           }),
       }),
@@ -828,6 +1036,18 @@ export const appRouter = t.router({
             const res = await createShareLink(input.mediaId, "view");
             if (!res.success) return { success: false, error: res.error };
             return { success: true, url: `${APP_URL}/share/${res.token}` };
+          }),
+      }),
+      reports: t.router({
+        create: protectedProcedure
+          .input(
+            z.object({
+              mediaId: z.string().uuid(),
+              reason: z.string().min(1).max(500),
+            }),
+          )
+          .mutation(async ({ input }) => {
+            return await createReport(input.mediaId, input.reason);
           }),
       }),
       upload: t.router({
