@@ -2,6 +2,7 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { auditLog } from "@/lib/audit";
 import {
   blurRequests,
   eventFaceIndexes,
@@ -18,6 +19,8 @@ import {
 } from "@/lib/db/schema";
 import { decryptFaceTemplate, encryptFaceTemplate } from "@/lib/face-crypto";
 import { logger } from "@/lib/logger";
+import { createBlurThumbnail, renderBlurredPhoto } from "@/lib/blur-render";
+import { uploadToS3 } from "@/lib/media/s3";
 import {
   cancelVisionJob,
   createFaceDetectionJob,
@@ -842,23 +845,72 @@ async function createAutomaticFaceBlurRequests(options: {
     });
     if (existing) continue;
     const region = expandedDetectionRegion(detection);
-    await db
-      .insert(blurRequests)
-      .values({
-        id: randomUUID(),
+    const requestId = randomUUID();
+    try {
+      const rendered = await renderBlurredPhoto(
+        item.s3Key,
+        [region],
+        undefined,
+        item.mimeType,
+      );
+      const ext =
+        rendered.mimeType === "image/png"
+          ? "png"
+          : rendered.mimeType === "image/webp"
+            ? "webp"
+            : "jpg";
+      const blurredS3Key = `media/${item.id}/blur-requests/${requestId}-automatic.${ext}`;
+      const thumbnailS3Key = `media/${item.id}/blur-requests/${requestId}-automatic-thumb.jpg`;
+      const thumbnail = await createBlurThumbnail(rendered.buffer);
+      await uploadToS3(
+        rendered.buffer,
+        blurredS3Key,
+        rendered.mimeType,
+        undefined,
+        {
+          uploadedBy: options.userId,
+          mediaId: item.id,
+        },
+      );
+      await uploadToS3(thumbnail, thumbnailS3Key, "image/jpeg", undefined, {
+        uploadedBy: options.userId,
         mediaId: item.id,
-        requesterId: options.userId,
-        status: "pending",
+      });
+      await db.transaction(async (tx) => {
+        await tx.insert(blurRequests).values({
+          id: requestId,
+          mediaId: item.id,
+          requesterId: options.userId,
+          status: "approved",
+          source: "automatic_face",
+          faceScanId: options.scanId,
+          faceDetectionId: detection.id,
+          regions: [region],
+          blurredS3Key,
+          blurredThumbnailS3Key: thumbnailS3Key,
+          resolvedAt: new Date(),
+          resolvedById: options.userId,
+        });
+        await tx
+          .update(media)
+          .set({
+            s3Key: blurredS3Key,
+            thumbnailS3Key,
+            originalS3Key: item.s3Key,
+            originalThumbnailS3Key: item.thumbnailS3Key,
+            blurredS3Key,
+            blurredThumbnailS3Key: thumbnailS3Key,
+            blurStatus: "approved",
+          })
+          .where(and(eq(media.id, item.id), eq(media.s3Key, item.s3Key)));
+      });
+      await auditLog(options.userId, "update", "blur_request", requestId, {
+        status: "approved",
         source: "automatic_face",
-        faceScanId: options.scanId,
-        faceDetectionId: detection.id,
-        regions: [region],
-        // Pending automatic requests do not need a duplicate preview artifact.
-        // Approval renders the final blur from the current source image.
-        blurredS3Key: item.s3Key,
-        blurredThumbnailS3Key: item.thumbnailS3Key,
-      })
-      .onConflictDoNothing();
+      });
+    } catch (error) {
+      logger.error(`Failed to automatically blur media ${item.id}`, error);
+    }
   }
 }
 
