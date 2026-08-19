@@ -188,9 +188,9 @@ function ReviewPanel({
       if (event.key === "a") void approve();
       if (event.key === "r") void reject();
       if (event.key === "=")
-        setBlurIntensity((value) => Math.min(24, value + 2));
+        setBlurIntensity((value) => Math.min(20, value + 2));
       if (event.key === "-")
-        setBlurIntensity((value) => Math.max(4, value - 2));
+        setBlurIntensity((value) => Math.max(2, value - 2));
       if (event.key === "Backspace") removeSelected();
       if (event.key === "ArrowRight" && hasNext) onNext();
       if (event.key === "ArrowLeft" && hasPrevious) onPrevious();
@@ -213,7 +213,7 @@ function ReviewPanel({
         Math.max(region.width * width, region.height * height, largest),
       0,
     );
-    const next = Math.max(8, Math.min(24, Math.round(largestRegion / 48)));
+    const next = Math.max(4, Math.min(16, Math.round(largestRegion / 64)));
     setSuggestedIntensity(next);
     if (!manuallyAdjusted) setBlurIntensity(next);
   };
@@ -355,8 +355,8 @@ function ReviewPanel({
             </div>
             <input
               type="range"
-              min="4"
-              max="24"
+              min="2"
+              max="20"
               step="2"
               value={blurIntensity}
               onChange={(event) => {
