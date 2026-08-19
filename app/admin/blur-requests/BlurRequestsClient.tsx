@@ -10,6 +10,40 @@ import {
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
 type Rect = { x: number; y: number; width: number; height: number };
+
+function recommendBlurIntensity(
+  regions: Rect[],
+  imageWidth: number,
+  imageHeight: number,
+) {
+  const largest = regions.reduce(
+    (result, region) => {
+      const width = region.width * imageWidth;
+      const height = region.height * imageHeight;
+      return result.dimension > Math.max(width, height)
+        ? result
+        : {
+            area: region.width * region.height,
+            dimension: Math.max(width, height),
+          };
+    },
+    { area: 0, dimension: 0 },
+  );
+  if (largest.dimension === 0) return 8;
+
+  // Larger, higher-resolution faces retain more identifying detail after the
+  // fixed 64px pixelation step used by the server renderer.
+  const sizeScore = Math.log2(largest.dimension / 160) * 2.5;
+  const areaScore = largest.area > 0.12 ? 1 : largest.area > 0.05 ? 0.5 : 0;
+  const resolutionScore = Math.max(
+    0,
+    Math.log2(Math.max(imageWidth, imageHeight) / 1800),
+  );
+  return Math.max(
+    4,
+    Math.min(16, Math.round(7 + sizeScore + areaScore + resolutionScore)),
+  );
+}
 type Request = {
   id: string;
   status: "pending" | "approved" | "rejected";
@@ -208,12 +242,7 @@ function ReviewPanel({
     setSelectedRegion((index) => Math.max(0, index - 1));
   };
   const updateSuggestedIntensity = (width: number, height: number) => {
-    const largestRegion = regions.reduce(
-      (largest, region) =>
-        Math.max(region.width * width, region.height * height, largest),
-      0,
-    );
-    const next = Math.max(4, Math.min(16, Math.round(largestRegion / 64)));
+    const next = recommendBlurIntensity(regions, width, height);
     setSuggestedIntensity(next);
     if (!manuallyAdjusted) setBlurIntensity(next);
   };
