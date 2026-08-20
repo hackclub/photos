@@ -1,57 +1,73 @@
 import { initTRPC, TRPCError } from "@trpc/server";
-import { randomUUID } from "node:crypto";
 import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
+import {
+  cancelDataExport,
+  deleteExport,
+  getLatestExport,
+  requestDataExport,
+} from "@/app/actions/data-export";
+import { joinEvent, leaveEvent } from "@/app/actions/events";
+import { getGlobalFeed } from "@/app/actions/feed";
+import { getMapData } from "@/app/actions/map";
+import { deleteMedia, updateMediaCaption } from "@/app/actions/media";
+import {
+  addMention,
+  getMediaMentions,
+  removeMention,
+} from "@/app/actions/mentions";
 import {
   checkHandleAvailability,
   completeOnboarding,
 } from "@/app/actions/onboarding";
-import { getGlobalFeed } from "@/app/actions/feed";
-import { updatePrivacyPreferences } from "@/app/actions/privacy";
-import { joinEvent, leaveEvent } from "@/app/actions/events";
+import {
+  deleteAllFaceData,
+  getPrivacyOverview,
+  updatePrivacyPreferences,
+} from "@/app/actions/privacy";
+import { createReport } from "@/app/actions/reports";
+import { globalSearch } from "@/app/actions/search";
+import { createShareLink, getSharedMedia } from "@/app/actions/sharing";
+import { getRandomMediaIds } from "@/app/actions/signage";
 import {
   createComment,
+  deleteComment,
   getMediaComments,
+  toggleCommentLike,
   toggleMediaLike,
 } from "@/app/actions/social";
-import { createShareLink } from "@/app/actions/sharing";
-import { deleteMedia } from "@/app/actions/media";
-import { getMediaTags } from "@/app/actions/tags";
-import { getMediaMentions } from "@/app/actions/mentions";
-import { createReport } from "@/app/actions/reports";
-import { getMapData } from "@/app/actions/map";
-import { globalSearch } from "@/app/actions/search";
-import { getRandomMediaIds } from "@/app/actions/signage";
+import { addTag, getMediaTags, removeTag } from "@/app/actions/tags";
+import { finalizeUpload, getPresignedUrl } from "@/app/actions/upload";
+import {
+  deleteAccount,
+  searchUsers,
+  updateUserProfile,
+} from "@/app/actions/users";
 import { getSession } from "@/lib/auth";
 import { APP_URL } from "@/lib/constants";
 import { db } from "@/lib/db";
 import {
   eventParticipants,
+  facePrivacyPreferences,
   media,
+  mediaComments,
   mediaLikes,
   mediaMentions,
   series,
   users,
 } from "@/lib/db/schema";
-import { getAssetProxyUrl, getMediaProxyUrl } from "@/lib/media/s3";
+import {
+  getAssetProxyUrl,
+  getMediaProxyUrl,
+  getSignedDownloadUrl,
+} from "@/lib/media/s3";
 import {
   augmentMediaWithPermissions,
   can,
   getAccessibleEventIdsForUser,
   getUserContext,
 } from "@/lib/policy";
-import { queueMediaForFaceIndexing } from "@/lib/face-indexing";
-import {
-  deleteFromS3,
-  getSignedDownloadUrl,
-  getSignedUploadUrl,
-} from "@/lib/media/s3";
-import { extractExifData, resolveTrustedDate } from "@/lib/media/exif";
-import { processImageUpload } from "@/lib/media/thumbnail";
-import { isUnsupportedImageBuffer } from "@/lib/media/validation";
-import { checkStorageLimit } from "@/lib/storage";
 import { getSlackAvatarUrl, toPublicUser } from "@/lib/user-display";
-import { logger, serializeError } from "@/lib/logger";
 
 export async function createTRPCContext() {
   let token: string | null = null;
@@ -330,6 +346,7 @@ export const appRouter = t.router({
                   slug: event.series.slug,
                 }
               : null,
+            requiresInvite: Boolean(event.inviteCode),
           },
           isParticipant: Boolean(participant),
           canManage,
@@ -580,9 +597,16 @@ export const appRouter = t.router({
     webSession: protectedProcedure.query(() => ({ ok: true })),
     feed: t.router({
       page: protectedProcedure
-        .input(z.object({ limit: z.number().min(1).max(100).optional() }))
+        .input(
+          z.object({
+            limit: z.number().min(1).max(100).optional(),
+            cursor: z.number().min(0).optional(),
+          }),
+        )
         .query(async ({ input }) => {
-          const res = await getGlobalFeed(input.limit ?? 50, 0);
+          const limit = input.limit ?? 50;
+          const offset = input.cursor ?? 0;
+          const res = await getGlobalFeed(limit, offset);
           if (!res.success || !res.items) return { items: [] };
           return {
             items: res.items
@@ -619,6 +643,7 @@ export const appRouter = t.router({
                     }
                   : null,
               })),
+            nextCursor: res.items.length === limit ? offset + limit : undefined,
           };
         }),
     }),
@@ -705,7 +730,15 @@ export const appRouter = t.router({
           }),
         participants: protectedProcedure
           .input(z.object({ eventId: z.string().uuid() }))
-          .query(async ({ input }) => {
+          .query(async ({ ctx, input }) => {
+            const user = await getUserContext(ctx.session.id);
+            const event = await db.query.events.findFirst({
+              where: (events, { eq }) => eq(events.id, input.eventId),
+            });
+            if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+            if (!(await can(user, "view", "event", event))) {
+              throw new TRPCError({ code: "FORBIDDEN" });
+            }
             const rows = await db.query.eventParticipants.findMany({
               where: eq(eventParticipants.eventId, input.eventId),
               with: { user: true },
@@ -723,12 +756,90 @@ export const appRouter = t.router({
           }),
       }),
       media: t.router({
+        byId: protectedProcedure
+          .input(z.object({ mediaId: z.string().uuid() }))
+          .query(async ({ ctx, input }) => {
+            const user = await getUserContext(ctx.session.id);
+            const item = await db.query.media.findFirst({
+              where: eq(media.id, input.mediaId),
+              with: {
+                event: { columns: { id: true, name: true, slug: true } },
+                uploadedBy: {
+                  columns: {
+                    id: true,
+                    handle: true,
+                    preferredName: true,
+                    slackId: true,
+                  },
+                },
+              },
+            });
+            if (!item || item.blurStatus === "pending") {
+              throw new TRPCError({ code: "NOT_FOUND" });
+            }
+            if (!(await can(user, "view", "media", item))) {
+              throw new TRPCError({ code: "FORBIDDEN" });
+            }
+            const [[likeCountRow], [commentCountRow], existingLike, augmented] =
+              await Promise.all([
+                db
+                  .select({ value: count() })
+                  .from(mediaLikes)
+                  .where(eq(mediaLikes.mediaId, item.id)),
+                db
+                  .select({ value: count() })
+                  .from(mediaComments)
+                  .where(eq(mediaComments.mediaId, item.id)),
+                db.query.mediaLikes.findFirst({
+                  where: and(
+                    eq(mediaLikes.mediaId, item.id),
+                    eq(mediaLikes.userId, ctx.session.id),
+                  ),
+                  columns: { id: true },
+                }),
+                augmentMediaWithPermissions(ctx.session.id, [item]),
+              ]);
+            const permitted = augmented[0];
+            if (!permitted) throw new TRPCError({ code: "FORBIDDEN" });
+            return {
+              id: item.id,
+              filename: item.filename,
+              mimeType: item.mimeType,
+              width: item.width,
+              height: item.height,
+              duration: item.duration,
+              caption: item.caption,
+              exifData: item.exifData,
+              latitude: item.latitude,
+              longitude: item.longitude,
+              takenAt: item.takenAt,
+              uploadedAt: item.uploadedAt,
+              url: getMediaProxyUrl(item.id),
+              thumbnailUrl: getMediaProxyUrl(item.id, "thumbnail"),
+              likeCount: likeCountRow?.value ?? 0,
+              commentCount: commentCountRow?.value ?? 0,
+              hasLiked: Boolean(existingLike),
+              canDelete: permitted.canDelete,
+              uploadedBy: toPublicUser(item.uploadedBy),
+              event: item.event,
+            };
+          }),
         delete: protectedProcedure
           .input(z.object({ mediaId: z.string().uuid() }))
           .mutation(async ({ input }) => {
             const res = await deleteMedia(input.mediaId);
             return { success: res.success, error: res.error };
           }),
+        updateCaption: protectedProcedure
+          .input(
+            z.object({
+              mediaId: z.string().uuid(),
+              caption: z.string().max(500),
+            }),
+          )
+          .mutation(async ({ input }) =>
+            updateMediaCaption(input.mediaId, input.caption),
+          ),
         tags: protectedProcedure
           .input(z.object({ mediaId: z.string().uuid() }))
           .query(async ({ input }) => {
@@ -736,6 +847,19 @@ export const appRouter = t.router({
             if (!res.success) return { tags: [] };
             return { tags: res.tags ?? [] };
           }),
+        addTag: protectedProcedure
+          .input(
+            z.object({
+              mediaId: z.string().uuid(),
+              name: z.string().min(1).max(80),
+            }),
+          )
+          .mutation(async ({ input }) => addTag(input.mediaId, input.name)),
+        removeTag: protectedProcedure
+          .input(
+            z.object({ mediaId: z.string().uuid(), tagId: z.string().uuid() }),
+          )
+          .mutation(async ({ input }) => removeTag(input.mediaId, input.tagId)),
         mentions: protectedProcedure
           .input(z.object({ mediaId: z.string().uuid() }))
           .query(async ({ input }) => {
@@ -743,13 +867,32 @@ export const appRouter = t.router({
             if (!res.success) return { users: [] };
             return { users: res.mentions ?? [] };
           }),
+        addMention: protectedProcedure
+          .input(
+            z.object({ mediaId: z.string().uuid(), userId: z.string().uuid() }),
+          )
+          .mutation(async ({ input }) =>
+            addMention(input.mediaId, input.userId),
+          ),
+        removeMention: protectedProcedure
+          .input(
+            z.object({ mediaId: z.string().uuid(), userId: z.string().uuid() }),
+          )
+          .mutation(async ({ input }) =>
+            removeMention(input.mediaId, input.userId),
+          ),
         downloadUrl: protectedProcedure
           .input(z.object({ mediaId: z.string().uuid() }))
           .query(async ({ ctx, input }) => {
             const user = await getUserContext(ctx.session.id);
             const item = await db.query.media.findFirst({
               where: eq(media.id, input.mediaId),
-              columns: { id: true, s3Key: true, mimeType: true, filename: true },
+              columns: {
+                id: true,
+                s3Key: true,
+                mimeType: true,
+                filename: true,
+              },
             });
             if (!item) throw new TRPCError({ code: "NOT_FOUND" });
             if (!(await can(user, "view", "media", item))) {
@@ -809,9 +952,25 @@ export const appRouter = t.router({
           }),
       }),
       users: t.router({
+        search: protectedProcedure
+          .input(z.object({ query: z.string().min(2).max(80) }))
+          .query(async ({ input }) => searchUsers(input.query)),
+        updateProfile: protectedProcedure
+          .input(
+            z.object({
+              preferredName: z.string().max(80),
+              handle: z.string().min(3).max(20),
+              bio: z.string().max(500),
+              socialLinks: z.record(z.string(), z.string().max(200)),
+            }),
+          )
+          .mutation(async ({ ctx, input }) =>
+            updateUserProfile(ctx.session.id, input),
+          ),
+        deleteAccount: protectedProcedure.mutation(async () => deleteAccount()),
         byHandle: protectedProcedure
           .input(z.object({ handle: z.string().min(1).max(40) }))
-          .query(async ({ input }) => {
+          .query(async ({ ctx, input }) => {
             const user = await db.query.users.findFirst({
               where: eq(users.handle, input.handle),
               columns: {
@@ -830,6 +989,15 @@ export const appRouter = t.router({
             if (!user || user.isBanned) {
               throw new TRPCError({ code: "NOT_FOUND" });
             }
+            const privacy = await db.query.facePrivacyPreferences.findFirst({
+              where: eq(facePrivacyPreferences.userId, user.id),
+            });
+            const privilegedViewer =
+              ctx.session.id === user.id ||
+              (await getUserContext(ctx.session.id))?.isGlobalAdmin === true;
+            if (privacy?.hideProfile && !privilegedViewer) {
+              throw new TRPCError({ code: "NOT_FOUND" });
+            }
 
             const withEvent = {
               with: {
@@ -837,7 +1005,7 @@ export const appRouter = t.router({
               },
             } as const;
 
-            const [uploads, likeRows, mentionRows, participations] =
+            const [rawUploads, rawLikeRows, rawMentionRows, rawParticipations] =
               await Promise.all([
                 db.query.media.findMany({
                   ...withEvent,
@@ -861,7 +1029,9 @@ export const appRouter = t.router({
                         uploadedAt: true,
                       },
                       with: {
-                        event: { columns: { id: true, name: true, slug: true } },
+                        event: {
+                          columns: { id: true, name: true, slug: true },
+                        },
                       },
                     },
                   },
@@ -882,7 +1052,9 @@ export const appRouter = t.router({
                         uploadedAt: true,
                       },
                       with: {
-                        event: { columns: { id: true, name: true, slug: true } },
+                        event: {
+                          columns: { id: true, name: true, slug: true },
+                        },
                       },
                     },
                   },
@@ -897,6 +1069,27 @@ export const appRouter = t.router({
                 }),
               ]);
 
+            const accessibleEventIds = new Set(
+              await getAccessibleEventIdsForUser(ctx.session.id),
+            );
+            const uploads = rawUploads.filter((item) =>
+              accessibleEventIds.has(item.eventId),
+            );
+            const likeRows = rawLikeRows.filter((item) =>
+              item.media ? accessibleEventIds.has(item.media.event.id) : false,
+            );
+            const mentionRows =
+              privacy?.hideMentions && !privilegedViewer
+                ? []
+                : rawMentionRows.filter((item) =>
+                    item.media
+                      ? accessibleEventIds.has(item.media.event.id)
+                      : false,
+                  );
+            const participations = rawParticipations.filter((item) =>
+              accessibleEventIds.has(item.eventId),
+            );
+
             const likes = likeRows
               .map((r) => r.media)
               .filter((m): m is NonNullable<typeof m> => !!m);
@@ -905,9 +1098,7 @@ export const appRouter = t.router({
               .filter((m): m is NonNullable<typeof m> => !!m);
 
             const ids = [
-              ...new Set(
-                [...uploads, ...likes, ...mentions].map((m) => m.id),
-              ),
+              ...new Set([...uploads, ...likes, ...mentions].map((m) => m.id)),
             ];
             const likeRows2 = ids.length
               ? await db
@@ -942,7 +1133,16 @@ export const appRouter = t.router({
               }));
 
             const mapLikeMedia = (
-              list: { id: string; filename: string; mimeType: string; width: number | null; height: number | null; caption: string | null; uploadedAt: Date; event: { id: string; name: string; slug: string } | null }[],
+              list: {
+                id: string;
+                filename: string;
+                mimeType: string;
+                width: number | null;
+                height: number | null;
+                caption: string | null;
+                uploadedAt: Date;
+                event: { id: string; name: string; slug: string } | null;
+              }[],
             ) =>
               list.map((item) => ({
                 id: item.id,
@@ -1027,6 +1227,12 @@ export const appRouter = t.router({
                 input.parentCommentId,
               );
             }),
+          delete: protectedProcedure
+            .input(z.object({ commentId: z.string().uuid() }))
+            .mutation(async ({ input }) => deleteComment(input.commentId)),
+          like: protectedProcedure
+            .input(z.object({ commentId: z.string().uuid() }))
+            .mutation(async ({ input }) => toggleCommentLike(input.commentId)),
         }),
       }),
       share: t.router({
@@ -1036,6 +1242,35 @@ export const appRouter = t.router({
             const res = await createShareLink(input.mediaId, "view");
             if (!res.success) return { success: false, error: res.error };
             return { success: true, url: `${APP_URL}/share/${res.token}` };
+          }),
+        // Public: anyone with a valid share token can view the media.
+        byToken: t.procedure
+          .input(z.object({ token: z.string().min(1).max(64) }))
+          .query(async ({ input }) => {
+            const res = await getSharedMedia(input.token);
+            if (!res.success || !res.link) {
+              throw new TRPCError({ code: "NOT_FOUND" });
+            }
+            const mediaItem = res.link.media;
+            return {
+              id: mediaItem.id,
+              filename: mediaItem.filename,
+              mimeType: mediaItem.mimeType,
+              caption: mediaItem.caption,
+              width: mediaItem.width,
+              height: mediaItem.height,
+              uploadedAt: mediaItem.uploadedAt,
+              url: getMediaProxyUrl(mediaItem.id),
+              thumbnailUrl: getMediaProxyUrl(mediaItem.id, "thumbnail"),
+              uploadedBy: toPublicUser(mediaItem.uploadedBy),
+              event: mediaItem.event
+                ? {
+                    id: mediaItem.event.id,
+                    name: mediaItem.event.name,
+                    slug: mediaItem.event.slug,
+                  }
+                : null,
+            };
           }),
       }),
       reports: t.router({
@@ -1050,6 +1285,46 @@ export const appRouter = t.router({
             return await createReport(input.mediaId, input.reason);
           }),
       }),
+      privacy: t.router({
+        overview: protectedProcedure.query(async () => getPrivacyOverview()),
+        update: protectedProcedure
+          .input(
+            z.object({
+              matchingEnabled: z.boolean(),
+              autoSuggestionsEnabled: z.boolean(),
+              hideProfile: z.boolean(),
+              hideMentions: z.boolean(),
+              hideAiSuggestions: z.boolean(),
+            }),
+          )
+          .mutation(async ({ input }) => updatePrivacyPreferences(input)),
+        deleteFaceData: protectedProcedure.mutation(async () =>
+          deleteAllFaceData(),
+        ),
+      }),
+      dataExport: t.router({
+        latest: protectedProcedure.query(async () => {
+          const result = await getLatestExport();
+          if (!result.success || !result.export) return result;
+          return {
+            ...result,
+            export: {
+              ...result.export,
+              downloadUrl:
+                result.export.status === "completed" && result.export.s3Key
+                  ? await getSignedDownloadUrl(result.export.s3Key)
+                  : null,
+            },
+          };
+        }),
+        request: protectedProcedure.mutation(async () => requestDataExport()),
+        cancel: protectedProcedure
+          .input(z.object({ exportId: z.string().uuid() }))
+          .mutation(async ({ input }) => cancelDataExport(input.exportId)),
+        delete: protectedProcedure
+          .input(z.object({ exportId: z.string().uuid() }))
+          .mutation(async ({ input }) => deleteExport(input.exportId)),
+      }),
       upload: t.router({
         presign: protectedProcedure
           .input(
@@ -1060,30 +1335,27 @@ export const appRouter = t.router({
               eventId: z.string().uuid(),
             }),
           )
-          .mutation(async ({ ctx, input }) => {
-            const user = await getUserContext(ctx.session.id);
-            if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
-            if (!(await can(user, "upload", "event", input.eventId))) {
-              throw new TRPCError({ code: "FORBIDDEN" });
-            }
-            const storageCheck = await checkStorageLimit(
-              user.id,
+          .mutation(async ({ input }) => {
+            const result = await getPresignedUrl(
+              input.eventId,
+              input.filename,
+              input.mimeType,
               input.size,
-              user,
             );
-            if (!storageCheck.allowed) {
+            if (!result.success) {
               throw new TRPCError({
-                code: "PAYLOAD_TOO_LARGE",
-                message: "Storage limit exceeded",
+                code: "BAD_REQUEST",
+                message: result.error ?? "Could not start upload",
               });
             }
-            const ext =
-              input.filename.split(".").pop()?.toLowerCase() || "bin";
-            const safeExt = /^[a-z0-9]{1,12}$/.test(ext) ? ext : "bin";
-            const mediaId = randomUUID();
-            const s3Key = `media/${mediaId}/original.${safeExt}`;
-            const uploadUrl = await getSignedUploadUrl(s3Key, input.mimeType);
-            return { mediaId, s3Key, uploadUrl, eventId: input.eventId };
+            return {
+              mediaId: result.mediaId,
+              s3Key: result.s3Key,
+              uploadUrl: result.uploadUrl,
+              thumbnailS3Key: result.thumbnailS3Key,
+              thumbnailUploadUrl: result.thumbnailUploadUrl,
+              eventId: input.eventId,
+            };
           }),
         complete: protectedProcedure
           .input(
@@ -1097,96 +1369,32 @@ export const appRouter = t.router({
               caption: z.string().max(500).optional(),
             }),
           )
-          .mutation(async ({ ctx, input }) => {
-            const user = await getUserContext(ctx.session.id);
-            if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
-            if (!(await can(user, "upload", "event", input.eventId))) {
-              throw new TRPCError({ code: "FORBIDDEN" });
-            }
-            const src = await getSignedDownloadUrl(input.s3Key);
-            const res = await fetch(src);
-            if (!res.ok) {
+          .mutation(async ({ input }) => {
+            const result = await finalizeUpload(
+              input.mediaId,
+              input.eventId,
+              {
+                filename: input.filename,
+                fileSize: input.size,
+                mimeType: input.mimeType,
+                width: null,
+                height: null,
+                takenAt: null,
+                exifData: null,
+                s3Key: input.s3Key,
+                thumbnailS3Key: null,
+                thumbnailFailed: true,
+                thumbnailError: "Mobile client requested server processing",
+              },
+              true,
+            );
+            if (!result.success || !result.media) {
               throw new TRPCError({
                 code: "BAD_REQUEST",
-                message: "Uploaded object is missing",
+                message: result.error ?? "Could not process upload",
               });
             }
-            const bytes = Buffer.from(await res.arrayBuffer());
-            if (isUnsupportedImageBuffer(bytes)) {
-              throw new TRPCError({
-                code: "BAD_REQUEST",
-                message: "Unsupported image format",
-              });
-            }
-            let thumbnailS3Key: string | null = null;
-            let width: number | null = null;
-            let height: number | null = null;
-            let takenAt: Date | null = null;
-            let latitude: number | null = null;
-            let longitude: number | null = null;
-            if (input.mimeType.startsWith("image/")) {
-              try {
-                const exif = await extractExifData(bytes, input.mimeType);
-                if (exif) {
-                  takenAt = exif.dateTimeOriginal
-                    ? new Date(exif.dateTimeOriginal)
-                    : null;
-                  latitude = exif.gpsLatitude ?? null;
-                  longitude = exif.gpsLongitude ?? null;
-                }
-                const processed = await processImageUpload(
-                  bytes,
-                  input.mediaId,
-                  user.id,
-                  input.eventId,
-                  input.mimeType,
-                );
-                thumbnailS3Key = processed.thumbnailS3Key ?? null;
-                width = processed.width ?? null;
-                height = processed.height ?? null;
-              } catch (e) {
-                logger.error(
-                  { error: serializeError(e) },
-                  "mobile upload image processing failed",
-                );
-              }
-            }
-            try {
-              const [row] = await db
-                .insert(media)
-                .values({
-                  id: input.mediaId,
-                  eventId: input.eventId,
-                  uploadedById: user.id,
-                  s3Key: input.s3Key,
-                  s3Url: input.s3Key,
-                  thumbnailS3Key,
-                  filename: input.filename,
-                  mimeType: input.mimeType,
-                  fileSize: input.size,
-                  width,
-                  height,
-                  takenAt: resolveTrustedDate(takenAt, new Date()),
-                  latitude,
-                  longitude,
-                  caption: input.caption ?? null,
-                  uploadedAt: new Date(),
-                })
-                .returning();
-              queueMediaForFaceIndexing(input.mediaId).catch((e) =>
-                logger.error(
-                  { error: serializeError(e) },
-                  "queue face index failed",
-                ),
-              );
-              return { success: true, media: { id: row.id } };
-            } catch (e) {
-              await deleteFromS3(input.s3Key).catch(() => {});
-              throw new TRPCError({
-                code: "INTERNAL_SERVER_ERROR",
-                message: "Failed to save media",
-              });
-            }
+            return { success: true, media: { id: result.media.id } };
           }),
       }),
     }),
