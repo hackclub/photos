@@ -305,16 +305,18 @@ export async function GET(
   if (variant === "original") {
     return new NextResponse("Not found", { status: 404 });
   }
-  if (mediaItem.blurStatus === "approved") {
+  const isPartialContent = Boolean(s3Response.ContentRange);
+  if (isPartialContent) {
+    headers.set("Cache-Control", "private, no-store");
+    headers.set("CDN-Cache-Control", "no-store");
+  } else if (mediaItem.blurStatus === "approved") {
     headers.set("Cache-Control", "no-store, max-age=0");
     headers.set("CDN-Cache-Control", "no-store");
-    headers.set("Cloudflare-CDN-Cache-Control", "no-store");
   } else if (mediaItem.event.visibility === "public") {
     const browserCache = "public, max-age=3600, stale-while-revalidate=86400";
     const cdnCache = "public, max-age=3600, stale-while-revalidate=86400";
     headers.set("Cache-Control", browserCache);
     headers.set("CDN-Cache-Control", cdnCache);
-    headers.set("Cloudflare-CDN-Cache-Control", cdnCache);
   } else {
     headers.set("Cache-Control", "private, no-store");
   }
