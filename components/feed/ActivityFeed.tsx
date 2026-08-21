@@ -62,6 +62,9 @@ export default function ActivityFeed({
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const pendingUrlIdsRef = useRef<Set<string>>(new Set());
+  const urlFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const imageUrlsRef = useRef<Map<string, string>>(new Map());
   const [isLive, setIsLive] = useState(false);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [newlyAddedIds, setNewlyAddedIds] = useState<Set<string>>(new Set());
@@ -72,6 +75,41 @@ export default function ActivityFeed({
     itemsLengthRef.current = items.length;
     itemsRef.current = items;
   }, [items]);
+  useEffect(() => {
+    imageUrlsRef.current = imageUrls;
+  }, [imageUrls]);
+  const enqueueUrlFetches = useCallback((mediaIds: string[]) => {
+    let queued = false;
+    for (const id of mediaIds) {
+      if (imageUrlsRef.current.has(id)) {
+        continue;
+      }
+      pendingUrlIdsRef.current.add(id);
+      queued = true;
+    }
+    if (!queued || urlFlushTimerRef.current) return;
+    urlFlushTimerRef.current = setTimeout(async () => {
+      urlFlushTimerRef.current = null;
+      const ids = Array.from(pendingUrlIdsRef.current);
+      pendingUrlIdsRef.current.clear();
+      if (ids.length === 0) return;
+      try {
+        const { getMediaUrls } = await import("@/app/actions/media");
+        const result = await getMediaUrls(ids);
+        if (result.success && result.urls) {
+          setImageUrls((prev) => {
+            const newUrls = new Map(prev);
+            for (const [mediaId, url] of Object.entries(result.urls!)) {
+              newUrls.set(mediaId, url);
+            }
+            return capImageUrls(newUrls);
+          });
+        }
+      } catch (err) {
+        logger.error("Failed to fetch feed media URLs:", err);
+      }
+    }, 120);
+  }, []);
   const fetchFeed = useCallback(
     async (append = false) => {
       if (isFetchingRef.current) return;
@@ -170,6 +208,35 @@ export default function ActivityFeed({
           if (typeof event.data !== "string") return;
           const data = JSON.parse(event.data);
           if (
+            data.type === "new_photos" &&
+            Array.isArray(data.items) &&
+            data.items.length > 0
+          ) {
+            const incoming = data.items as FeedItemType[];
+            const urlIds: string[] = [];
+            setItems((prev) => {
+              const existingIds = new Set(prev.map((item) => item.id));
+              const fresh = incoming.filter((item) => {
+                if (!item.id || existingIds.has(item.id)) return false;
+                existingIds.add(item.id);
+                if (item.media?.id) urlIds.push(item.media.id);
+                return true;
+              });
+              for (const id of fresh.map((i) => i.id)) {
+                setNewlyAddedIds((prevNew) => new Set(prevNew).add(id));
+                setTimeout(() => {
+                  setNewlyAddedIds((prevNew) => {
+                    const next = new Set(prevNew);
+                    next.delete(id);
+                    return next;
+                  });
+                }, 5000);
+              }
+              if (fresh.length === 0) return prev;
+              return capFeedItems([...fresh, ...prev]);
+            });
+            if (urlIds.length > 0) enqueueUrlFetches(urlIds);
+          } else if (
             (data.type === "new_photo" ||
               data.type === "new_comment" ||
               data.type === "new_like") &&
@@ -193,27 +260,7 @@ export default function ActivityFeed({
               return capFeedItems([data.item, ...prev]);
             });
             if (data.item.media) {
-              import("@/app/actions/media").then(({ getMediaUrls }) => {
-                getMediaUrls([data.item.media.id])
-                  .then((result) => {
-                    if (result.success && result.urls) {
-                      setImageUrls((prev) => {
-                        const newUrls = new Map(prev);
-                        newUrls.set(
-                          data.item.media.id,
-                          result.urls![data.item.media.id],
-                        );
-                        return capImageUrls(newUrls);
-                      });
-                    }
-                  })
-                  .catch((error) => {
-                    logger.error(
-                      "Failed to fetch activity feed media URL:",
-                      error,
-                    );
-                  });
-              });
+              enqueueUrlFetches([data.item.media.id]);
             }
           } else if (data.type === "photo_deleted" && data.mediaId) {
             setItems((prev) =>
@@ -263,7 +310,7 @@ export default function ActivityFeed({
       }
       setIsLive(false);
     };
-  }, [type]);
+  }, [type, enqueueUrlFetches]);
   useEffect(() => {
     if (type === "global" || socketRef.current) {
       return;
@@ -286,17 +333,7 @@ export default function ActivityFeed({
               .filter((item: FeedItemType) => item.media)
               .map((item: FeedItemType) => item.media?.id);
             if (mediaIds.length > 0) {
-              const { getMediaUrls } = await import("@/app/actions/media");
-              const result = await getMediaUrls(mediaIds);
-              if (result.success && result.urls) {
-                setImageUrls((prev) => {
-                  const newUrls = new Map(prev);
-                  for (const [mediaId, url] of Object.entries(result.urls!)) {
-                    newUrls.set(mediaId, url as string);
-                  }
-                  return capImageUrls(newUrls);
-                });
-              }
+              enqueueUrlFetches(mediaIds as string[]);
             }
           }
         }
@@ -313,7 +350,7 @@ export default function ActivityFeed({
         clearInterval(pollIntervalRef.current);
       }
     };
-  }, [fetchData, pollInterval, type]);
+  }, [fetchData, pollInterval, type, enqueueUrlFetches]);
   useEffect(() => {
     if (!loadMoreRef.current || !hasMore) return;
     observerRef.current = new IntersectionObserver(

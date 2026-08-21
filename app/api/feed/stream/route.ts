@@ -3,7 +3,7 @@ import {
   experimental_upgradeWebSocket,
   type WebSocketData,
 } from "@vercel/functions";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -25,6 +25,173 @@ type FeedClient = {
   expires: ReturnType<typeof setTimeout>;
   socket: WebSocket;
 };
+
+const USER_CTX_TTL_MS = 20_000;
+const EVENT_PERM_TTL_MS = 20_000;
+
+const userCtxCache = new Map<
+  string,
+  { expiry: number; ctx: Awaited<ReturnType<typeof getUserContext>> }
+>();
+const eventPermCache = new Map<string, { expiry: number; allowed: boolean }>();
+
+async function getCachedUserContext(userId?: string) {
+  const key = userId ?? "";
+  const now = Date.now();
+  const hit = userCtxCache.get(key);
+  if (hit && hit.expiry > now) return hit.ctx;
+  const ctx = await getUserContext(userId);
+  userCtxCache.set(key, { expiry: now + USER_CTX_TTL_MS, ctx });
+  return ctx;
+}
+
+async function canViewEvent(userId: string | undefined, event: { id: string }) {
+  const key = `${userId ?? ""}:${event.id}`;
+  const now = Date.now();
+  const hit = eventPermCache.get(key);
+  if (hit && hit.expiry > now) return hit.allowed;
+  const user = await getCachedUserContext(userId);
+  const allowed = !user?.isBanned && (await can(user, "view", "event", event));
+  eventPermCache.set(key, { expiry: now + EVENT_PERM_TTL_MS, allowed });
+  return allowed;
+}
+
+const PHOTO_BATCH_MS = 900;
+const MAX_PHOTO_BATCH = 500;
+const pendingPhotoIds = new Set<string>();
+let photoBatchTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function flushPhotoBatch() {
+  photoBatchTimer = null;
+  if (pendingPhotoIds.size === 0) return;
+  const ids = [...pendingPhotoIds].slice(0, MAX_PHOTO_BATCH);
+  if (ids.length < pendingPhotoIds.size) {
+    const remaining = [...pendingPhotoIds].slice(MAX_PHOTO_BATCH);
+    pendingPhotoIds.clear();
+    for (const id of remaining) pendingPhotoIds.add(id);
+  } else {
+    pendingPhotoIds.clear();
+  }
+  try {
+    const items = await fetchPhotoItems(ids);
+    if (items.length > 0) {
+      await deliverNewPhotos(items);
+      await publishNewPhotos(items);
+    }
+  } catch (error) {
+    logger.error("[WebSocket] Error flushing photo batch:", error);
+  }
+  if (pendingPhotoIds.size > 0 && !photoBatchTimer) {
+    photoBatchTimer = setTimeout(() => void flushPhotoBatch(), PHOTO_BATCH_MS);
+  }
+}
+
+function enqueueNewPhoto(mediaId: string) {
+  pendingPhotoIds.add(mediaId);
+  if (!photoBatchTimer) {
+    photoBatchTimer = setTimeout(() => void flushPhotoBatch(), PHOTO_BATCH_MS);
+  }
+}
+
+async function fetchPhotoItems(ids: string[]): Promise<Record<string, any>[]> {
+  const rows = await db
+    .select({
+      id: media.id,
+      filename: media.filename,
+      s3Url: media.s3Url,
+      mimeType: media.mimeType,
+      width: media.width,
+      height: media.height,
+      thumbnailS3Key: media.thumbnailS3Key,
+      exifData: media.exifData,
+      uploadedAt: media.uploadedAt,
+      uploadedBy: {
+        id: users.id,
+        handle: users.handle,
+        slackId: users.slackId,
+      },
+      eventId: media.eventId,
+      event: {
+        id: events.id,
+        name: events.name,
+        slug: events.slug,
+        visibility: events.visibility,
+        seriesId: events.seriesId,
+      },
+      user: {
+        id: users.id,
+        handle: users.handle,
+        slackId: users.slackId,
+      },
+      likeCount: sql<number>`(SELECT COUNT(*) FROM ${mediaLikes} WHERE ${mediaLikes.mediaId} = ${media.id})::int`,
+      commentCount: sql<number>`(SELECT COUNT(*) FROM ${mediaComments} WHERE ${mediaComments.mediaId} = ${media.id} AND ${mediaComments.parentCommentId} IS NULL)::int`,
+    })
+    .from(media)
+    .leftJoin(users, eq(media.uploadedById, users.id))
+    .leftJoin(events, eq(media.eventId, events.id))
+    .where(inArray(media.id, ids));
+  return rows.map((item) => ({
+    id: `photo-${item.id}`,
+    type: "photo",
+    timestamp: item.uploadedAt,
+    event: item.event,
+    user: item.user ? toPublicUser(item.user) : null,
+    media: {
+      id: item.id,
+      filename: item.filename,
+      s3Url: item.s3Url,
+      mimeType: item.mimeType,
+      width: item.width,
+      height: item.height,
+      thumbnailS3Key: item.thumbnailS3Key,
+      exifData: item.exifData,
+      uploadedAt: item.uploadedAt,
+      uploadedBy: item.uploadedBy ? toPublicUser(item.uploadedBy) : null,
+      likeCount: item.likeCount,
+      commentCount: item.commentCount,
+    },
+  }));
+}
+
+async function deliverNewPhotos(items: Record<string, any>[]) {
+  const clientEntries = [...clients.entries()];
+  const eventsById = new Map<string, { id: string }>();
+  for (const it of items) {
+    if (it.event?.id) eventsById.set(it.event.id, { id: it.event.id });
+  }
+  for (const [socket, client] of clientEntries) {
+    try {
+      const allowedEvents = new Set<string>();
+      for (const ev of eventsById.values()) {
+        if (await canViewEvent(client.userId, ev)) allowedEvents.add(ev.id);
+      }
+      const allowed = items.filter((it) => allowedEvents.has(it.event?.id));
+      if (allowed.length > 0) {
+        sendToClient(
+          socket,
+          JSON.stringify({ type: "new_photos", items: allowed }),
+        );
+      }
+    } catch (err) {
+      logger.error("[WebSocket] Error sending photo batch (removing):", err);
+      removeClient(socket);
+    }
+  }
+}
+
+async function publishNewPhotos(items: Record<string, any>[]) {
+  const redis = getRedisClient();
+  if (!redis) return;
+  try {
+    if (redis.status === "wait") await redis.connect();
+    await redis.publish(
+      FEED_REDIS_CHANNEL,
+      JSON.stringify({ origin: instanceId, type: "new_photos", items }),
+    );
+  } catch (error) {
+    logger.error("[WebSocket] Failed to publish photo batch:", error);
+  }
+}
 
 const feedGlobal = globalThis as typeof globalThis & {
   __photosFeedClients?: Map<WebSocket, FeedClient>;
@@ -82,24 +249,18 @@ async function sendFeedUpdate(activityData: Record<string, unknown>) {
     return;
   }
   const clientEntries = [...clients.entries()];
-  const users = new Map(
-    await Promise.all(
-      [...new Set(clientEntries.map(([, client]) => client.userId))].map(
-        async (userId) => [userId, await getUserContext(userId)] as const,
-      ),
-    ),
-  );
-  for (const [socket, client] of clientEntries) {
-    try {
-      const user = users.get(client.userId);
-      if (!user?.isBanned && (await can(user, "view", "event", event))) {
-        sendToClient(socket, data);
+  await Promise.all(
+    clientEntries.map(async ([socket, client]) => {
+      try {
+        if (await canViewEvent(client.userId, event)) {
+          sendToClient(socket, data);
+        }
+      } catch (err) {
+        logger.error("[WebSocket] Error sending to client (removing):", err);
+        removeClient(socket);
       }
-    } catch (err) {
-      logger.error("[WebSocket] Error sending to client (removing):", err);
-      removeClient(socket);
-    }
-  }
+    }),
+  );
 }
 
 async function ensureRedisSubscriber() {
@@ -115,9 +276,14 @@ async function ensureRedisSubscriber() {
         try {
           const envelope = JSON.parse(message) as {
             origin: string;
-            activityData: Record<string, unknown>;
+            type?: string;
+            items?: Record<string, any>[];
+            activityData?: Record<string, unknown>;
           };
-          if (envelope.origin !== instanceId) {
+          if (envelope.origin === instanceId) return;
+          if (envelope.type === "new_photos" && Array.isArray(envelope.items)) {
+            void deliverNewPhotos(envelope.items);
+          } else if (envelope.activityData) {
             void sendFeedUpdate(envelope.activityData);
           }
         } catch (error) {
@@ -187,73 +353,9 @@ export async function GET(request: NextRequest) {
 }
 export async function broadcastNewPhoto(mediaId: string) {
   try {
-    const result = await db
-      .select({
-        id: media.id,
-        filename: media.filename,
-        s3Url: media.s3Url,
-        mimeType: media.mimeType,
-        width: media.width,
-        height: media.height,
-        thumbnailS3Key: media.thumbnailS3Key,
-        exifData: media.exifData,
-        uploadedAt: media.uploadedAt,
-        uploadedBy: {
-          id: users.id,
-          handle: users.handle,
-          slackId: users.slackId,
-        },
-        eventId: media.eventId,
-        event: {
-          id: events.id,
-          name: events.name,
-          slug: events.slug,
-          visibility: events.visibility,
-          seriesId: events.seriesId,
-        },
-        user: {
-          id: users.id,
-          handle: users.handle,
-          slackId: users.slackId,
-        },
-        likeCount: sql<number>`(SELECT COUNT(*) FROM ${mediaLikes} WHERE ${mediaLikes.mediaId} = ${media.id})::int`,
-        commentCount: sql<number>`(SELECT COUNT(*) FROM ${mediaComments} WHERE ${mediaComments.mediaId} = ${media.id} AND ${mediaComments.parentCommentId} IS NULL)::int`,
-      })
-      .from(media)
-      .leftJoin(users, eq(media.uploadedById, users.id))
-      .leftJoin(events, eq(media.eventId, events.id))
-      .where(eq(media.id, mediaId))
-      .limit(1);
-    if (result.length > 0) {
-      const item = result[0];
-      const activityData = {
-        type: "new_photo",
-        item: {
-          id: `photo-${item.id}`,
-          type: "photo",
-          timestamp: item.uploadedAt,
-          event: item.event,
-          user: item.user ? toPublicUser(item.user) : null,
-          media: {
-            id: item.id,
-            filename: item.filename,
-            s3Url: item.s3Url,
-            mimeType: item.mimeType,
-            width: item.width,
-            height: item.height,
-            thumbnailS3Key: item.thumbnailS3Key,
-            exifData: item.exifData,
-            uploadedAt: item.uploadedAt,
-            uploadedBy: item.uploadedBy ? toPublicUser(item.uploadedBy) : null,
-            likeCount: item.likeCount,
-            commentCount: item.commentCount,
-          },
-        },
-      };
-      await notifyFeedUpdate(activityData);
-    }
+    enqueueNewPhoto(mediaId);
   } catch (error) {
-    logger.error("[SSE] Error broadcasting new photo:", error);
+    logger.error("[SSE] Error enqueueing new photo:", error);
   }
 }
 export async function broadcastPhotoDeleted(mediaId: string) {

@@ -65,6 +65,8 @@ export default function BlurMeGallery({
           isAdmin={isAdmin}
           eventId={eventId}
           initialPhotoId={initialPhotoId}
+          liveScopeType="event"
+          liveScopeId={eventId}
         />
         {eventId && currentUserId ? (
           <IncludesMeDrawer

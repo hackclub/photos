@@ -278,6 +278,8 @@ export default function SeriesDetailClient({
             currentUserId={currentUserId}
             isAdmin={isAdmin}
             showEventFilter={true}
+            liveScopeType="series"
+            liveScopeId={series.id}
           />
         ) : (
           <div className="text-center py-24 bg-zinc-900 rounded-xl border border-zinc-800">

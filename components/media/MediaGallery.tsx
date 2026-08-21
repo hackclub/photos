@@ -1,7 +1,8 @@
 "use client";
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
   HiArrowDownTray,
   HiArrowPath,
@@ -23,6 +24,7 @@ import type { Event, MediaItem } from "@/types/media";
 import ConfirmModal from "../ui/ConfirmModal";
 import ServerActionModal from "../ui/ServerActionModal";
 import ChangeOwnerModal from "./ChangeOwnerModal";
+import GalleryLiveStream from "./GalleryLiveStream";
 import MediaGalleryToolbar from "./MediaGalleryToolbar";
 import OnDemandVideoThumb from "./OnDemandVideoThumb";
 import VideoIndicator from "./VideoIndicator";
@@ -127,6 +129,8 @@ interface MediaGalleryProps {
   showTypeFilter?: boolean;
   showSortFilter?: boolean;
   hideControls?: boolean;
+  liveScopeType?: "event" | "series";
+  liveScopeId?: string;
   title?: string;
   emptyMessage?: string;
   blurMode?: boolean;
@@ -156,6 +160,8 @@ export default function MediaGallery({
   showTypeFilter = true,
   showSortFilter = true,
   hideControls = false,
+  liveScopeType,
+  liveScopeId,
   blurMode = false,
   blurDrafts = {},
   onBlurDraft,
@@ -199,6 +205,24 @@ export default function MediaGallery({
   const [includesMeActive, setIncludesMeActive] = useState(false);
   const [faceMediaIds, setFaceMediaIds] = useState<Set<string>>(new Set());
   const [_isPending, startTransition] = useTransition();
+  const router = useRouter();
+  const handleLiveNewMedia = useCallback(
+    (newItems: MediaItem[]) => {
+      if (newItems.length === 0) return;
+      setLocalMedia((prev) => {
+        const existing = new Set(prev.map((m) => m.id));
+        const fresh = newItems.filter((m) => !existing.has(m.id));
+        if (fresh.length === 0) return prev;
+        return [...fresh, ...prev];
+      });
+    },
+    [setLocalMedia],
+  );
+  const handleLiveFocus = useCallback(() => {
+    router.refresh();
+  }, [router]);
+  const liveEnabled =
+    Boolean(liveScopeType) && Boolean(liveScopeId) && !blurMode;
   const abortControllerRef = useRef<AbortController | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const sortedMedia = includesMeActive
@@ -412,6 +436,14 @@ export default function MediaGallery({
   });
   return (
     <div className="space-y-4">
+      {liveEnabled ? (
+        <GalleryLiveStream
+          scopeType={liveScopeType!}
+          scopeId={liveScopeId!}
+          onNewMedia={handleLiveNewMedia}
+          onFocus={handleLiveFocus}
+        />
+      ) : null}
       {selectionMode && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-zinc-800 rounded-lg border border-zinc-700 sticky top-4 z-30 shadow-xl">
           <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
