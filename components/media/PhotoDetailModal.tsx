@@ -139,6 +139,7 @@ interface Event {
   id?: string;
   name?: string;
   slug?: string;
+  visibility?: string;
 }
 interface Reply {
   id: string;
@@ -1351,7 +1352,7 @@ export default function PhotoDetailModal({
                     src={thumbnailUrl}
                     alt={media.filename}
                     fill
-                    unoptimized
+                    unoptimized={event?.visibility !== "public"}
                     sizes="(max-width: 1024px) 100vw, 70vw"
                     priority
                     className="select-none object-contain opacity-100 blur-[1px] scale-[1.005] transition-opacity duration-300"
@@ -1364,7 +1365,7 @@ export default function PhotoDetailModal({
                     src={effectiveUrl}
                     alt={media.filename}
                     fill
-                    unoptimized
+                    unoptimized={event?.visibility !== "public"}
                     sizes="(max-width: 1024px) 100vw, 70vw"
                     priority
                     draggable={false}

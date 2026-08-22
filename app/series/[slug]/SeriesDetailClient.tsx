@@ -20,6 +20,7 @@ interface Event {
   slug: string;
   description: string | null;
   eventDate: Date | null;
+  visibility?: "public" | "unlisted" | "auth_required";
   isAdmin?: boolean;
 }
 interface MediaItem {
@@ -84,7 +85,7 @@ export default function SeriesDetailClient({
               src={bannerUrl}
               alt={series.name}
               fill
-              unoptimized
+              unoptimized={series.visibility !== "public"}
               className="object-cover"
               priority
             />

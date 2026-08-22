@@ -217,7 +217,7 @@ export default async function EventPage({
               src={bannerUrl}
               alt={event.name}
               fill
-              unoptimized
+              unoptimized={event.visibility !== "public"}
               sizes="(max-width: 768px) 100vw, 50vw"
               className="object-cover"
               priority
@@ -423,6 +423,14 @@ export default async function EventPage({
                 uploadedBy: toPublicUser(m.uploadedBy),
                 likeCount: likeCountByMediaId.get(m.id) ?? 0,
               }))}
+              events={[
+                {
+                  id: event.id,
+                  name: event.name,
+                  slug: event.slug,
+                  visibility: event.visibility,
+                },
+              ]}
               currentUserId={session?.id}
               eventId={event.id}
               isAdmin={canEdit}

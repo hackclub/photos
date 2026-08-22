@@ -81,7 +81,15 @@ function getSearchGalleryImageObserver() {
   return searchGalleryImageObserver;
 }
 
-function LazySearchGalleryImage({ src, alt }: { src?: string; alt: string }) {
+function LazySearchGalleryImage({
+  src,
+  alt,
+  optimize,
+}: {
+  src?: string;
+  alt: string;
+  optimize: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -124,7 +132,7 @@ function LazySearchGalleryImage({ src, alt }: { src?: string; alt: string }) {
           }
           alt={alt}
           fill
-          unoptimized
+          unoptimized={!optimize}
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
           className={`object-cover transition-opacity duration-700 ease-out ${
             isLoaded ? "opacity-100" : "opacity-0"
@@ -161,6 +169,7 @@ export interface MediaItem {
     id: string;
     name: string;
     slug: string;
+    visibility?: string;
   };
   uploadedBy: {
     id: string;
@@ -629,6 +638,7 @@ export default function SearchGallery({
                     key={url ?? item.id}
                     src={url}
                     alt={item.filename}
+                    optimize={item.event?.visibility === "public"}
                   />
 
                   {isVideo && url && <VideoIndicator size="lg" />}

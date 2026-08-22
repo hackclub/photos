@@ -88,6 +88,7 @@ export async function getMapData(eventSlug?: string | null) {
               id: item.eventId,
               name: item.eventName,
               slug: item.eventSlug,
+              visibility: item.eventVisibility,
             },
           });
         }
@@ -157,6 +158,7 @@ export async function getMapData(eventSlug?: string | null) {
         country: event.locationCountry,
         lat,
         lng,
+        visibility: event.visibility,
         photoCount: mediaCountByEventId.get(event.id) ?? 0,
         photos: event.media.map((item) => ({
           ...item,

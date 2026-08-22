@@ -59,7 +59,7 @@ export default function SeriesCard({
           src={displayImage}
           alt={series.name}
           fill
-          unoptimized
+          unoptimized={series.visibility !== "public"}
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           className="object-cover transition-transform duration-300 md:group-hover:scale-105"
         />

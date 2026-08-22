@@ -56,7 +56,15 @@ function getGalleryImageObserver() {
   return galleryImageObserver;
 }
 
-function LazyGalleryImage({ src, alt }: { src?: string; alt: string }) {
+function LazyGalleryImage({
+  src,
+  alt,
+  optimize,
+}: {
+  src?: string;
+  alt: string;
+  optimize: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -97,7 +105,7 @@ function LazyGalleryImage({ src, alt }: { src?: string; alt: string }) {
           }
           alt={alt}
           fill
-          unoptimized
+          unoptimized={!optimize}
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
           key={`${src}-${retryCount}`}
           className={`object-cover transition-opacity duration-700 ease-out ${
@@ -589,6 +597,7 @@ export default function MediaGallery({
             const isVideo = item.mimeType.startsWith("video/");
             const event =
               item.event || (item.eventId ? eventMap.get(item.eventId) : null);
+            const optimizeMedia = event?.visibility === "public";
             return (
               <div
                 key={item.id}
@@ -616,6 +625,7 @@ export default function MediaGallery({
                     key={url ?? item.id}
                     src={url}
                     alt={item.filename}
+                    optimize={optimizeMedia}
                   />
 
                   {isVideo && !item.thumbnailS3Key && (

@@ -81,6 +81,7 @@ interface MediaItem {
     id: string;
     name: string;
     slug: string;
+    visibility?: "public" | "unlisted" | "auth_required";
   };
   likeCount?: number;
   commentCount?: number;

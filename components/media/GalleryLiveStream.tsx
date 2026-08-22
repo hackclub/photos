@@ -36,6 +36,7 @@ function toMediaItem(item: ActivityMedia): MediaItem | null {
           id: item.event.id,
           name: item.event.name,
           slug: item.event.slug,
+          visibility: item.event.visibility,
         }
       : undefined,
     uploadedBy: {

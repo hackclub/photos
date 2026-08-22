@@ -38,6 +38,7 @@ interface Photo {
     id: string;
     name: string;
     slug: string;
+    visibility?: string;
   };
 }
 interface SimplePhoto {
@@ -57,6 +58,7 @@ interface EventLocation {
   lng: number | null;
   photoCount?: number;
   photos?: SimplePhoto[];
+  visibility?: string;
 }
 interface MapData {
   photos: Photo[];
@@ -602,7 +604,7 @@ export default function PhotoMap() {
                           alt={photo.filename}
                           width={200}
                           height={150}
-                          unoptimized
+                          unoptimized={photo.event?.visibility !== "public"}
                           className="w-full h-auto"
                         />
                         {photo.mimeType.startsWith("video/") && (
@@ -678,7 +680,7 @@ export default function PhotoMap() {
                                   src={url}
                                   alt={photo.filename}
                                   fill
-                                  unoptimized
+                                  unoptimized={event.visibility !== "public"}
                                   sizes="200px"
                                   className="object-cover"
                                 />

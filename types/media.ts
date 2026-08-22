@@ -17,6 +17,7 @@ export interface MediaItem {
     id: string;
     name: string;
     slug: string;
+    visibility?: "public" | "unlisted" | "auth_required";
   };
   uploadedBy: {
     id: string;
@@ -41,4 +42,5 @@ export interface Event {
   id: string;
   name: string;
   slug: string;
+  visibility?: "public" | "unlisted" | "auth_required";
 }
