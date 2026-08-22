@@ -41,6 +41,7 @@ import { extractVideoMetadataFromS3Key } from "@/lib/media/video-metadata";
 import {
   forgetMultipartSession,
   getMultipartSession,
+  markMultipartSessionCompleted,
   rememberMultipartSession,
 } from "@/lib/multipart-sessions";
 import { can, getUserContext } from "@/lib/policy";
@@ -318,8 +319,13 @@ export async function completeMultipart(
     if (!(await can(user, "upload", "event", uploadSession.eventId))) {
       return { success: false, error: "Forbidden" };
     }
-    await completeMultipartUpload(s3Key, uploadId, parts);
-    await forgetMultipartSession(s3Key, uploadId);
+    if (uploadSession.completedAt) return { success: true };
+    try {
+      await completeMultipartUpload(s3Key, uploadId, parts);
+    } catch (error) {
+      if (!(await objectExists(s3Key))) throw error;
+    }
+    await markMultipartSessionCompleted(s3Key, uploadId);
     return { success: true };
   } catch (error) {
     logger.error("Error completing multipart upload:", error);

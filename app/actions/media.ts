@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { and, eq, inArray, or } from "drizzle-orm";
 import { revalidatePath, revalidateTag } from "next/cache";
+import { broadcastPhotoDeleted } from "@/app/api/feed/stream/route";
 import { auditLog } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { withDirectUploadSlot } from "@/lib/concurrency";
@@ -655,6 +656,7 @@ export async function deleteMedia(mediaId: string) {
     }
     revalidatePath(`/events/${mediaItem.eventId}`);
     revalidatePath("/users/[username]", "page");
+    broadcastPhotoDeleted(mediaId);
     return { success: true };
   } catch (error) {
     logger.error("Error deleting media:", error);

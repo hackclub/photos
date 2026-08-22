@@ -7,6 +7,7 @@ export type MultipartUploadSession = {
   eventId: string;
   s3Key: string;
   expiresAt: number;
+  completedAt?: number;
 };
 
 const localSessions = new Map<string, MultipartUploadSession>();
@@ -98,4 +99,34 @@ export async function forgetMultipartSession(s3Key: string, uploadId: string) {
     return;
   }
   localSessions.delete(key);
+}
+
+export async function markMultipartSessionCompleted(
+  s3Key: string,
+  uploadId: string,
+) {
+  const key = sessionKey(s3Key, uploadId);
+  const redis = getRedisClient();
+  let session: MultipartUploadSession | null = null;
+  if (redis) {
+    const value = await redis.get(key);
+    if (value) {
+      try {
+        session = JSON.parse(value) as MultipartUploadSession;
+      } catch {
+        await redis.del(key);
+      }
+    }
+  } else {
+    requireLocalFallback();
+    session = localSessions.get(key) ?? null;
+  }
+  if (!session) return;
+  session.completedAt = Date.now();
+  const remaining = Math.max(1, session.expiresAt - Date.now());
+  if (redis) {
+    await redis.set(key, JSON.stringify(session), "PX", remaining);
+  } else {
+    localSessions.set(key, session);
+  }
 }

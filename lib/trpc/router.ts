@@ -2,6 +2,10 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import {
+  submitBlurRequests,
+  submitFaceBlurRequests,
+} from "@/app/actions/blur-requests";
+import {
   cancelDataExport,
   deleteExport,
   getLatestExport,
@@ -37,7 +41,14 @@ import {
   toggleMediaLike,
 } from "@/app/actions/social";
 import { addTag, getMediaTags, removeTag } from "@/app/actions/tags";
-import { finalizeUpload, getPresignedUrl } from "@/app/actions/upload";
+import {
+  abortMultipart,
+  completeMultipart,
+  finalizeUpload,
+  getMultipartPresignedUrls,
+  getPresignedUrl,
+  initiateMultipartUpload,
+} from "@/app/actions/upload";
 import {
   deleteAccount,
   searchUsers,
@@ -603,11 +614,31 @@ export const appRouter = t.router({
             cursor: z.number().min(0).optional(),
           }),
         )
-        .query(async ({ input }) => {
+        .query(async ({ ctx, input }) => {
           const limit = input.limit ?? 50;
           const offset = input.cursor ?? 0;
           const res = await getGlobalFeed(limit, offset);
           if (!res.success || !res.items) return { items: [] };
+          const mediaIds = Array.from(
+            new Set(
+              res.items
+                .map((item) => item.media?.id)
+                .filter((id): id is string => Boolean(id)),
+            ),
+          );
+          const likedMediaIds = new Set(
+            mediaIds.length
+              ? (
+                  await db.query.mediaLikes.findMany({
+                    where: and(
+                      eq(mediaLikes.userId, ctx.session.id),
+                      inArray(mediaLikes.mediaId, mediaIds),
+                    ),
+                    columns: { mediaId: true },
+                  })
+                ).map((like) => like.mediaId)
+              : [],
+          );
           return {
             items: res.items
               .filter((item) => item.media)
@@ -623,6 +654,7 @@ export const appRouter = t.router({
                   height: item.media!.height,
                   uploadedAt: item.media!.uploadedAt,
                   likeCount: item.media!.likeCount,
+                  hasLiked: likedMediaIds.has(item.media!.id),
                   commentCount: item.media!.commentCount,
                   thumbnailUrl: getMediaProxyUrl(item.media!.id, "thumbnail"),
                   url: getMediaProxyUrl(item.media!.id),
@@ -671,6 +703,12 @@ export const appRouter = t.router({
             lat: event.lat,
             lng: event.lng,
             photoCount: event.photoCount ?? event.photos?.length ?? 0,
+            photos: (event.photos ?? []).slice(0, 9).map((photo) => ({
+              id: photo.id,
+              filename: photo.filename,
+              mimeType: photo.mimeType,
+              thumbnailUrl: getMediaProxyUrl(photo.id, "thumbnail"),
+            })),
             thumbnailUrl: event.photos?.[0]
               ? getMediaProxyUrl(event.photos[0].id, "thumbnail")
               : null,
@@ -830,6 +868,41 @@ export const appRouter = t.router({
             const res = await deleteMedia(input.mediaId);
             return { success: res.success, error: res.error };
           }),
+        requestBlur: protectedProcedure
+          .input(
+            z.object({
+              mediaId: z.string().uuid(),
+              regions: z
+                .array(
+                  z.object({
+                    x: z.number().min(0).max(1),
+                    y: z.number().min(0).max(1),
+                    width: z.number().positive().max(1),
+                    height: z.number().positive().max(1),
+                  }),
+                )
+                .min(1)
+                .max(100),
+            }),
+          )
+          .mutation(async ({ input }) =>
+            submitBlurRequests([
+              {
+                mediaId: input.mediaId,
+                regions: input.regions,
+                source: "manual",
+              },
+            ]),
+          ),
+        requestFaceBlur: protectedProcedure
+          .input(
+            z.object({
+              eventId: z.string().uuid(),
+              scanId: z.string().uuid(),
+              detectionIds: z.array(z.string().uuid()).min(1).max(200),
+            }),
+          )
+          .mutation(async ({ input }) => submitFaceBlurRequests(input)),
         updateCaption: protectedProcedure
           .input(
             z.object({
@@ -1357,6 +1430,108 @@ export const appRouter = t.router({
               eventId: input.eventId,
             };
           }),
+        multipartInitiate: protectedProcedure
+          .input(
+            z.object({
+              eventId: z.string().uuid(),
+              filename: z.string().min(1),
+              mimeType: z.string().min(1),
+              size: z.number().min(1),
+            }),
+          )
+          .mutation(async ({ input }) => {
+            const result = await initiateMultipartUpload(
+              input.eventId,
+              input.filename,
+              input.mimeType,
+              input.size,
+            );
+            if (
+              !result.success ||
+              !result.mediaId ||
+              !result.uploadId ||
+              !result.s3Key
+            ) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: result.error ?? "Could not start multipart upload",
+              });
+            }
+            return {
+              mediaId: result.mediaId,
+              uploadId: result.uploadId,
+              s3Key: result.s3Key,
+              thumbnailS3Key: result.thumbnailS3Key,
+              thumbnailUploadUrl: result.thumbnailUploadUrl,
+              eventId: input.eventId,
+            };
+          }),
+        multipartPartUrls: protectedProcedure
+          .input(
+            z.object({
+              s3Key: z.string().min(1),
+              uploadId: z.string().min(1),
+              partNumbers: z
+                .array(z.number().int().min(1).max(10_000))
+                .min(1)
+                .max(100),
+            }),
+          )
+          .mutation(async ({ input }) => {
+            const result = await getMultipartPresignedUrls(
+              input.s3Key,
+              input.uploadId,
+              input.partNumbers,
+            );
+            if (!result.success || !result.urls) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: result.error ?? "Could not prepare upload parts",
+              });
+            }
+            return { urls: result.urls };
+          }),
+        multipartComplete: protectedProcedure
+          .input(
+            z.object({
+              s3Key: z.string().min(1),
+              uploadId: z.string().min(1),
+              parts: z
+                .array(
+                  z.object({
+                    ETag: z.string().min(1),
+                    PartNumber: z.number().int().min(1).max(10_000),
+                  }),
+                )
+                .min(1)
+                .max(10_000),
+            }),
+          )
+          .mutation(async ({ input }) => {
+            const result = await completeMultipart(
+              input.s3Key,
+              input.uploadId,
+              input.parts,
+            );
+            if (!result.success) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: result.error ?? "Could not assemble upload",
+              });
+            }
+            return { success: true };
+          }),
+        multipartAbort: protectedProcedure
+          .input(
+            z.object({
+              s3Key: z.string().min(1),
+              uploadId: z.string().min(1),
+            }),
+          )
+          .mutation(async ({ input }) => {
+            const result = await abortMultipart(input.s3Key, input.uploadId);
+            return { success: result.success, error: result.error };
+          }),
         complete: protectedProcedure
           .input(
             z.object({
@@ -1367,9 +1542,24 @@ export const appRouter = t.router({
               mimeType: z.string().min(1),
               size: z.number().min(1),
               caption: z.string().max(500).optional(),
+              width: z.number().int().positive().nullable().optional(),
+              height: z.number().int().positive().nullable().optional(),
+              thumbnailS3Key: z.string().min(1).nullable().optional(),
+              thumbnailFailed: z.boolean().optional(),
+              thumbnailError: z.string().max(500).nullable().optional(),
             }),
           )
-          .mutation(async ({ input }) => {
+          .mutation(async ({ ctx, input }) => {
+            const existing = await db.query.media.findFirst({
+              where: eq(media.id, input.mediaId),
+              columns: { id: true, uploadedById: true },
+            });
+            if (existing) {
+              if (existing.uploadedById !== ctx.session.id) {
+                throw new TRPCError({ code: "FORBIDDEN" });
+              }
+              return { success: true, media: { id: existing.id } };
+            }
             const result = await finalizeUpload(
               input.mediaId,
               input.eventId,
@@ -1377,14 +1567,18 @@ export const appRouter = t.router({
                 filename: input.filename,
                 fileSize: input.size,
                 mimeType: input.mimeType,
-                width: null,
-                height: null,
+                width: input.width ?? null,
+                height: input.height ?? null,
                 takenAt: null,
                 exifData: null,
                 s3Key: input.s3Key,
-                thumbnailS3Key: null,
-                thumbnailFailed: true,
-                thumbnailError: "Mobile client requested server processing",
+                thumbnailS3Key: input.thumbnailS3Key ?? null,
+                thumbnailFailed: input.thumbnailFailed ?? !input.thumbnailS3Key,
+                thumbnailError:
+                  input.thumbnailError ??
+                  (input.thumbnailS3Key
+                    ? null
+                    : "Mobile client requested server processing"),
               },
               true,
             );
