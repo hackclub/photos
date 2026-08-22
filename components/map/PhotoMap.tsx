@@ -602,6 +602,7 @@ export default function PhotoMap() {
                           alt={photo.filename}
                           width={200}
                           height={150}
+                          unoptimized
                           className="w-full h-auto"
                         />
                         {photo.mimeType.startsWith("video/") && (
@@ -677,6 +678,7 @@ export default function PhotoMap() {
                                   src={url}
                                   alt={photo.filename}
                                   fill
+                                  unoptimized
                                   sizes="200px"
                                   className="object-cover"
                                 />

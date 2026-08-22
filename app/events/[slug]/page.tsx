@@ -217,6 +217,7 @@ export default async function EventPage({
               src={bannerUrl}
               alt={event.name}
               fill
+              unoptimized
               sizes="(max-width: 768px) 100vw, 50vw"
               className="object-cover"
               priority

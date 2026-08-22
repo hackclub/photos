@@ -97,6 +97,7 @@ function LazyGalleryImage({ src, alt }: { src?: string; alt: string }) {
           }
           alt={alt}
           fill
+          unoptimized
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
           key={`${src}-${retryCount}`}
           className={`object-cover transition-opacity duration-700 ease-out ${

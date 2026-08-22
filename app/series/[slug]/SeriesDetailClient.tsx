@@ -84,6 +84,7 @@ export default function SeriesDetailClient({
               src={bannerUrl}
               alt={series.name}
               fill
+              unoptimized
               className="object-cover"
               priority
             />
