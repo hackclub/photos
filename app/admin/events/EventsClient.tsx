@@ -174,7 +174,7 @@ export default function EventsClient({ events }: EventsClientProps) {
       </AdminToolbar>
 
       {filteredEvents.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="catalog-card-grid">
           {filteredEvents.map((event) => (
             <EventCard
               key={event.id}

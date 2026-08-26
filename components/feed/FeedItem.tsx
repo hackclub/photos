@@ -119,7 +119,7 @@ export default function FeedItem({
                   alt={item.media.filename}
                   fill
                   unoptimized={item.event?.visibility !== "public"}
-                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                  sizes="(max-width: 767px) calc(100vw - 2rem), 320px"
                   priority={index < 3}
                   className="object-cover transition-transform duration-700 group-hover/media:scale-105"
                 />

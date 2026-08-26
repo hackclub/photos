@@ -107,7 +107,7 @@ export default async function SeriesPage() {
 
       <div className="px-4 sm:px-8 py-6 sm:py-8">
         {series.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+          <div className="catalog-card-grid">
             {series.map((s) => (
               <SeriesCard
                 key={s.id}

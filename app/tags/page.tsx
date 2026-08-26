@@ -67,9 +67,9 @@ export default async function TagsPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="w-full px-4 py-12 sm:px-6 lg:px-8">
         {tagsWithPreviews.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="tag-card-grid">
             {tagsWithPreviews.map((tag) => {
               const colorStyle =
                 TAG_COLORS[tag.color || "blue"] || TAG_COLORS.blue;

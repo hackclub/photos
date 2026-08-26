@@ -50,8 +50,17 @@ body {
 
 @media (min-width: 64rem) {
   .sidebar-panel:not(:hover):not(:focus-within) .sidebar-search-input {
+    width: 2.75rem;
+    margin-inline: auto;
+    padding: 0;
+    border-radius: 0.75rem;
     color: transparent;
     caret-color: transparent;
+    cursor: pointer;
+  }
+
+  .sidebar-panel:not(:hover):not(:focus-within) .sidebar-search-icon {
+    left: 0.875rem;
   }
 
   .sidebar-panel:not(:hover):not(:focus-within)
@@ -62,6 +71,78 @@ body {
   .sidebar-panel:not(:hover):not(:focus-within) .sidebar-search-clear {
     pointer-events: none;
     opacity: 0;
+  }
+}
+
+/* Container-driven grids add columns instead of stretching cards indefinitely. */
+.catalog-card-grid,
+.feed-card-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.gallery-card-grid,
+.people-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.gallery-card-grid {
+  gap: 0.5rem;
+}
+
+.people-card-grid,
+.tag-card-grid {
+  gap: 1rem;
+}
+
+.tag-card-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 40rem) {
+  .catalog-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
+
+  .gallery-card-grid {
+    gap: 0.75rem;
+  }
+
+  .people-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tag-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 48rem) {
+  .gallery-card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
+    gap: 1rem;
+  }
+
+  .feed-card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  }
+
+  .tag-card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
+  }
+}
+
+@media (min-width: 64rem) {
+  .catalog-card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+  }
+
+  .people-card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr));
   }
 }
 

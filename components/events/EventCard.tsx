@@ -82,7 +82,7 @@ export default function EventCard({
           alt={event.name}
           fill
           unoptimized={event.visibility !== "public"}
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+          sizes="(max-width: 639px) calc(100vw - 2rem), (max-width: 1023px) 50vw, 320px"
           className="object-cover transition-transform duration-300 md:group-hover:scale-105"
         />
       ) : (

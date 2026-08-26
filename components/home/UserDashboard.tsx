@@ -96,7 +96,7 @@ export default function UserDashboard({
       />
 
       <div className="px-4 sm:px-8 py-6 sm:py-8">
-        <div className="max-w-7xl mx-auto">
+        <div className="w-full">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-white">
@@ -117,7 +117,7 @@ export default function UserDashboard({
           </div>
 
           {userParticipations.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div className="catalog-card-grid">
               {userParticipations.map((participation) => {
                 const event = participation.event;
                 const stats = eventStats.get(event.id) || {

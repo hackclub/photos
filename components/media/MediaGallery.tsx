@@ -106,7 +106,7 @@ function LazyGalleryImage({
           alt={alt}
           fill
           unoptimized={!optimize}
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+          sizes="(max-width: 767px) 50vw, 240px"
           key={`${src}-${retryCount}`}
           className={`object-cover transition-opacity duration-700 ease-out ${
             isLoaded ? "opacity-100" : "opacity-0"
@@ -588,7 +588,7 @@ export default function MediaGallery({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4 xl:grid-cols-5">
+      <div className="gallery-card-grid">
         {sortedMedia
           .slice(0, Math.min(visibleCount, sortedMedia.length))
           .map((item) => {

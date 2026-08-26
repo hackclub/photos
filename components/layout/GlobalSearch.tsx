@@ -68,7 +68,7 @@ export default function GlobalSearch() {
   return (
     <div className="relative w-full max-w-md" ref={searchRef}>
       <div className="relative">
-        <HiMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 w-5 h-5" />
+        <HiMagnifyingGlass className="sidebar-search-icon pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
         <input
           type="text"
           aria-label="Search events, series, people, and photos"
@@ -87,7 +87,7 @@ export default function GlobalSearch() {
             }
           }}
           placeholder="Search events, series, people..."
-          className="sidebar-search-input min-h-11 w-full rounded-full border border-zinc-700 bg-zinc-800 py-2 pl-10 pr-12 text-base text-white placeholder-zinc-400 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-600 sm:text-sm"
+          className="sidebar-search-input block min-h-11 w-full rounded-full border border-zinc-700 bg-zinc-800 py-2 pl-10 pr-12 text-base text-white placeholder-zinc-400 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-600 sm:text-sm"
         />
         {query && (
           <button

@@ -2,7 +2,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect } from "react";
+import { type PointerEvent, useCallback, useEffect } from "react";
 import {
   HiArrowLeftOnRectangle,
   HiArrowRightOnRectangle,
@@ -58,6 +58,13 @@ const compactCopyClasses =
 
 const sectionHeadingClasses =
   "mb-2 max-h-6 overflow-hidden px-3 text-xs font-semibold uppercase tracking-wider text-zinc-500 transition-all duration-150 lg:mb-0 lg:max-h-0 lg:opacity-0 lg:group-hover/sidebar:mb-2 lg:group-hover/sidebar:max-h-6 lg:group-hover/sidebar:opacity-100 lg:group-focus-within/sidebar:mb-2 lg:group-focus-within/sidebar:max-h-6 lg:group-focus-within/sidebar:opacity-100";
+
+function releasePointerFocus(event: PointerEvent<HTMLElement>) {
+  if (!(event.target instanceof Element)) return;
+
+  const control = event.target.closest("a, button");
+  if (control instanceof HTMLElement) control.blur();
+}
 
 interface SidebarProps {
   isOpen: boolean;
@@ -140,7 +147,10 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
         `}
       >
-        <aside className="sidebar-panel group/sidebar relative flex h-full w-full flex-col overflow-x-clip border-r border-zinc-800 bg-zinc-900 lg:absolute lg:inset-y-0 lg:left-0 lg:w-20 lg:transition-[width,box-shadow] lg:duration-200 lg:ease-out lg:hover:w-72 lg:hover:shadow-2xl lg:hover:shadow-black/40 lg:focus-within:w-72 lg:focus-within:shadow-2xl lg:focus-within:shadow-black/40 motion-reduce:transition-none">
+        <aside
+          onPointerUp={releasePointerFocus}
+          className="sidebar-panel group/sidebar relative flex h-full w-full flex-col overflow-x-clip border-r border-zinc-800 bg-zinc-900 lg:absolute lg:inset-y-0 lg:left-0 lg:w-20 lg:transition-[width,box-shadow] lg:duration-200 lg:ease-out lg:hover:w-72 lg:hover:shadow-2xl lg:hover:shadow-black/40 lg:focus-within:w-72 lg:focus-within:shadow-2xl lg:focus-within:shadow-black/40 motion-reduce:transition-none"
+        >
           <button
             type="button"
             onClick={handleClose}

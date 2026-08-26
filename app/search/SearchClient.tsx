@@ -665,7 +665,7 @@ export default function SearchClient({
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative min-h-[50vh]">
+      <div className="relative min-h-[50vh] w-full px-4 py-8 sm:px-6 lg:px-8">
         {loading && (
           <div
             className={`flex flex-col items-center justify-center z-20 ${
@@ -729,7 +729,7 @@ export default function SearchClient({
                   <HiCalendar className="w-5 h-5 text-zinc-400" />
                   Events
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="catalog-card-grid">
                   {results.events.map((event) => (
                     <a
                       key={event.id}
@@ -760,7 +760,7 @@ export default function SearchClient({
                   <HiUser className="w-5 h-5 text-zinc-400" />
                   People
                 </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div className="people-card-grid">
                   {results.users.map((user) => (
                     <a
                       key={user.id}

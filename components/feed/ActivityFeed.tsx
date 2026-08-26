@@ -419,7 +419,7 @@ export default function ActivityFeed({
     <>
       {type === "global" && (
         <div className="sticky top-0 z-30 bg-black/80 backdrop-blur-xl border-b border-zinc-800/50 -mx-4 px-4 py-4 mb-8 sm:mx-0 sm:px-0 sm:bg-transparent sm:backdrop-blur-none sm:border-none sm:static">
-          <div className="max-w-7xl mx-auto flex items-center justify-end">
+          <div className="flex items-center justify-end">
             <FeedLiveIndicator
               isLive={isLive}
               reconnectAttempts={reconnectAttempts}
@@ -428,7 +428,7 @@ export default function ActivityFeed({
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-7xl mx-auto w-full pb-20">
+      <div className="feed-card-grid w-full pb-20">
         {items.map((item, index) => {
           const imageUrl = item.media
             ? item.media.thumbnailS3Key

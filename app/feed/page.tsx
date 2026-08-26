@@ -14,7 +14,7 @@ export const metadata = createOgMetadata({
 export default function FeedPage() {
   return (
     <div className="min-h-screen text-white">
-      <div className="max-w-7xl mx-auto px-4 py-4 sm:py-8">
+      <div className="w-full px-4 py-4 sm:py-8">
         <div className="mb-6">
           <h1 className="text-3xl font-bold mb-2">Feed</h1>
           <p className="text-zinc-400">Latest photos from Hack Club events</p>
