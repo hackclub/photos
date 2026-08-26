@@ -48,6 +48,23 @@ body {
   }
 }
 
+@media (min-width: 64rem) {
+  .sidebar-panel:not(:hover):not(:focus-within) .sidebar-search-input {
+    color: transparent;
+    caret-color: transparent;
+  }
+
+  .sidebar-panel:not(:hover):not(:focus-within)
+    .sidebar-search-input::placeholder {
+    color: transparent;
+  }
+
+  .sidebar-panel:not(:hover):not(:focus-within) .sidebar-search-clear {
+    pointer-events: none;
+    opacity: 0;
+  }
+}
+
 @keyframes find-me-breathe {
   0%,
   100% {

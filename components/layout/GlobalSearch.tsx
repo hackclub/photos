@@ -71,6 +71,7 @@ export default function GlobalSearch() {
         <HiMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 w-5 h-5" />
         <input
           type="text"
+          aria-label="Search events, series, people, and photos"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -86,7 +87,7 @@ export default function GlobalSearch() {
             }
           }}
           placeholder="Search events, series, people..."
-          className="min-h-11 w-full rounded-full border border-zinc-700 bg-zinc-800 py-2 pl-10 pr-12 text-base text-white placeholder-zinc-400 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-600 sm:text-sm"
+          className="sidebar-search-input min-h-11 w-full rounded-full border border-zinc-700 bg-zinc-800 py-2 pl-10 pr-12 text-base text-white placeholder-zinc-400 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-600 sm:text-sm"
         />
         {query && (
           <button
@@ -95,7 +96,8 @@ export default function GlobalSearch() {
               setResults(null);
               setIsOpen(false);
             }}
-            className="absolute right-1.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-700 hover:text-white"
+            className="sidebar-search-clear absolute right-1.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-700 hover:text-white"
+            aria-label="Clear search"
           >
             <HiXMark className="w-5 h-5" />
           </button>
