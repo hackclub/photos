@@ -1,4 +1,4 @@
-![Hack Club Photos Banner](https://hc-cdn.hel1.your-objectstorage.com/s/v3/a54592b546a360f0_cleanshot_2025-12-16_at_00.20.34.png)
+![Hack Club Photos Banner](https://cdn.hackclub.com/01a06dab-ee58-7504-852d-89a393fd3803/image.png)
 
 # Hack Club Photos
 
