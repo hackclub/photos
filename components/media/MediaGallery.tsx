@@ -1,7 +1,6 @@
 "use client";
-import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   HiArrowDownTray,
   HiArrowPath,
@@ -24,19 +23,8 @@ import ChangeOwnerModal from "./ChangeOwnerModal";
 import GalleryCell from "./GalleryCell";
 import GalleryLiveStream from "./GalleryLiveStream";
 import MediaGalleryToolbar from "./MediaGalleryToolbar";
+import PhotoDetailModal from "./PhotoDetailModal";
 import VirtualGalleryGrid from "./VirtualGalleryGrid";
-
-const PhotoDetailModal = dynamic(() => import("./PhotoDetailModal"), {
-  ssr: false,
-});
-
-let modalChunkPreloaded = false;
-
-function preloadModalChunk() {
-  if (modalChunkPreloaded) return;
-  modalChunkPreloaded = true;
-  void import("./PhotoDetailModal");
-}
 
 interface MediaGalleryProps {
   media: MediaItem[];
@@ -163,19 +151,6 @@ export default function MediaGallery({
         : -1,
     [sortedMedia, selectedMedia],
   );
-
-  useEffect(() => {
-    const idle: typeof requestIdleCallback =
-      typeof window !== "undefined" && "requestIdleCallback" in window
-        ? window.requestIdleCallback
-        : (callback) => window.setTimeout(callback, 300);
-    const handle = idle(() => preloadModalChunk());
-    return () => {
-      if ("cancelIdleCallback" in window) {
-        window.cancelIdleCallback(handle as number);
-      }
-    };
-  }, []);
 
   const prefetchAdjacentMedia = useCallback(
     (item: MediaItem) => {

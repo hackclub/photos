@@ -1,6 +1,5 @@
 "use client";
 import dynamic from "next/dynamic";
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -1381,21 +1380,6 @@ export default function PhotoDetailModal({
                   setCurrentBlurRegion(null);
                 }}
               >
-                {!imageLoaded && thumbnailUrl && (
-                  <Image
-                    src={thumbnailUrl}
-                    alt={media.filename}
-                    fill
-                    unoptimized={
-                      !thumbnailUrl.includes("sig=") &&
-                      event?.visibility !== "public"
-                    }
-                    sizes="(max-width: 1024px) 100vw, 70vw"
-                    priority
-                    className="select-none object-contain opacity-100 blur-[1px] scale-[1.005] transition-opacity duration-300"
-                    aria-hidden="true"
-                  />
-                )}
                 {effectiveUrl && (
                   <picture>
                     {effectiveAvifUrl && (
@@ -1407,9 +1391,7 @@ export default function PhotoDetailModal({
                       alt={media.filename}
                       draggable={false}
                       style={{ viewTransitionName: `photo-${media.id}` }}
-                      className={`absolute inset-0 h-full w-full select-none object-contain transition-opacity duration-200 ease-out ${
-                        imageLoaded ? "opacity-100" : "opacity-0"
-                      }`}
+                      className="absolute inset-0 h-full w-full select-none object-contain"
                       onLoad={() => {
                         setImageLoaded(true);
                         setImageError(false);
@@ -1433,14 +1415,6 @@ export default function PhotoDetailModal({
                       }}
                     />
                   </picture>
-                )}
-                {!imageLoaded && !imageError && (
-                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black/10 pointer-events-none">
-                    <LoadingSpinner size="xl" label="Loading image..." center />
-                    <div className="rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-xs text-zinc-300 shadow-lg backdrop-blur-md">
-                      Loading photo...
-                    </div>
-                  </div>
                 )}
                 {blurMode &&
                   imageLoaded &&

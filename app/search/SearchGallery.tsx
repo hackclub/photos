@@ -1,5 +1,4 @@
 "use client";
-import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FaDice } from "react-icons/fa";
@@ -18,6 +17,7 @@ import { bulkDeleteMedia } from "@/app/actions/bulk";
 import { deleteMedia } from "@/app/actions/media";
 import ChangeOwnerModal from "@/components/media/ChangeOwnerModal";
 import GalleryCell from "@/components/media/GalleryCell";
+import PhotoDetailModal from "@/components/media/PhotoDetailModal";
 import VirtualGalleryGrid from "@/components/media/VirtualGalleryGrid";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import ServerActionModal from "@/components/ui/ServerActionModal";
@@ -25,11 +25,6 @@ import { logger } from "@/lib/client-logger";
 import { resolveMediaDate } from "@/lib/media/exif";
 import { prefetchImage } from "@/lib/media/prefetch";
 import { startViewTransition } from "@/lib/view-transition";
-
-const PhotoDetailModal = dynamic(
-  () => import("@/components/media/PhotoDetailModal"),
-  { ssr: false },
-);
 
 function getMediaProxyUrl(
   mediaId: string,
