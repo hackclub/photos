@@ -89,6 +89,9 @@ export function toClientMedia(
     thumbnailUrl: hasThumbnail(item)
       ? getMediaThumbnailUrl(item.id, "sm")
       : null,
+    thumbnailAvifUrl: hasThumbnail(item)
+      ? getMediaThumbnailUrl(item.id, "sm", "avif")
+      : null,
     displayUrl: isImage ? getMediaDisplayUrl(item.id) : null,
     displayAvifUrl: isImage ? getMediaDisplayUrl(item.id, "avif") : null,
     event: item.event

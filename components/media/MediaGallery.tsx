@@ -673,8 +673,7 @@ export default function MediaGallery({
         renderItem={(item, index) => {
           const event =
             item.event || (item.eventId ? eventMap.get(item.eventId) : null);
-          const optimizeMedia =
-            Boolean(item.thumbnailUrl) || event?.visibility === "public";
+          const optimizeMedia = event?.visibility === "public";
           return (
             <GalleryCell
               item={item}

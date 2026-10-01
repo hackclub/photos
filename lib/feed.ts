@@ -37,6 +37,7 @@ export type FeedItem = {
     height: number | null;
     thumbnailS3Key?: string | null;
     thumbnailUrl?: string | null;
+    thumbnailAvifUrl?: string | null;
     displayUrl?: string | null;
     displayAvifUrl?: string | null;
     exifData: Record<string, unknown> | null;
@@ -256,6 +257,11 @@ export async function fetchFeedItems(
               height: mediaItem.height,
               thumbnailS3Key: mediaItem.thumbnailS3Key,
               thumbnailUrl: getMediaThumbnailUrl(mediaItem.id, "md"),
+              thumbnailAvifUrl: getMediaThumbnailUrl(
+                mediaItem.id,
+                "sm",
+                "avif",
+              ),
               displayUrl: mediaItem.mimeType.startsWith("image/")
                 ? getMediaDisplayUrl(mediaItem.id)
                 : null,
@@ -307,6 +313,11 @@ export async function fetchFeedItems(
               height: mediaItem.height,
               thumbnailS3Key: mediaItem.thumbnailS3Key,
               thumbnailUrl: getMediaThumbnailUrl(mediaItem.id, "md"),
+              thumbnailAvifUrl: getMediaThumbnailUrl(
+                mediaItem.id,
+                "sm",
+                "avif",
+              ),
               displayUrl: mediaItem.mimeType.startsWith("image/")
                 ? getMediaDisplayUrl(mediaItem.id)
                 : null,
@@ -353,6 +364,11 @@ export async function fetchFeedItems(
               height: mediaItem.height,
               thumbnailS3Key: mediaItem.thumbnailS3Key,
               thumbnailUrl: getMediaThumbnailUrl(mediaItem.id, "md"),
+              thumbnailAvifUrl: getMediaThumbnailUrl(
+                mediaItem.id,
+                "sm",
+                "avif",
+              ),
               displayUrl: mediaItem.mimeType.startsWith("image/")
                 ? getMediaDisplayUrl(mediaItem.id)
                 : null,

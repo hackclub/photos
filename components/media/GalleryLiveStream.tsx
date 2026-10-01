@@ -24,6 +24,7 @@ function toMediaItem(item: ActivityMedia): MediaItem | null {
     id: m.id,
     thumbnailS3Key: m.thumbnailS3Key ?? null,
     thumbnailUrl: m.thumbnailUrl ?? null,
+    thumbnailAvifUrl: m.thumbnailAvifUrl ?? null,
     displayUrl: m.displayUrl ?? null,
     displayAvifUrl: m.displayAvifUrl ?? null,
     filename: m.filename || "",

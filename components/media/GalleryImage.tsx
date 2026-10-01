@@ -46,11 +46,13 @@ export default function GalleryImage({
       className={`relative h-full w-full bg-zinc-800 ${className}`}
       style={viewTransitionName ? { viewTransitionName } : undefined}
     >
-      {!isLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
-          <HiPhoto className="w-12 h-12 text-zinc-600 animate-pulse" />
-        </div>
-      )}
+      <div
+        className={`absolute inset-0 flex items-center justify-center bg-zinc-800 transition-opacity duration-300 ${
+          isLoaded ? "opacity-0" : "opacity-100"
+        }`}
+      >
+        <HiPhoto className="w-12 h-12 text-zinc-500 animate-pulse" />
+      </div>
       {src ? (
         <Image
           key={`${src}#${retryCount}`}
@@ -61,7 +63,7 @@ export default function GalleryImage({
           sizes={sizes}
           priority={priority}
           fetchPriority={priority ? "high" : undefined}
-          className={`object-cover transition-opacity duration-700 ease-out ${
+          className={`object-cover transition-opacity duration-300 ease-out ${
             isLoaded ? "opacity-100" : "opacity-0"
           }`}
           onLoad={() => setIsLoaded(true)}

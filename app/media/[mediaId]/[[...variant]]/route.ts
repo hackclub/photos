@@ -314,6 +314,7 @@ export async function GET(
       mediaItem.id,
       "thumb-sm",
       sourceTag,
+      format === "avif" ? "avif" : "jpg",
     );
   } else if (wantsLg) {
     derivativeKind = "display";

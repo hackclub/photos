@@ -303,8 +303,9 @@ textarea {
   contain-intrinsic-size: auto 320px;
 }
 
-.gallery-virtual-row {
-  will-change: transform;
+.gallery-card-grid > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 240px;
 }
 
 /* biome-ignore lint/correctness/noUnknownTypeSelector: View Transition pseudo-elements accept a snapshot name */

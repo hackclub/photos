@@ -26,7 +26,6 @@
     "@aws-sdk/s3-request-presigner": "^3.1111.0",
     "@flags-sdk/vercel": "^1.4.6",
     "@smithy/node-http-handler": "^4.11.2",
-    "@tanstack/react-virtual": "^3.14.13",
     "@trpc/client": "^11.18.0",
     "@trpc/server": "^11.18.0",
     "@vercel/analytics": "^2.0.1",

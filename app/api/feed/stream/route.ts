@@ -144,7 +144,14 @@ async function fetchPhotoItems(ids: string[]): Promise<Record<string, any>[]> {
       width: item.width,
       height: item.height,
       thumbnailS3Key: item.thumbnailS3Key,
-      thumbnailUrl: getMediaThumbnailUrl(item.id, "sm"),
+      thumbnailUrl:
+        item.thumbnailS3Key || item.mimeType.startsWith("image/")
+          ? getMediaThumbnailUrl(item.id, "sm")
+          : null,
+      thumbnailAvifUrl:
+        item.thumbnailS3Key || item.mimeType.startsWith("image/")
+          ? getMediaThumbnailUrl(item.id, "sm", "avif")
+          : null,
       displayUrl: item.mimeType.startsWith("image/")
         ? getMediaDisplayUrl(item.id)
         : null,

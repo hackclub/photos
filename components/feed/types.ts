@@ -24,6 +24,7 @@ export type FeedItemType = {
     height: number | null;
     thumbnailS3Key?: string | null;
     thumbnailUrl?: string | null;
+    thumbnailAvifUrl?: string | null;
     displayUrl?: string | null;
     displayAvifUrl?: string | null;
     exifData: Record<string, unknown> | null;

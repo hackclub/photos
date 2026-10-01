@@ -39,6 +39,7 @@ export function getThumbnailDerivativeS3Keys(mediaId: string) {
   const keys: string[] = [];
   for (const tag of DERIVATIVE_SOURCE_TAGS) {
     keys.push(getThumbnailDerivativeS3Key(mediaId, "thumb-sm", tag));
+    keys.push(getThumbnailDerivativeS3Key(mediaId, "thumb-sm", tag, "avif"));
     keys.push(getThumbnailDerivativeS3Key(mediaId, "display", tag));
     keys.push(getThumbnailDerivativeS3Key(mediaId, "display", tag, "avif"));
   }
@@ -133,6 +134,20 @@ export async function buildDisplayImage(buffer: Buffer): Promise<Buffer> {
     .toBuffer();
 }
 
+export async function buildThumbnailAvif(buffer: Buffer): Promise<Buffer> {
+  return await createSharp(buffer, { failOn: "none" })
+    .rotate()
+    .flatten({ background: "#111111" })
+    .resize(THUMBNAIL_SM_SIZE, THUMBNAIL_SM_SIZE, {
+      fit: "cover",
+      position: "attention",
+      withoutEnlargement: false,
+      kernel: sharp.kernel.lanczos3,
+    })
+    .avif({ quality: 55, effort: 4 })
+    .toBuffer();
+}
+
 export async function buildDisplayAvif(buffer: Buffer): Promise<Buffer> {
   return await createSharp(buffer, { failOn: "none" })
     .rotate()
@@ -176,6 +191,12 @@ async function buildThumbnailDerivativeInternal(options: {
         72,
       ),
       contentType: "image/jpeg",
+    });
+    if (signal?.aborted) return null;
+    outputs.push({
+      key: getThumbnailDerivativeS3Key(mediaId, "thumb-sm", sourceTag, "avif"),
+      buffer: await buildThumbnailAvif(sourceBuffer),
+      contentType: "image/avif",
     });
   }
   if (signal?.aborted) return null;

@@ -550,9 +550,7 @@ export default function SearchGallery({
             item={item}
             selected={selectedItems.has(item.id)}
             selectionMode={selectionMode}
-            optimize={
-              Boolean(item.thumbnailUrl) || item.event?.visibility === "public"
-            }
+            optimize={item.event?.visibility === "public"}
             priority={index < 10}
             badges={renderBadges(item)}
             viewTransitionName={

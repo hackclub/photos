@@ -4,6 +4,7 @@ export interface MediaItem {
   s3Key?: string;
   thumbnailS3Key?: string | null;
   thumbnailUrl?: string | null;
+  thumbnailAvifUrl?: string | null;
   displayUrl?: string | null;
   displayAvifUrl?: string | null;
   filename: string;

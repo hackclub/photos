@@ -83,8 +83,14 @@ function signedMediaUrl(
 export function getMediaThumbnailUrl(
   mediaId: string,
   size: Extract<MediaImageSize, "sm" | "md"> = "sm",
+  format: MediaImageFormat | null = null,
 ): string {
-  return signedMediaUrl(mediaId, "thumbnail", size);
+  return signedMediaUrl(
+    mediaId,
+    "thumbnail",
+    size,
+    format === "avif" ? "avif" : null,
+  );
 }
 
 export function getMediaDisplayUrl(
