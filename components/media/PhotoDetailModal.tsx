@@ -1407,7 +1407,7 @@ export default function PhotoDetailModal({
                       alt={media.filename}
                       draggable={false}
                       style={{ viewTransitionName: `photo-${media.id}` }}
-                      className={`absolute inset-0 h-full w-full select-none object-contain transition-opacity duration-500 ease-out ${
+                      className={`absolute inset-0 h-full w-full select-none object-contain transition-opacity duration-200 ease-out ${
                         imageLoaded ? "opacity-100" : "opacity-0"
                       }`}
                       onLoad={() => {

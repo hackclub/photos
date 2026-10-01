@@ -304,18 +304,37 @@ textarea {
 }
 
 .gallery-virtual-row {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 240px;
+  will-change: transform;
 }
 
-::view-transition-old(*),
-::view-transition-new(*) {
-  animation-duration: 180ms;
+/* biome-ignore lint/correctness/noUnknownTypeSelector: View Transition pseudo-elements accept a snapshot name */
+::view-transition-old(root) {
+  animation: none;
+}
+
+/* biome-ignore lint/correctness/noUnknownTypeSelector: View Transition pseudo-elements accept a snapshot name */
+::view-transition-new(root) {
+  animation: none;
 }
 
 ::view-transition-group(*) {
-  animation-duration: 280ms;
+  animation-duration: 320ms;
   animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes feedCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.feed-card-enter {
+  animation: feedCardIn 320ms ease-out both;
 }
 
 @keyframes scroll-left {

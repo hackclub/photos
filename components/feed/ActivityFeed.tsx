@@ -1,9 +1,10 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HiArrowUp } from "react-icons/hi2";
 import { deleteMedia } from "@/app/actions/media";
 import { logger } from "@/lib/client-logger";
+import { startViewTransition } from "@/lib/view-transition";
 import ConfirmModal from "../ui/ConfirmModal";
 import LoadingSpinner from "../ui/LoadingSpinner";
 import FeedEmptyState from "./FeedEmptyState";
@@ -301,6 +302,18 @@ export default function ActivityFeed({
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+  const transitionNames = useMemo(() => {
+    const names = new Map<string, string>();
+    const used = new Set<string>();
+    for (const item of items) {
+      const mediaId = item.media?.id;
+      if (!mediaId || used.has(mediaId)) continue;
+      used.add(mediaId);
+      names.set(item.id, mediaId);
+    }
+    return names;
+  }, [items]);
+
   if (loading && items.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -335,6 +348,13 @@ export default function ActivityFeed({
         {items.map((item, index) => {
           const imageUrl = item.media?.thumbnailUrl ?? null;
           const isNew = newlyAddedIds.has(item.id);
+          const mediaId = item.media?.id;
+          const viewTransitionName =
+            mediaId && selectedMedia?.id !== mediaId
+              ? transitionNames.get(item.id) === mediaId
+                ? `photo-${mediaId}`
+                : undefined
+              : undefined;
           return (
             <FeedItem
               key={item.id}
@@ -342,7 +362,10 @@ export default function ActivityFeed({
               imageUrl={imageUrl}
               isNew={isNew}
               index={index}
-              onSelect={(media) => setSelectedMedia(media)}
+              viewTransitionName={viewTransitionName}
+              onSelect={(media) =>
+                startViewTransition(() => setSelectedMedia(media))
+              }
             />
           );
         })}
@@ -395,7 +418,7 @@ export default function ActivityFeed({
           event={items.find((i) => i.media?.id === selectedMedia.id)?.event}
           currentUserId={currentUserId || undefined}
           isGlobalAdmin={isGlobalAdmin}
-          onClose={() => setSelectedMedia(null)}
+          onClose={() => startViewTransition(() => setSelectedMedia(null))}
           onDownload={async () => {
             if (!fullSizeUrl) return;
             try {

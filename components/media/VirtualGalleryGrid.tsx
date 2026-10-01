@@ -30,16 +30,34 @@ export default function VirtualGalleryGrid<T>({
     scrollMargin: number;
   } | null>(null);
 
+  // Self-healing measurement: layout shifts above the grid (toolbars, banners)
+  // move the container without resizing it, and a stale scrollMargin strands
+  // rows outside the computed window. Bail out when nothing changed so this
+  // never causes an extra render.
+  useLayoutEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+    const width = element.offsetWidth;
+    const scrollMargin = element.getBoundingClientRect().top + window.scrollY;
+    setMetrics((prev) =>
+      prev && prev.width === width && prev.scrollMargin === scrollMargin
+        ? prev
+        : { width, scrollMargin },
+    );
+  });
+
   useLayoutEffect(() => {
     const element = containerRef.current;
     if (!element) return;
     const update = () => {
-      setMetrics({
-        width: element.offsetWidth,
-        scrollMargin: element.getBoundingClientRect().top + window.scrollY,
-      });
+      const width = element.offsetWidth;
+      const scrollMargin = element.getBoundingClientRect().top + window.scrollY;
+      setMetrics((prev) =>
+        prev && prev.width === width && prev.scrollMargin === scrollMargin
+          ? prev
+          : { width, scrollMargin },
+      );
     };
-    update();
     const observer = new ResizeObserver(update);
     observer.observe(element);
     window.addEventListener("resize", update);
@@ -63,11 +81,22 @@ export default function VirtualGalleryGrid<T>({
   const rowSize = cellSize + gap;
 
   const virtualizer = useWindowVirtualizer({
-    count: rowCount,
+    // Never let the virtualizer cache measurements under the degenerate
+    // pre-measure geometry (rowSize 0 + gap): that stale size cache is what
+    // leaves whole regions blank after scrolling.
+    count: metrics ? rowCount : 0,
     estimateSize: () => rowSize,
     overscan: 6,
     scrollMargin: metrics?.scrollMargin ?? 0,
   });
+
+  // estimateSize is not part of the virtualizer's cache key; without an
+  // explicit measure() the itemSizeCache keeps whatever geometry was computed
+  // first and the served range decouples from what we paint.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rowSize/rowCount changes must re-measure cached item sizes.
+  useLayoutEffect(() => {
+    virtualizer.measure();
+  }, [virtualizer, rowSize, rowCount]);
 
   if (!metrics) {
     return (

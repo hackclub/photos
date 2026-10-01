@@ -11,6 +11,7 @@ interface FeedItemProps {
   imageUrl: string | null;
   isNew: boolean;
   index: number;
+  viewTransitionName?: string;
   onSelect: (media: NonNullable<FeedItemType["media"]>) => void;
 }
 export default function FeedItem({
@@ -18,6 +19,7 @@ export default function FeedItem({
   imageUrl,
   isNew,
   index,
+  viewTransitionName,
   onSelect,
 }: FeedItemProps) {
   const isVideo = item.media?.mimeType.startsWith("video/");
@@ -44,7 +46,7 @@ export default function FeedItem({
   };
   return (
     <div
-      className={`group/card relative flex flex-col gap-3 p-4 rounded-2xl border border-zinc-800/50 bg-zinc-900/20 transition-all hover:bg-zinc-900/40 hover:border-zinc-700/50 ${isNew ? " bg-red-600/5" : ""}`}
+      className={`feed-card-enter group/card relative flex flex-col gap-3 p-4 rounded-2xl border border-zinc-800/50 bg-zinc-900/20 transition-all hover:bg-zinc-900/40 hover:border-zinc-700/50 ${isNew ? " bg-red-600/5" : ""}`}
       style={{
         animation: isNew ? "highlight 2s ease-out" : undefined,
       }}
@@ -107,6 +109,7 @@ export default function FeedItem({
           <button
             type="button"
             onClick={() => onSelect(item.media!)}
+            style={viewTransitionName ? { viewTransitionName } : undefined}
             className="block w-full aspect-square relative group/media"
           >
             {!resolvedImageUrl ? (

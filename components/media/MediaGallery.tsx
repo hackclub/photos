@@ -195,8 +195,8 @@ export default function MediaGallery({
     (item: MediaItem) => {
       startViewTransition(() => {
         setSelectedMedia(item);
-        updateUrl(item.id);
       });
+      updateUrl(item.id);
       prefetchAdjacentMedia(item);
     },
     [setSelectedMedia, updateUrl, prefetchAdjacentMedia],
@@ -446,8 +446,8 @@ export default function MediaGallery({
       onClose={() => {
         startViewTransition(() => {
           setSelectedMedia(null);
-          updateUrl(null);
         });
+        updateUrl(null);
       }}
       onDownload={() => handleDownload(selectedMedia)}
       blurMode={blurMode && selectedMedia.mimeType.startsWith("image/")}

@@ -3,7 +3,7 @@ import {
   type GetObjectCommandOutput,
 } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
-import { type NextRequest, NextResponse } from "next/server";
+import { after, type NextRequest, NextResponse } from "next/server";
 import { verifySessionToken } from "@/lib/auth";
 import { getUserContext } from "@/lib/auth-api";
 import { db } from "@/lib/db";
@@ -347,32 +347,24 @@ export async function GET(
         servedDerivative = true;
       } catch (error: any) {
         if (error?.$metadata?.httpStatusCode === 304) throw error;
-        const sourceBuffer = await readS3ObjectToBuffer(s3Key).catch(
-          () => null,
-        );
-        const generated = sourceBuffer
-          ? await generateThumbnailDerivative({
-              mediaId,
-              kind: derivativeKind,
-              sourceTag,
-              sourceBuffer,
-              tags: {
-                uploadedBy: mediaItem.uploadedById,
-                eventId: mediaItem.eventId ?? "",
-              },
-              signal: request.signal,
-            })
-          : null;
-        if (generated && derivativeKey) {
-          s3Response = await fetchMediaObject(
-            derivativeKey,
-            request,
-            requestRange,
+        s3Response = await fetchMediaObject(s3Key, request, requestRange);
+        const backgroundKind = derivativeKind;
+        after(async () => {
+          const sourceBuffer = await readS3ObjectToBuffer(s3Key).catch(
+            () => null,
           );
-          servedDerivative = true;
-        } else {
-          s3Response = await fetchMediaObject(s3Key, request, requestRange);
-        }
+          if (!sourceBuffer || !backgroundKind) return;
+          await generateThumbnailDerivative({
+            mediaId,
+            kind: backgroundKind,
+            sourceTag,
+            sourceBuffer,
+            tags: {
+              uploadedBy: mediaItem.uploadedById,
+              eventId: mediaItem.eventId ?? "",
+            },
+          });
+        });
       }
     } else {
       s3Response = await fetchMediaObject(s3Key, request, requestRange);

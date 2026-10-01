@@ -101,9 +101,12 @@ export default function SearchGallery({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [localMedia, setLocalMedia] = useState<MediaItem[]>(media);
-  const selectedMedia = useMemo(() => {
+  const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
+  useEffect(() => {
     const photoId = searchParams.get("photo");
-    return photoId ? localMedia.find((m) => m.id === photoId) || null : null;
+    setSelectedMedia(
+      photoId ? localMedia.find((m) => m.id === photoId) || null : null,
+    );
   }, [searchParams, localMedia]);
   const [sortBy, setSortBy] = useState<"date" | "likes" | "random">("date");
   const [dateOrder, setDateOrder] = useState<"desc" | "asc">("desc");
@@ -220,8 +223,9 @@ export default function SearchGallery({
   const openMedia = useCallback(
     (item: MediaItem) => {
       startViewTransition(() => {
-        updateUrl(item.id);
+        setSelectedMedia(item);
       });
+      updateUrl(item.id);
       prefetchAdjacentMedia(item);
     },
     [updateUrl, prefetchAdjacentMedia],
@@ -230,6 +234,9 @@ export default function SearchGallery({
     (index: number) => {
       const nextMedia = sortedMedia[index];
       if (!nextMedia) return;
+      startViewTransition(() => {
+        setSelectedMedia(nextMedia);
+      });
       updateUrl(nextMedia.id);
       prefetchAdjacentMedia(nextMedia);
     },
@@ -569,8 +576,9 @@ export default function SearchGallery({
           downloading={downloading}
           onClose={() => {
             startViewTransition(() => {
-              updateUrl(null);
+              setSelectedMedia(null);
             });
+            updateUrl(null);
           }}
           onMediaUpdate={(updatedMedia) => {
             setLocalMedia((prev) =>
